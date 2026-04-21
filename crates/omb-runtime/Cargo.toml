@@ -1,0 +1,12 @@
+[package]
+name = "omb-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+omb-mux = { path = "../omb-mux" }
+omb-runtime-core = { path = "../omb-runtime-core" }
+serde_json = "1"
+

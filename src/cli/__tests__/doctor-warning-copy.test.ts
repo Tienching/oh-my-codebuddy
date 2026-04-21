@@ -1,0 +1,249 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { withPackagedExploreHarnessHidden, withPackagedExploreHarnessLock } from './packaged-explore-harness-lock.js';
+
+function runOmx(
+  cwd: string,
+  argv: string[],
+  envOverrides: Record<string, string> = {},
+): { status: number | null; stdout: string; stderr: string; error?: string } {
+  const testDir = dirname(fileURLToPath(import.meta.url));
+  const repoRoot = join(testDir, '..', '..', '..');
+  const ombBin = join(repoRoot, 'dist', 'cli', 'omb.js');
+  const mergedEnv = { ...process.env, ...envOverrides };
+  if (typeof envOverrides.HOME === 'string' && typeof envOverrides.USERPROFILE !== 'string') {
+    mergedEnv.USERPROFILE = envOverrides.HOME;
+  }
+  const r = spawnSync(process.execPath, [ombBin, ...argv], {
+    cwd,
+    encoding: 'utf-8',
+    env: mergedEnv,
+  });
+  return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error?.message };
+}
+
+function shouldSkipForSpawnPermissions(err?: string): boolean {
+  return typeof err === 'string' && /(EPERM|EACCES)/i.test(err);
+}
+
+describe('omb doctor onboarding warning copy', () => {
+  it('explains first-setup expectation for config and MCP onboarding warnings', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-copy-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      await mkdir(codexDir, { recursive: true });
+      await writeFile(
+        join(codexDir, 'settings.json'),
+        JSON.stringify({
+          mcpServers: {
+            non_omx: {
+              command: "node",
+            },
+          },
+        }, null, 2),
+      );
+
+      const res = runOmx(wd, ['doctor'], {
+        HOME: home,
+        CODEBUDDY_HOME: join(home, '.codex'),
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Config: settings\.json exists but no OMB entries yet \(expected before first setup; run "omb setup --force" once\)/,
+      );
+      assert.match(
+        res.stdout,
+        /MCP Servers: 1 servers but no OMB servers yet \(expected before first setup; run "omb setup --force" once\)/,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('warns when explore harness sources are packaged but cargo is unavailable', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-explore-copy-'));
+    try {
+      await withPackagedExploreHarnessHidden(async () => {
+        const home = join(wd, 'home');
+        const codexDir = join(home, '.codex');
+        const fakeBin = join(wd, 'bin');
+        await mkdir(codexDir, { recursive: true });
+        await mkdir(fakeBin, { recursive: true });
+        await writeFile(join(fakeBin, 'codex'), '#!/bin/sh\necho "codex test"\n');
+        spawnSync('chmod', ['+x', join(fakeBin, 'codex')], { encoding: 'utf-8' });
+
+        const res = runOmx(wd, ['doctor'], {
+          HOME: home,
+          CODEBUDDY_HOME: join(home, '.codex'),
+          PATH: fakeBin,
+        });
+        if (shouldSkipForSpawnPermissions(res.error)) return;
+        assert.equal(res.status, 0, res.stderr || res.stdout);
+        assert.match(
+          res.stdout,
+          /Explore Harness: (Rust harness sources are packaged, but no compatible packaged prebuilt or cargo was found \(install Rust or set OMB_EXPLORE_BIN for omb explore\)|not ready \(no packaged binary, OMB_EXPLORE_BIN, or cargo toolchain\))/,
+        );
+      });
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('passes explore harness check when a packaged native binary is present even without cargo', async () => {
+    await withPackagedExploreHarnessLock(async () => {
+      const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-explore-binary-'));
+      try {
+        const home = join(wd, 'home');
+        const codexDir = join(home, '.codex');
+        const fakeBin = join(wd, 'bin');
+        const packageBinDir = join(process.cwd(), 'bin');
+        const packagedBinary = join(packageBinDir, process.platform === 'win32' ? 'omb-explore-harness.exe' : 'omb-explore-harness');
+        const packagedMeta = join(packageBinDir, 'omb-explore-harness.meta.json');
+        const hadExistingBinary = existsSync(packagedBinary);
+        const hadExistingMeta = existsSync(packagedMeta);
+
+        await mkdir(codexDir, { recursive: true });
+        await mkdir(fakeBin, { recursive: true });
+        await writeFile(join(fakeBin, 'codex'), '#!/bin/sh\necho "codex test"\n');
+        spawnSync('chmod', ['+x', join(fakeBin, 'codex')], { encoding: 'utf-8' });
+        const fsPromises = await import('node:fs/promises');
+        const originalBinary = hadExistingBinary ? await fsPromises.readFile(packagedBinary) : null;
+        const originalMeta = hadExistingMeta ? await fsPromises.readFile(packagedMeta, 'utf-8') : null;
+        await mkdir(packageBinDir, { recursive: true });
+        await writeFile(packagedBinary, '#!/bin/sh\necho "stub harness"\n');
+        await writeFile(packagedMeta, JSON.stringify({ binaryName: process.platform === 'win32' ? 'omb-explore-harness.exe' : 'omb-explore-harness', platform: process.platform, arch: process.arch }));
+        spawnSync('chmod', ['+x', packagedBinary], { encoding: 'utf-8' });
+
+        try {
+          const res = runOmx(wd, ['doctor'], {
+            HOME: home,
+            CODEBUDDY_HOME: join(home, '.codex'),
+            PATH: fakeBin,
+          });
+          if (shouldSkipForSpawnPermissions(res.error)) return;
+          assert.equal(res.status, 0, res.stderr || res.stdout);
+          assert.match(
+            res.stdout,
+            /Explore Harness: ready \(packaged native binary:/,
+          );
+        } finally {
+          if (originalBinary) {
+            await writeFile(packagedBinary, originalBinary);
+            spawnSync('chmod', ['+x', packagedBinary], { encoding: 'utf-8' });
+          } else {
+            await rm(packagedBinary, { force: true });
+          }
+          if (originalMeta !== null) {
+            await writeFile(packagedMeta, originalMeta);
+          } else {
+            await rm(packagedMeta, { force: true });
+          }
+        }
+      } finally {
+        await rm(wd, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it('warns when explore routing is explicitly disabled in settings.json', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-explore-routing-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      await mkdir(codexDir, { recursive: true });
+      await writeFile(
+        join(codexDir, 'settings.json'),
+        JSON.stringify({
+          env: {
+            USE_OMB_EXPLORE_CMD: "off",
+          },
+        }, null, 2),
+      );
+
+      const res = runOmx(wd, ['doctor'], {
+        HOME: home,
+        CODEBUDDY_HOME: join(home, '.codex'),
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Explore routing: disabled in settings\.json env; set USE_OMB_EXPLORE_CMD to "1" to restore default explore-first routing/,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('warns when canonical and legacy skill roots overlap', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-skill-overlap-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      const canonicalHelp = join(codexDir, 'skills', 'help');
+      const canonicalPlan = join(codexDir, 'skills', 'plan');
+      const legacyHelp = join(home, '.agents', 'skills', 'help');
+      await mkdir(canonicalHelp, { recursive: true });
+      await mkdir(canonicalPlan, { recursive: true });
+      await mkdir(legacyHelp, { recursive: true });
+      await writeFile(join(canonicalHelp, 'SKILL.md'), '# canonical help\n');
+      await writeFile(join(canonicalPlan, 'SKILL.md'), '# canonical plan\n');
+      await writeFile(join(legacyHelp, 'SKILL.md'), '# legacy help\n');
+
+      const res = runOmx(wd, ['doctor'], {
+        HOME: home,
+        CODEBUDDY_HOME: codexDir,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Legacy skill roots: 1 overlapping skill names between .*\.codex[\\/]+skills and .*\.agents[\\/]+skills; 1 differ in SKILL\.md content; Codex Enable\/Disable Skills may show duplicates until ~\/\.agents\/skills is cleaned up/,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('passes when legacy skill root is a link to the canonical skills directory', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-skill-link-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      const canonicalSkillsRoot = join(codexDir, 'skills');
+      const canonicalHelp = join(canonicalSkillsRoot, 'help');
+      const legacyRoot = join(home, '.agents', 'skills');
+      await mkdir(canonicalHelp, { recursive: true });
+      await mkdir(join(home, '.agents'), { recursive: true });
+      await writeFile(join(canonicalHelp, 'SKILL.md'), '# canonical help\n');
+      await symlink(
+        canonicalSkillsRoot,
+        legacyRoot,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+
+      const res = runOmx(wd, ['doctor'], {
+        HOME: home,
+        CODEBUDDY_HOME: codexDir,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Legacy skill roots: ~\/\.agents\/skills links to canonical .*\.codex[\\/]+skills; treating both paths as one shared skill root/,
+      );
+      assert.doesNotMatch(res.stdout, /\[!!\] Legacy skill roots:/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+});

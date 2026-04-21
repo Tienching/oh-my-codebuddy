@@ -1,0 +1,24 @@
+{
+  "contract": "team-api-interop",
+  "version": 2,
+  "compatibility_fallback": "legacy-envelope",
+  "compatibility_fields": [
+    "ok",
+    "operation",
+    "data",
+    "error"
+  ],
+  "status": "error",
+  "ok": false,
+  "operation": "list-tasks",
+  "error": {
+    "code": "invalid_input",
+    "message": "team_name is required"
+  },
+  "errors": [
+    {
+      "code": "invalid_input",
+      "message": "team_name is required"
+    }
+  ]
+}

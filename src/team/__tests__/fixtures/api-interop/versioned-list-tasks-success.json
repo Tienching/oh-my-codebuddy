@@ -1,0 +1,22 @@
+{
+  "contract": "team-api-interop",
+  "version": 2,
+  "compatibility_fallback": "legacy-envelope",
+  "compatibility_fields": [
+    "ok",
+    "operation",
+    "data",
+    "error"
+  ],
+  "status": "ok",
+  "ok": true,
+  "operation": "list-tasks",
+  "result": {
+    "count": 0,
+    "tasks": []
+  },
+  "data": {
+    "count": 0,
+    "tasks": []
+  }
+}

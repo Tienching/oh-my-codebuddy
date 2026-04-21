@@ -1,0 +1,61 @@
+
+oh-my-codebuddy (omb) - Multi-agent orchestration for CodeBuddy CLI
+
+Usage:
+  omb           Launch CodeBuddy CLI (HUD auto-attaches only when already inside tmux)
+  omb exec      Run codebuddy exec non-interactively with OMX AGENTS/overlay injection
+  omb setup     Install skills, prompts, MCP servers, and scope-specific AGENTS.md
+  omb uninstall Remove OMX configuration and clean up installed artifacts
+  omb doctor    Check installation health
+  omb cleanup   Kill orphaned OMX MCP server processes from prior sessions
+  omb doctor --team  Check team/swarm runtime health diagnostics
+  omb ask       Ask local provider CLI (claude|gemini) and write artifact output
+  omb autoresearch Launch thin-supervisor autoresearch with keep/discard/reset parity
+  omb explore   Default read-only exploration entrypoint (may adaptively use sparkshell backend)
+  omb session   Search prior local session transcripts and history artifacts
+  omb agents-init [path]
+                Bootstrap lightweight AGENTS.md files for a repo/subtree
+  omb deepinit [path]
+                Alias for agents-init (lightweight AGENTS bootstrap only)
+  omb team      Spawn parallel worker panes in tmux and bootstrap inbox/task state
+  omb ralph     Launch CodeBuddy with ralph persistence mode active
+  omb version   Show version information
+  omb tmux-hook Manage tmux prompt injection workaround (init|status|validate|test)
+  omb hooks     Manage hook plugins (init|status|validate|test)
+  omb hud       Show HUD statusline (--watch, --json, --preset=NAME)
+  omb sparkshell <command> [args...]
+  omb sparkshell --tmux-pane <pane-id> [--tail-lines <100-1000>]
+                Run native sparkshell sidecar for direct command execution or explicit tmux-pane summarization
+                (also used as an adaptive backend for qualifying read-only explore tasks)
+  omb help      Show this help message
+  omb status    Show active modes and state
+  omb cancel    Cancel active execution modes
+  omb reasoning Show or set model reasoning effort (low|medium|high|xhigh)
+
+Options:
+  --yolo        Launch CodeBuddy in yolo mode (shorthand for: omb launch --yolo)
+  --high        Launch CodeBuddy with high reasoning effort
+                (shorthand for: -c model_reasoning_effort="high")
+  --xhigh       Launch CodeBuddy with xhigh reasoning effort
+                (shorthand for: -c model_reasoning_effort="xhigh")
+  --madmax      DANGEROUS: bypass CodeBuddy approvals and sandbox
+                (alias for --dangerously-skip-permissions)
+  --spark       Use the CodeBuddy spark model (~1.3x faster) for team workers only
+                Workers get the configured low-complexity team model; leader model unchanged
+  --madmax-spark  spark model for workers + bypass approvals for leader and workers
+                (shorthand for: --spark --madmax)
+  --notify-temp  Enable temporary notification routing for this run/session only
+  --discord      Select Discord provider for temporary notification mode
+  --slack        Select Slack provider for temporary notification mode
+  --telegram     Select Telegram provider for temporary notification mode
+  --custom <name>
+                Select custom/OpenClaw gateway name for temporary notification mode
+  -w, --worktree[=<name>]
+                Launch CodeBuddy in a git worktree (detached when no name is given)
+  --force       Force reinstall (overwrite existing files)
+  --dry-run     Show what would be done without doing it
+  --keep-config Skip settings.json cleanup during uninstall
+  --purge       Remove .omb/ cache directory during uninstall
+  --verbose     Show detailed output
+  --scope       Setup scope for "omb setup" only:
+                user | project

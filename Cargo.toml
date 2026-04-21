@@ -1,0 +1,22 @@
+[workspace]
+members = [
+  "crates/omb-explore",
+  "crates/omb-mux",
+  "crates/omb-runtime-core",
+  "crates/omb-runtime",
+  "crates/omb-sparkshell",
+]
+resolver = "2"
+
+[workspace.package]
+
+version = "0.12.4"
+
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Tienching/oh-my-codebuddy"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

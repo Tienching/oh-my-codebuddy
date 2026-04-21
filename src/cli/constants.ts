@@ -1,0 +1,17 @@
+export const MADMAX_FLAG = '--madmax';
+export const CODEBUDDY_LEGACY_BYPASS_FLAG = '--dangerously-bypass-approvals-and-sandbox';
+export const YOLO_FLAG = '--yolo';
+export const CODEBUDDY_BIN = 'codebuddy';
+export const CODEBUDDY_BYPASS_FLAG = '--dangerously-skip-permissions';
+export const CODEBUDDY_PRINT_FLAG = '--print';
+export const CODEBUDDY_EFFORT_FLAG = '--effort';
+export const CODEBUDDY_SYSTEM_PROMPT_FLAG = '--system-prompt';
+export const CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG = '--system-prompt-file';
+export const CODEBUDDY_APPEND_SYSTEM_PROMPT_FLAG = '--append-system-prompt';
+export const HIGH_REASONING_FLAG = '--high';
+export const XHIGH_REASONING_FLAG = '--xhigh';
+export const SPARK_FLAG = '--spark';
+export const MADMAX_SPARK_FLAG = '--madmax-spark';
+export const CONFIG_FLAG = '-c';
+export const LONG_CONFIG_FLAG = '--config';
+export const MODEL_FLAG = '--model';
