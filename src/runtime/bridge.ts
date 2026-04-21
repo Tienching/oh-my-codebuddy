@@ -11,6 +11,10 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveActiveTeamStateRoot } from '../team/state-root.js';
+import {
+  resolveCanonicalRuntimeBinary,
+  isRuntimeBridgeEnabled as boundaryIsBridgeEnabled,
+} from '../compat/legacy-boundary.js';
 
 const __bridge_dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -118,7 +122,7 @@ export interface RuntimeBinaryDiscoveryOptions {
 
 export function resolveRuntimeBinaryPath(options: RuntimeBinaryDiscoveryOptions = {}): string {
   const exists = options.exists ?? existsSync;
-  const envOverride = process.env.OMB_RUNTIME_BINARY?.trim() || process.env.OMX_RUNTIME_BINARY?.trim();
+  const envOverride = resolveCanonicalRuntimeBinary();
   if (envOverride) return envOverride;
 
   const workspaceDebug = options.debugPath ?? resolve(__bridge_dirname, '../../target/debug/omx-runtime');
@@ -139,13 +143,13 @@ export class RuntimeBridge {
   private stateDir: string | undefined;
   private enabled: boolean;
 
-  constructor(options: { stateDir?: string; binaryPath?: string } = {}) {
-    this.enabled = process.env.OMX_RUNTIME_BRIDGE !== '0';
+  constructor(options: { stateDir?: string; binaryPath?: string; env?: NodeJS.ProcessEnv } = {}) {
+    this.enabled = boundaryIsBridgeEnabled(options.env);
     this.stateDir = options.stateDir;
     this.binaryPath = options.binaryPath ?? resolveRuntimeBinaryPath();
   }
 
-  /** Whether the bridge is enabled (OMX_RUNTIME_BRIDGE != '0'). */
+  /** Whether the bridge is enabled (OMB_RUNTIME_BRIDGE != '0', with OMX_RUNTIME_BRIDGE compat). */
   isEnabled(): boolean {
     return this.enabled;
   }
@@ -281,6 +285,6 @@ export function getDefaultBridge(stateDir?: string): RuntimeBridge {
   return _defaultBridge;
 }
 
-export function isBridgeEnabled(): boolean {
-  return process.env.OMX_RUNTIME_BRIDGE !== '0';
+export function isBridgeEnabled(env?: NodeJS.ProcessEnv): boolean {
+  return boundaryIsBridgeEnabled(env);
 }

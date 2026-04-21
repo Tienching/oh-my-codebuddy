@@ -1,6 +1,10 @@
 /**
  * omb setup - Automated installation of oh-my-codebuddy
  * Installs skills, prompts, MCP servers config, and AGENTS.md
+ *
+ * Refactored to support plan/preview/apply architecture.
+ * New modules: src/setup/plan.ts, src/setup/apply.ts, src/setup/config-merger.ts,
+ * src/setup/compat-rules.ts, src/setup/installers/
  */
 
 import {
@@ -62,6 +66,18 @@ import {
   detectPlatformRuntime,
   formatPlatformRuntime,
 } from "../platform/index.js";
+import {
+  type SetupAction,
+  type SetupPlan,
+  generateSetupPlan,
+  computePlanSummary,
+} from "../setup/plan.js";
+import { applySetupPlan, type ApplyResult } from "../setup/apply.js";
+import {
+  getLegacyScopeMigration,
+  getLegacySetupModel,
+  COMPAT_RULES,
+} from "../setup/compat-rules.js";
 
 interface SetupOptions {
   codexVersionProbe?: () => string | null;
@@ -81,21 +97,52 @@ interface SetupOptions {
  * Legacy scope values that may appear in persisted setup-scope.json files.
  * Both 'project-local' (renamed) and old 'project' (minimal, removed) are
  * migrated to the current 'project' scope on read.
+ * Now sourced from src/setup/compat-rules.ts
  */
-const LEGACY_SCOPE_MIGRATION: Record<string, "project"> = {
-  "project-local": "project",
-};
+const LEGACY_SCOPE_MIGRATION: Record<string, "project"> = getLegacyScopeMigration();
 
 export const SETUP_SCOPES = ["user", "project"] as const;
 export type SetupScope = (typeof SETUP_SCOPES)[number];
 
 export interface ScopeDirectories {
+  /** @deprecated Use homeDir instead */
   codexConfigFile: string;
+  /** @deprecated Use homeDir instead */
   codexHomeDir: string;
+  /** @deprecated Use hooksFile instead */
   codexHooksFile: string;
   nativeAgentsDir: string;
   promptsDir: string;
   skillsDir: string;
+}
+
+/**
+ * Neutral-name view of ScopeDirectories.
+ * Maps the legacy codex* field names to neutral names.
+ */
+export interface ScopeDirectoriesNeutral {
+  configFile: string;
+  homeDir: string;
+  hooksFile: string;
+  nativeAgentsDir: string;
+  promptsDir: string;
+  skillsDir: string;
+}
+
+/**
+ * Convert ScopeDirectories to neutral-name view.
+ */
+export function toNeutralScopeDirectories(
+  dirs: ScopeDirectories,
+): ScopeDirectoriesNeutral {
+  return {
+    configFile: dirs.codexConfigFile,
+    homeDir: dirs.codexHomeDir,
+    hooksFile: dirs.codexHooksFile,
+    nativeAgentsDir: dirs.nativeAgentsDir,
+    promptsDir: dirs.promptsDir,
+    skillsDir: dirs.skillsDir,
+  };
 }
 
 interface SetupCategorySummary {
@@ -193,7 +240,7 @@ const REQUIRED_TEAM_CLI_API_MARKERS = [
 ] as const;
 
 const DEFAULT_SETUP_SCOPE: SetupScope = "user";
-const LEGACY_SETUP_MODEL = "gpt-5.3-codex";
+const LEGACY_SETUP_MODEL = getLegacySetupModel();
 const DEFAULT_SETUP_MODEL = DEFAULT_FRONTIER_MODEL;
 const OBSOLETE_NATIVE_AGENT_FIELD = ["skill", "ref"].join("_");
 const TUI_OWNED_BY_CODEX_VERSION = [0, 107, 0] as const;

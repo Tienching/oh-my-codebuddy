@@ -4,7 +4,6 @@
  * Manages connections to language servers using JSON-RPC 2.0 over stdio.
  * Handles server lifecycle, message buffering, and request/response matching.
  *
- * Adapted from oh-my-claudecode for oh-my-codebuddy.
  */
 
 import { spawn, ChildProcess } from 'child_process';

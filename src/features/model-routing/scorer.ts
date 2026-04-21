@@ -4,7 +4,6 @@
  * Calculates complexity tier based on extracted signals.
  * Uses weighted scoring to determine LOW/MEDIUM/HIGH tier.
  *
- * Fully portable from oh-my-claudecode — pure math, no provider logic.
  */
 
 import type {

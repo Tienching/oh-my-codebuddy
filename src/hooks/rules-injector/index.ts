@@ -6,7 +6,6 @@
  * and injects their content into the tool output. Deduplicates by real path
  * and content hash to prevent repeated injection.
  *
- * Ported from oh-my-claudecode/src/hooks/rules-injector/
  */
 
 import { existsSync, readFileSync, realpathSync } from "fs";

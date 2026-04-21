@@ -5,7 +5,6 @@
  * and signals that the model should switch to a high-reasoning variant with
  * extended thinking budget.
  *
- * Ported from oh-my-claudecode/src/hooks/think-mode/
  */
 
 // ── Types ──────────────────────────────────────────────────────────────

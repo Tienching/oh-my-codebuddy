@@ -3,8 +3,6 @@
  *
  * Defines the rules engine for model routing decisions.
  * Rules are evaluated in priority order, and the first matching rule wins.
- *
- * Adapted from oh-my-claudecode with OMB-specific agent catalog.
  * ALL agents are adaptive based on task complexity.
  */
 

@@ -4,8 +4,6 @@
  * Extracts complexity signals from task prompts to inform routing decisions.
  * Signals are categorized into lexical, structural, and context types.
  *
- * Largely portable from oh-my-claudecode — the signal extraction is
- * provider-agnostic text analysis.
  */
 
 import type {

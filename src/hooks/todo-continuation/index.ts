@@ -7,7 +7,6 @@
  * (abort detection, rate limit detection, auth error detection) to ensure
  * safe escape hatches.
  *
- * Ported from oh-my-claudecode/src/hooks/todo-continuation/
  */
 
 import { existsSync, readFileSync } from "fs";

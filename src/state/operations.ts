@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { withModeRuntimeContext } from './mode-state-context.js';
@@ -16,7 +16,7 @@ import {
 } from '../mcp/state-paths.js';
 import { ensureCanonicalRalphArtifacts } from '../ralph/persistence.js';
 import { RALPH_PHASES, validateAndNormalizeRalphState } from '../ralph/contract.js';
-import { omxStateDir } from '../utils/paths.js';
+import { writeAtomicFile, createPathScopedWriteQueue } from '../shared/io/atomic-write.js';
 
 export const SUPPORTED_STATE_READ_MODES = [
   'autopilot',
@@ -41,47 +41,7 @@ export interface StateOperationResponse {
   isError?: boolean;
 }
 
-const stateWriteQueues = new Map<string, Promise<void>>();
-
-async function withStateWriteLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
-  const tail = stateWriteQueues.get(path) ?? Promise.resolve();
-  let release!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const queued = tail.finally(() => gate);
-  stateWriteQueues.set(path, queued);
-
-  await tail.catch(() => {});
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (stateWriteQueues.get(path) === queued) {
-      stateWriteQueues.delete(path);
-    }
-  }
-}
-
-async function writeAtomicFile(path: string, data: string): Promise<void> {
-  const tmpPath = `${path}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}`;
-  await writeFile(tmpPath, data, 'utf-8');
-  try {
-    await rename(tmpPath, path);
-  } catch (error) {
-    await unlink(tmpPath).catch(() => {});
-    throw error;
-  }
-}
-
-function getOmxStateDir(cwd: string, sessionId?: string): string {
-  const base = omxStateDir(cwd);
-  return sessionId ? join(base, 'sessions', sessionId) : base;
-}
-
-function getOmxStatePath(mode: string, cwd: string, sessionId?: string): string {
-  return join(getOmxStateDir(cwd, sessionId), `${validateStateModeSegment(mode)}-state.json`);
-}
+const writeQueue = createPathScopedWriteQueue();
 
 function readModeSupportsStrictValidation(mode: string): mode is SupportedStateReadMode {
   return SUPPORTED_STATE_READ_MODES.includes(mode as SupportedStateReadMode);
@@ -95,15 +55,11 @@ function validateStrictReadableMode(mode: unknown): string {
   return normalized;
 }
 
-async function initializeStateEnvironment(cwd: string, effectiveSessionId?: string): Promise<void> {
+async function ensureStateDir(cwd: string, effectiveSessionId?: string): Promise<void> {
   await mkdir(getStateDir(cwd), { recursive: true });
-  await mkdir(getOmxStateDir(cwd), { recursive: true });
   if (effectiveSessionId) {
     await mkdir(getStateDir(cwd, effectiveSessionId), { recursive: true });
-    await mkdir(getOmxStateDir(cwd, effectiveSessionId), { recursive: true });
   }
-  const { ensureTmuxHookInitialized } = await import('../cli/tmux-hook.js');
-  await ensureTmuxHookInitialized(cwd);
 }
 
 export async function listStateStatuses(
@@ -174,20 +130,15 @@ export async function executeStateOperation(
   try {
     const stateScope = await resolveStateScope(cwd, explicitSessionId);
     const effectiveSessionId = stateScope.sessionId;
-    await initializeStateEnvironment(cwd, effectiveSessionId);
+    await ensureStateDir(cwd, effectiveSessionId);
 
     switch (name) {
       case 'state_read': {
         const mode = validateStrictReadableMode(rawArgs.mode);
-        const omxPath = getOmxStatePath(mode, cwd, effectiveSessionId);
-        const preferOmxOnly =
-          mode === 'team' && existsSync(getOmxStateDir(cwd, effectiveSessionId));
-        const paths = preferOmxOnly
-          ? [omxPath]
-          : [
-              omxPath,
-              ...(await getReadScopedStatePaths(mode, cwd, explicitSessionId)),
-            ];
+        // Read canonical first, then fall back to scoped paths for read-through compat
+        const canonicalPath = getStatePath(mode, cwd, effectiveSessionId);
+        const scopedPaths = await getReadScopedStatePaths(mode, cwd, explicitSessionId);
+        const paths = [canonicalPath, ...scopedPaths.filter((p) => p !== canonicalPath)];
         const path = paths.find((candidate) => existsSync(candidate));
         if (!path) {
           return { payload: { exists: false, mode } };
@@ -199,7 +150,6 @@ export async function executeStateOperation(
       case 'state_write': {
         const mode = validateStateModeSegment(rawArgs.mode);
         const path = getStatePath(mode, cwd, effectiveSessionId);
-        const omxPath = getOmxStatePath(mode, cwd, effectiveSessionId);
         const {
           mode: _mode,
           workingDirectory: _workingDirectory,
@@ -209,7 +159,7 @@ export async function executeStateOperation(
         } = rawArgs;
         let validationError: string | null = null;
 
-        await withStateWriteLock(path, async () => {
+        await writeQueue.withWriteLock(path, async () => {
           let existing: Record<string, unknown> = {};
           if (existsSync(path)) {
             try {
@@ -254,7 +204,6 @@ export async function executeStateOperation(
           const merged = withModeRuntimeContext(existing, mergedRaw);
           const serialized = JSON.stringify(merged, null, 2);
           await writeAtomicFile(path, serialized);
-          await writeAtomicFile(omxPath, serialized);
         });
 
         if (validationError) {
@@ -264,7 +213,7 @@ export async function executeStateOperation(
           };
         }
 
-        return { payload: { success: true, mode, path: omxPath } };
+        return { payload: { success: true, mode, path } };
       }
 
       case 'state_clear': {
@@ -273,14 +222,10 @@ export async function executeStateOperation(
 
         if (!allSessions) {
           const path = getStatePath(mode, cwd, effectiveSessionId);
-          const omxPath = getOmxStatePath(mode, cwd, effectiveSessionId);
           if (existsSync(path)) {
             await unlink(path);
           }
-          if (existsSync(omxPath)) {
-            await unlink(omxPath);
-          }
-          return { payload: { cleared: true, mode, path: omxPath } };
+          return { payload: { cleared: true, mode, path } };
         }
 
         const removedPaths = new Set<string>();
@@ -289,11 +234,6 @@ export async function executeStateOperation(
           if (!existsSync(path)) continue;
           await unlink(path);
           removedPaths.add(path);
-        }
-        const omxRoot = getOmxStatePath(mode, cwd);
-        if (existsSync(omxRoot)) {
-          await unlink(omxRoot);
-          removedPaths.add(omxRoot);
         }
 
         return {

@@ -43,6 +43,7 @@
     "smoke:packed-install": "node dist/scripts/smoke-packed-install.js",
     "test:sparkshell": "node dist/scripts/test-sparkshell.js",
     "test:reply-listener:live": "node dist/scripts/test-reply-listener-live.js",
+    "clean:env": "bash src/scripts/clean-team-env.sh",
     "postpack": "npm run clean:native-package-assets"
   },
   "engines": {

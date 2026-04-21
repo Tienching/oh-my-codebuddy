@@ -10,8 +10,13 @@ import { readdir, readFile, realpath } from "fs/promises";
 import { dirname, isAbsolute, join, resolve } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
+import {
+  resolveCanonicalCodebuddyHome,
+  resolveCanonicalEntryPath as boundaryResolveEntryPath,
+  resolveLegacyStateDir,
+} from "../compat/legacy-boundary.js";
 
-/** Legacy Codex CLI home directory (~/.codex/) */
+/** Legacy Codex CLI home directory (~/.codex/) — compat-only; prefer codebuddyHome() */
 export function codexHome(): string {
   return process.env.CODEX_HOME || process.env.CODEBUDDY_HOME || join(homedir(), ".codex");
 }
@@ -40,10 +45,10 @@ export function resolveOmxEntryPath(
   } = {},
 ): string | null {
   const { argv1 = process.argv[1], cwd = process.cwd(), env = process.env } = options;
-  const fromEnv = String(env[OMX_ENTRY_PATH_ENV] ?? "").trim();
-  if (fromEnv !== "") return fromEnv;
-  const fromOmbEnv = String(env[OMB_ENTRY_PATH_ENV] ?? "").trim();
-  if (fromOmbEnv !== "") return fromOmbEnv;
+
+  // Delegate to legacy-boundary for canonical-first env resolution
+  const fromBoundary = boundaryResolveEntryPath({ env });
+  if (fromBoundary !== null) return fromBoundary;
 
   const rawPath = typeof argv1 === "string" ? argv1.trim() : "";
   if (rawPath === "") return null;
@@ -144,7 +149,7 @@ export function legacyUserSkillsDir(): string {
 
 /** CodeBuddy CLI home directory (~/.codebuddy/, with $CODEX_HOME compatibility fallback) */
 export function codebuddyHome(): string {
-  return process.env.CODEBUDDY_HOME || process.env.CODEX_HOME || join(homedir(), ".codebuddy");
+  return resolveCanonicalCodebuddyHome();
 }
 
 /** CodeBuddy config file path (~/.codebuddy/config.toml) */
@@ -319,27 +324,27 @@ async function hashSkillDirectory(
   return hashes;
 }
 
-/** OMB compatibility state directory (.omx/state/) */
+/** OMB compatibility state directory (.omx/state/) — compat-only; prefer ombStateDir() */
 export function omxStateDir(projectRoot?: string): string {
-  return join(projectRoot || process.cwd(), ".omx", "state");
+  return resolveLegacyStateDir(projectRoot || process.cwd());
 }
 
-/** OMB compatibility project memory file (.omx/project-memory.json) */
+/** OMB compatibility project memory file (.omx/project-memory.json) — compat-only */
 export function omxProjectMemoryPath(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omx", "project-memory.json");
 }
 
-/** OMB compatibility notepad file (.omx/notepad.md) */
+/** OMB compatibility notepad file (.omx/notepad.md) — compat-only */
 export function omxNotepadPath(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omx", "notepad.md");
 }
 
-/** OMB compatibility plans directory (.omx/plans/) */
+/** OMB compatibility plans directory (.omx/plans/) — compat-only */
 export function omxPlansDir(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omx", "plans");
 }
 
-/** OMB compatibility logs directory (.omx/logs/) */
+/** OMB compatibility logs directory (.omx/logs/) — compat-only */
 export function omxLogsDir(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omx", "logs");
 }

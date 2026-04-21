@@ -9,7 +9,6 @@
  * Complements OMB's existing event log (state/events.ts) by adding
  * MCP-specific event types and rotation support.
  *
- * Ported from oh-my-claudecode/src/team/audit-log.ts
  */
 
 import { existsSync, readFileSync } from "fs";

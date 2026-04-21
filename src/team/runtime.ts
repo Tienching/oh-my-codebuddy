@@ -3,6 +3,8 @@ import { existsSync, appendFileSync, mkdirSync } from 'fs';
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import { performance } from 'perf_hooks';
 import { spawn, spawnSync, type ChildProcessByStdio } from 'child_process';
+import { monitorTeamCycle, type MonitorCycleResult } from './monitor/index.js';
+import { decideFromSnapshot } from './monitor/reducer.js';
 import type { Writable } from 'stream';
 import {
   sanitizeTeamName,
@@ -4269,3 +4271,9 @@ export async function broadcastWorkerMessage(
     throw new Error(`mailbox_notify_failed:${firstFailure?.reason ?? 'unknown'}`);
   }
 }
+
+// Re-export new decomposed monitor modules for gradual migration.
+// New callers should use monitorTeamCycle and decideFromSnapshot directly.
+export { monitorTeamCycle, type MonitorCycleResult } from './monitor/index.js';
+export { decideFromSnapshot, type MonitorDecision } from './monitor/reducer.js';
+export { TeamLifecycleCoordinator, type LifecycleStep, type LifecycleResult, type LifecycleContext } from './lifecycle/coordinator.js';

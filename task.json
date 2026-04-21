@@ -1,1783 +1,2877 @@
 {
+  "schema_version": "1.0.0",
+  "pass": true,
   "project": "oh-my-codebuddy",
-  "reference_project": "/home/ubuntu/Projects/oh-my-claudecode",
-  "created_at": "2026-04-20",
-  "updated_at": "2026-04-20",
-  "plan_schema_version": "2.1.0",
-  "layers": [
-    "Foundation",
-    "CLI",
-    "Platform",
-    "Interop",
-    "Workflow",
-    "Team",
-    "Hooks",
-    "Tools",
-    "Quality",
-    "Experience",
-    "Learning",
-    "Verification"
-  ],
-  "description": "基于与 oh-my-claudecode 的结构化对比，生成可分阶段落地的移植计划。所有任务默认 pass=false，用于逐项验收。",
-  "analysis_snapshot": {
-    "method": "对两个仓库 src 目录做路径级比对（去重并标注新增/共用文件）",
-    "counts": {
-      "oh-my-codebuddy_src_files": 490,
-      "oh-my-claudecode_src_files": 879,
-      "common_relative_paths": 117,
-      "codebuddy_only_files": 373,
-      "claudecode_only_files": 762
-    },
-    "shared_top_dirs": [
-      "agents",
-      "autoresearch",
-      "cli",
-      "config",
-      "features",
-      "hooks",
-      "hud",
-      "index.ts",
-      "mcp",
-      "notifications",
-      "openclaw",
-      "planning",
-      "team",
-      "tools"
-    ],
-    "codebuddy_only_notable_dirs": [
-      "compat",
-      "catalog",
-      "modes",
-      "pipeline",
-      "ralph",
-      "ralplan",
-      "runtime",
-      "scripts",
-      "session-history",
-      "subagents",
-      "visual"
-    ],
-    "claudecode_only_notable_dirs": [
-      "providers",
-      "platform",
-      "interop",
-      "lib",
-      "commands",
-      "constants",
-      "ralphthon",
-      "skills",
-      "shared",
-      "verification"
-    ],
-    "high_value_candidates_in_oh_my_claudecode": [
-      "providers（仓库/远端供应商检测）",
-      "features/context-injector / task-decomposer / delegation-* / magic-keywords（上下文与策略化执行）",
-      "features/background-agent、background-tasks、continuation-enforcement、rate-limit-wait（长任务韧性）",
-      "features/learner、session-history-search、notepad-wisdom（经验沉淀）",
-      "team/runtime-v2、task-router、dispatch-queue、summary-report（调度增强）",
-      "mcp/omc-tools-server、shared-memory-server、job-management（工具生态）",
-      "hooks/auto-slash-command、think-mode、project-memory、recovery、skill-state（钩子体系）",
-      "hooks/extensibility（插件化加载）",
-      "hud/background-tasks/openclaw（可观测性与外部事件）"
+  "artifact_type": "task.json",
+  "generated_at": "2026-04-21",
+  "language": "zh-CN",
+  "generation_basis": {
+    "pass": false,
+    "basis": "基于 main 分支公开仓库结构的静态审阅结果整理，不包含本地运行、测试执行或真实提交。",
+    "bias": "优先修边界、兼容债务、职责分离、测试契约与恢复能力，而不是先加新功能。"
+  },
+  "global_defaults": {
+    "pass": true,
+    "default_item_state": "todo",
+    "default_pass": false
+  },
+  "audit_basis": {
+    "pass": false,
+    "summary": [
+      {
+        "pass": false,
+        "text": "README 将项目定义为 CodeBuddy CLI 的多代理 orchestration/runtime layer，强调 tmux/worktree、MCP/CLI parity、AGENTS scaffolding、guided workflow。"
+      },
+      {
+        "pass": false,
+        "text": "package.json 同时暴露 omb 与 omx 两个 bin。"
+      },
+      {
+        "pass": false,
+        "text": "src/utils/paths.ts 同时维护 CODEBUDDY_HOME/CODEX_HOME、OMB/OMX entry env、.codebuddy/.codex 等路径兼容。"
+      },
+      {
+        "pass": false,
+        "text": "src/cli/setup.ts 同时承担 setup scope、legacy scope migration、legacy model migration、.codex alias、team CLI interop 验证等职责。"
+      },
+      {
+        "pass": false,
+        "text": "src/team/runtime.ts 的 monitorTeam 同时承担 scan/decide/actuate/persist 多阶段工作。"
+      },
+      {
+        "pass": false,
+        "text": "src/state/operations.ts 在状态读写时还会初始化运行环境并写 canonical+legacy state。"
+      },
+      {
+        "pass": false,
+        "text": "src/runtime/bridge.ts 是 Rust runtime 的薄桥接层，同时执行命令、读 snapshot、再读 compatibility JSON。"
+      },
+      {
+        "pass": false,
+        "text": "src/hooks/agents-overlay.ts 与 src/team/worker-bootstrap.ts 都在管理 AGENTS 生态，包含锁、overlay、generated instructions、skip-worktree 恢复等逻辑。"
+      },
+      {
+        "pass": false,
+        "text": "src/hooks/session.ts 使用 PID + Linux start ticks/cmdline 做 stale 检测，但仍有 omb/omx session 双写。"
+      },
+      {
+        "pass": false,
+        "text": "COVERAGE.md 与 CONTRIBUTING.md 暴露了身份漂移、dist 覆盖率 gate、手工 unset OMB_TEAM_* 等维护成本信号。"
+      }
     ]
   },
-  "assumptions": [
-    "移植目标是增强 Codex 体验，不追求无差异复刻 Claude Code 全量模型。",
-    "默认保持现有 CLI 与状态目录语义（omb/omx、.omb/.omx）为主，.codex/.clade 兼容保持回退可用。",
-    "每个能力都需提供可关闭的兼容开关，避免一次性大规模行为变更。"
-  ],
-  "constraints": [
-    "每个任务和子任务默认 pass=false，只在人工/自动验收通过后置为 true。",
-    "新增能力必须有正向与回归测试，至少各 1 个（含失败场景）。",
-    "不影响现有主链路时，任何新模块仅提供 feature-flag/兼容层接入。",
-    "涉及 tmux、文件锁、持久化状态的改造必须明确清理与回退路径。"
-  ],
-  "migration_categories": [
-    {
-      "id": "direct-port",
-      "description": "Read-only or leaf behavior can be ported directly because it does not take over an authoritative writer.",
-      "default_rollout": "Only after parity tests are green and the existing entrypoint remains available for rollback."
-    },
-    {
-      "id": "adapter-first",
-      "description": "Stateful or user-visible behavior must land behind a compatibility adapter and an off-by-default feature flag.",
-      "default_rollout": "Legacy implementation remains authoritative until shadow diffs and regression gates are green."
-    },
-    {
-      "id": "reference-only",
-      "description": "Upstream behavior is tracked for planning or QA, but is not promoted to a shipped runtime path yet.",
-      "default_rollout": "Documentation only; removing the reference must not change shipped behavior."
-    }
-  ],
-  "migration_module_matrix": [
-    {
-      "source_module": "agents",
-      "target_surface": [
-        "src/agents"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T05",
-        "T07"
-      ]
-    },
-    {
-      "source_module": "autoresearch",
-      "target_surface": [
-        "src/autoresearch"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T12"
-      ]
-    },
-    {
-      "source_module": "cli",
-      "target_surface": [
-        "src/cli",
-        "src/commands"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T02",
-        "T03",
-        "T13"
-      ]
-    },
-    {
-      "source_module": "config",
-      "target_surface": [
-        "src/config",
-        "src/utils/paths.ts"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T02",
-        "T04",
-        "T07"
-      ]
-    },
-    {
-      "source_module": "features",
-      "target_surface": [
-        "src/features"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T04",
-        "T05"
-      ]
-    },
-    {
-      "source_module": "hooks",
-      "target_surface": [
-        "src/hooks"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T05",
-        "T07",
-        "T13"
-      ]
-    },
-    {
-      "source_module": "hud",
-      "target_surface": [
-        "src/hud"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T12"
-      ]
-    },
-    {
-      "source_module": "index.ts",
-      "target_surface": [
-        "src/index.ts"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T12"
-      ]
-    },
-    {
-      "source_module": "mcp",
-      "target_surface": [
-        "src/mcp",
-        "src/team/mcp-comm.ts"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T08",
-        "T14"
-      ]
-    },
-    {
-      "source_module": "notifications",
-      "target_surface": [
-        "src/notifications"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T12"
-      ]
-    },
-    {
-      "source_module": "openclaw",
-      "target_surface": [
-        "src/openclaw"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T12"
-      ]
-    },
-    {
-      "source_module": "planning",
-      "target_surface": [
-        "src/planning",
-        ".omx/plans"
-      ],
-      "classification": "reference-only",
-      "tasks": [
-        "T01",
-        "T12"
-      ]
-    },
-    {
-      "source_module": "team",
-      "target_surface": [
-        "src/team"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T06",
-        "T14"
-      ]
-    },
-    {
-      "source_module": "tools",
-      "target_surface": [
-        "src/tools",
-        "src/shared-memory"
-      ],
-      "classification": "adapter-first",
-      "tasks": [
-        "T08",
-        "T13"
-      ]
-    }
-  ],
-  "conflict_matrix": [
-    {
-      "surface": "CLI",
-      "conflict": "New command template and platform facades must not change omb/omx argument semantics by default.",
-      "guardrail": "Keep existing CLI dispatch authoritative until adapter coverage is green."
-    },
-    {
-      "surface": "Paths",
-      "conflict": ".omb/.omx stay canonical while legacy compatibility paths remain read-only fallbacks.",
-      "guardrail": "Do not move canonical state ownership during the first migration phase."
-    },
-    {
-      "surface": "Hooks",
-      "conflict": "New hook loaders may extend behavior but cannot block the main workflow when they fail.",
-      "guardrail": "Keep fail-open isolation and preserve the existing load order until coverage is green."
-    },
-    {
-      "surface": "State",
-      "conflict": "Team, Ralph, and interop payload semantics must be frozen before any new writer or versioned payload is enabled.",
-      "guardrail": "Freeze fixtures and shadow diffs first; keep legacy writers authoritative."
-    }
-  ],
-  "milestones": [
-    {
-      "id": "M0-contract-freeze",
-      "title": "Freeze migration contracts and rollout metadata",
-      "tasks": [
-        "T01",
-        "T01A"
-      ],
-      "acceptance": [
-        "Decision matrix, conflict matrix, and dependency topology are documented and verified.",
-        "Feature flags and rollback owners exist for every P0/P1 task."
-      ]
-    },
-    {
-      "id": "M1-passive-adapters",
-      "title": "Land passive adapters behind default-off flags",
-      "tasks": [
-        "T02",
-        "T03",
-        "T04",
-        "T05"
-      ],
-      "acceptance": [
-        "Legacy CLI/runtime/state paths remain authoritative.",
-        "New adapter code is reversible through task-level feature flags."
-      ]
-    },
-    {
-      "id": "M2-shadow-runtime",
-      "title": "Enable observable shadow/runtime parity gates",
-      "tasks": [
-        "T14",
-        "T06",
-        "T07",
-        "T08",
-        "T13"
-      ],
-      "acceptance": [
-        "Shadow diffs are observable and golden fixtures stay green.",
-        "Interop and team compatibility layers remain rollback-safe."
-      ]
-    },
-    {
-      "id": "M3-release-gates",
-      "title": "Promote migration verification into release gates",
-      "tasks": [
-        "T12",
-        "T15"
-      ],
-      "acceptance": [
-        "CI/release gates enforce migration evidence.",
-        "Update/release rollback flows are documented and testable."
-      ]
-    }
-  ],
-  "dependency_topology": [
-    "T01",
-    "T01A",
-    "T03",
-    "T02",
-    "T14",
-    "T04",
-    "T05",
-    "T06",
-    "T07",
-    "T13",
-    "T08",
-    "T12",
-    "T15"
-  ],
-  "risk_register": [
-    {
-      "risk": "tmux/CLI 依赖差异",
-      "impact": "与现有 team 工作流和会话模型冲突，可能导致任务执行阻塞",
-      "mitigation": "采用 facade + feature flag，默认走现有 runtime，逐步导入 v2 路径。"
-    },
-    {
-      "risk": "关键字与关键词语义冲突",
-      "impact": "magic-keywords / delegation 与现有关键字栈产生优先级歧义",
-      "mitigation": "建立关键字冲突白名单与可回退策略，并在测试中做优先级快照。"
-    },
-    {
-      "risk": "MCP/工具栈差异",
-      "impact": "工具协议字段与 schema 变化导致服务启动或回放失败",
-      "mitigation": "优先引入兼容适配层，采用 versioned schema 与变更日志。"
-    }
-  ],
-  "tasks": [
-    {
-      "id": "T01",
-      "pass": true,
-      "layer": "Foundation",
-      "lane": "Foundation",
-      "priority": "P0",
-      "title": "建立移植决策矩阵与优先级",
-      "description": "输出可执行的移植决策：可直接移植/需要适配/仅兼容参考，并形成可追踪依赖图。",
-      "scope": [
-        "task.json（规划文档更新）",
-        "src/features、src/team、src/hooks、src/tools、src/cli"
-      ],
-      "success_metrics": [
-        "移植项覆盖率 = 100%（src 层关键目录至少按模块划分）",
-        "风险项覆盖率 = 100%（每项含风险/依赖/回退）",
-        "任务依赖图无环（topology 可线性执行）"
-      ],
-      "acceptance_criteria": [
-        "形成 3 类迁移分类并可用于排期",
-        "每项迁移项都有默认验收口径与回滚策略",
-        "任务项与层级映射无歧义"
-      ],
-      "subtasks": [
-        {
-          "id": "T01.1",
-          "pass": true,
-          "title": "生成模块映射表（目录级+文件级）",
-          "scope": [
-            "scripts"
-          ],
-          "success_metrics": [
-            "映射文件覆盖率>=95%"
-          ],
-          "evidence": [
-            "docs/contracts/migration-baseline.md#module-migration-matrix",
-            "src/verification/__tests__/migration-baseline-gate.test.ts"
-          ]
-        },
-        {
-          "id": "T01.2",
-          "pass": true,
-          "title": "补齐冲突矩阵（CLI/路径/Hooks/State）",
-          "scope": [
-            "src/cli",
-            "src/modes",
-            "src/state",
-            "src/utils"
-          ],
-          "success_metrics": [
-            "高优先级冲突项可复现并可回归"
-          ],
-          "evidence": [
-            "docs/contracts/migration-baseline.md#conflict-matrix",
-            "src/verification/__tests__/migration-baseline-gate.test.ts"
-          ]
-        },
-        {
-          "id": "T01.3",
-          "pass": true,
-          "title": "输出里程碑与任务分层（MVP/增强/可选）",
-          "scope": [
-            "task.json"
-          ],
-          "success_metrics": [
-            "里程碑阶段>=3",
-            "每阶段含验收条件"
-          ],
-          "evidence": [
-            "task.json#migration-categories-module-matrix-conflict-matrix-milestones-dependency-topology",
-            "src/verification/__tests__/migration-baseline-gate.test.ts"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_MIGRATION_BASELINE_ENFORCED",
-          "default": false,
-          "owner": "Foundation"
-        }
-      ],
-      "rollback": {
-        "owner": "Foundation",
-        "steps": [
-          "Treat docs/contracts/migration-baseline.md as advisory only.",
-          "Remove T01 pass status and restore the previous sequencing assumptions if the baseline drifts."
-        ]
+  "execution_strategy": {
+    "pass": false,
+    "recommended_order": [
+      {
+        "pass": false,
+        "step": 1,
+        "title": "先做兼容边界收口（EPIC-01）"
       },
-      "evidence": [
-        "docs/contracts/migration-baseline.md",
-        "docs/qa/migration-shadow-gates.md",
-        "src/verification/__tests__/migration-baseline-gate.test.ts"
-      ]
-    },
-    {
-      "id": "T01A",
-      "pass": true,
-      "layer": "Foundation",
-      "lane": "Foundation",
-      "priority": "P0",
-      "title": "冻结迁移契约、状态迁移夹具与特性开关基线",
-      "description": "在高风险移植前，先固化 team / ralph / interop 的 schema、migration fixture、shadow diff 报告模板、feature-flag 名录与回滚 runbook。",
-      "scope": [
-        "src/team/state.ts",
-        "src/ralph/persistence.ts",
-        "src/team/api-interop.ts",
-        "src/verification",
-        "docs/contracts",
-        "task.json"
-      ],
-      "success_metrics": [
-        "team + ralph 迁移夹具覆盖关键读写路径",
-        "每个 P0/P1 任务都有 feature flag、默认值、rollback owner"
-      ],
-      "acceptance_criteria": [
-        "产出 migration fixture 清单",
-        "产出 feature-flag registry 与默认值",
-        "产出 shadow diff 与回滚模板"
-      ],
-      "deliverables": [
-        "docs/contracts/migration-baseline.md",
-        "docs/qa/migration-shadow-gates.md",
-        "task.json 中高风险任务的 feature_flags / rollback 字段"
-      ],
-      "dependencies": [
-        "T01"
-      ],
-      "subtasks": [
-        {
-          "id": "T01A.1",
-          "pass": true,
-          "title": "固化 team/ralph migration fixtures",
-          "scope": [
-            "src/team/state.ts",
-            "src/ralph/persistence.ts",
-            "src/verification"
-          ],
-          "success_metrics": [
-            "fixture 覆盖 one-way 与 idempotent migration"
-          ],
-          "evidence": [
-            "docs/contracts/migration-baseline.md#migration-fixture-inventory",
-            "src/ralph/__tests__/persistence.test.ts :: ensures canonical artifacts stay authoritative / one-way migration stays intact",
-            "src/team/__tests__/state.test.ts :: migrateV1ToV2 writes manifest.v2.json idempotently from legacy config.json",
-            "src/team/__tests__/state.test.ts :: dispatch bridge queue uses the same request id as the TS store",
-            "src/team/__tests__/state.test.ts :: dispatch request store enqueues, dedupes, and transitions idempotently",
-            "src/team/__tests__/team-ops-contract.test.ts",
-            "src/team/__tests__/state-root.test.ts"
-          ]
-        },
-        {
-          "id": "T01A.2",
-          "pass": true,
-          "title": "固化 interop payload 版本与 golden fixtures",
-          "scope": [
-            "src/team/api-interop.ts",
-            "src/team/contracts.ts",
-            "src/verification"
-          ],
-          "success_metrics": [
-            "至少 1 组成功 + 1 组失败 golden payload"
-          ],
-          "evidence": [
-            "docs/contracts/migration-baseline.md#interop-golden-payload-baseline",
-            "src/team/__tests__/api-interop.test.ts :: executeTeamApiOperation: versioned interop payloads"
-          ]
-        },
-        {
-          "id": "T01A.3",
-          "pass": true,
-          "title": "建立 feature-flag registry 与回滚模板",
-          "scope": [
-            "task.json",
-            "docs/contracts"
-          ],
-          "success_metrics": [
-            "所有 P0/P1 任务均有 flag 与 rollback"
-          ],
-          "evidence": [
-            "task.json feature_flags / rollback metadata for every P0/P1 task",
-            "src/verification/__tests__/migration-baseline-gate.test.ts"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_MIGRATION_CONTRACTS_ENFORCED",
-          "default": false,
-          "owner": "Foundation"
-        }
-      ],
-      "rollback": {
-        "owner": "Foundation",
-        "steps": [
-          "Keep contract enforcement docs-only until fixture gates are green.",
-          "Revert task-level pass status updates if fixture or metadata evidence becomes stale."
-        ]
+      {
+        "pass": false,
+        "step": 2,
+        "title": "再拆 CLI 入口与 setup 安装器（EPIC-02, EPIC-03）"
       },
-      "evidence": [
-        "docs/contracts/migration-baseline.md#migration-fixture-inventory",
-        "docs/qa/migration-shadow-gates.md",
-        "src/verification/__tests__/migration-baseline-gate.test.ts",
-        "src/ralph/__tests__/persistence.test.ts",
-        "src/team/__tests__/state.test.ts :: targeted migration fixture subtests",
-        "src/team/__tests__/api-interop.test.ts :: executeTeamApiOperation: versioned interop payloads"
-      ]
-    },
-    {
-      "id": "T02",
-      "pass": true,
-      "layer": "CLI",
-      "lane": "CLI",
-      "priority": "P1",
-      "title": "抽取现有命令与平台适配层",
-      "description": "复用现有 CLI 与配置路径，先抽取命令模板/参数替换与平台检测适配层，避免建立并行平台栈。",
-      "scope": [
-        "src/cli",
-        "src/commands",
-        "src/utils/paths.ts",
-        "src/config/generator.ts",
-        "src/cli/launch.ts",
-        "src/cli/index.ts",
-        "src/cli/team.ts"
-      ],
-      "success_metrics": [
-        "三类命令路径通过端到端：列表/读取/执行",
-        "现有 omb/omx 主命令回归通过率=100%",
-        "默认行为与当前兼容版本一致"
-      ],
-      "acceptance_criteria": [
-        "支持 `$ARGUMENTS` 模板替换和参数透传",
-        "命令模板加载失败时优雅降级",
-        "新增入口可配置开关并默认关闭实验特性"
-      ],
-      "dependencies": [
-        "T01A",
-        "T01"
-      ],
-      "subtasks": [
-        {
-          "id": "T02.1",
-          "pass": true,
-          "title": "引入命令模板读取/解析模块",
-          "scope": [
-            "src/commands/index.ts",
-            "src/commands/parser.ts"
-          ],
-          "success_metrics": [
-            "非法模板不影响主流程"
-          ]
-        },
-        {
-          "id": "T02.2",
-          "pass": true,
-          "title": "接入 CLI 命令分发与回退路径",
-          "scope": [
-            "src/cli/launch.ts",
-            "src/cli/team.ts",
-            "src/cli/index.ts"
-          ],
-          "success_metrics": [
-            "fallback 路径覆盖率=100%"
-          ]
-        },
-        {
-          "id": "T02.3",
-          "pass": true,
-          "title": "补齐文档与测试",
-          "scope": [
-            "src/cli/__tests__"
-          ],
-          "success_metrics": [
-            "关键字/命令模板测试>=6 条"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_EXPERIMENTAL_COMMAND_TEMPLATES",
-          "default": false,
-          "owner": "CLI"
-        }
-      ],
-      "rollback": {
-        "owner": "CLI",
-        "steps": [
-          "Leave command templates disabled by default.",
-          "If parsing or dispatch drifts, fall back to the current CLI logic without changing command semantics.",
-          "Keep current omb/omx behavior authoritative."
-        ]
+      {
+        "pass": false,
+        "step": 3,
+        "title": "随后处理 team runtime 与 state 纯化（EPIC-04, EPIC-05）"
+      },
+      {
+        "pass": false,
+        "step": 4,
+        "title": "在边界稳定后收敛 Rust/TS authority（EPIC-06）"
+      },
+      {
+        "pass": false,
+        "step": 5,
+        "title": "最后统一 AGENTS ownership、session 卫生、routing 契约、docs/CI（EPIC-07 ~ EPIC-10）"
       }
+    ],
+    "why": "先收边界，再拆重量级模块，最后再做 authority 收敛，风险最低。"
+  },
+  "definition_of_done": [
+    {
+      "pass": false,
+      "text": "compat 逻辑集中到单一边界层，业务层不再散落 legacy alias 判断。"
     },
     {
-      "id": "T03",
-      "pass": true,
-      "layer": "Platform",
-      "lane": "Platform",
+      "pass": false,
+      "text": "src/cli/index.ts 与 src/cli/setup.ts 从超重脚本变成薄编排层。"
+    },
+    {
+      "pass": false,
+      "text": "team runtime 的扫描、决策、副作用、持久化四层边界清晰。"
+    },
+    {
+      "pass": false,
+      "text": "state 读写不再产生隐藏运行时副作用。"
+    },
+    {
+      "pass": false,
+      "text": "Rust/TS runtime authority 有正式 ADR 和契约测试。"
+    },
+    {
+      "pass": false,
+      "text": "AGENTS 相关文件有单一 owner、统一锁、可恢复账本和边角测试。"
+    },
+    {
+      "pass": false,
+      "text": "session/state root 收敛到 canonical 策略。"
+    },
+    {
+      "pass": false,
+      "text": "explore routing、setup migration、team lifecycle 等高风险行为都有 contract tests。"
+    },
+    {
+      "pass": false,
+      "text": "README/docs/contributing/coverage 的项目身份与工程边界一致。"
+    }
+  ],
+  "epics": [
+    {
+      "id": "EPIC-01",
+      "pass": false,
+      "title": "历史兼容层收口，建立单一命名边界",
       "priority": "P0",
-      "title": "抽取现有 setup/update 的平台适配层（避免新建并行平台栈）",
-      "description": "在现有 setup/update 实现上补齐 installer/platform facade 与兼容开关，不引入独立并行 platform/installer 核心。",
-      "scope": [
-        "src/cli/setup.ts",
-        "src/cli/update.ts",
-        "src/utils/platform-command.ts",
-        "src/installer"
-      ],
-      "success_metrics": [
-        "离线/无更新场景下主流程不中断",
-        "平台检测与提示回退可脚本验证",
-        "已有 installer 路径仍可回归"
-      ],
-      "acceptance_criteria": [
-        "新增 installer/patform 公共 API",
-        "提供幂等安装与安全路径解析",
-        "更新提示支持 dry-run 与失败回退"
-      ],
-      "dependencies": [
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T03.1",
-          "pass": true,
-          "title": "新增平台检测与 tmux/环境探测",
-          "scope": [
-            "src/platform/index.ts",
-            "src/platform/process-utils.ts"
-          ],
-          "success_metrics": [
-            "tmux 缺失时降级分支覆盖"
-          ],
-          "evidence": [
-            "src/platform/index.ts",
-            "src/platform/process-utils.ts",
-            "src/cli/__tests__/setup-refresh.test.ts",
-            "src/cli/__tests__/update.test.ts",
-            "src/installer/__tests__/index.test.ts"
-          ]
-        },
-        {
-          "id": "T03.2",
-          "pass": true,
-          "title": "封装 installer 统一入口（路径/幂等）",
-          "scope": [
-            "src/installer/index.ts",
-            "src/cli/setup.ts"
-          ],
-          "success_metrics": [
-            "安装幂等用例通过"
-          ]
-        },
-        {
-          "id": "T03.3",
-          "pass": true,
-          "title": "补齐更新检测接口（含回退）",
-          "scope": [
-            "src/cli/update.ts",
-            "src/features/auto-update.ts"
-          ],
-          "success_metrics": [
-            "更新失败不中断主任务"
-          ]
-        }
-      ],
-      "rollback": {
-        "owner": "Platform",
-        "steps": [
-          "Disable the platform facade.",
-          "Route setup/update back to the existing implementation.",
-          "Keep current installer semantics authoritative."
-        ]
-      },
-      "feature_flags": [
-        {
-          "name": "OMB_EXPERIMENTAL_PLATFORM_FACADE",
-          "default": false,
-          "owner": "Platform"
-        }
-      ],
-      "evidence": [
-        "src/platform/index.ts",
-        "src/platform/process-utils.ts",
-        "src/installer/index.ts",
-        "src/cli/setup.ts",
-        "src/features/auto-update.ts",
-        "src/cli/__tests__/setup-refresh.test.ts",
-        "src/cli/__tests__/update.test.ts",
-        "src/installer/__tests__/index.test.ts"
-      ]
-    },
-    {
-      "id": "T04",
-      "pass": true,
-      "layer": "Interop",
-      "lane": "Interop",
-      "priority": "P0",
-      "title": "移植 providers 与上下文注入",
-      "description": "接入仓库供应商检测与统一上下文注入，增强 team 与 hooks 的远端信息一致性。",
-      "scope": [
-        "src/providers",
-        "src/features/context-injector",
-        "src/config",
-        "src/team/role-router.ts"
-      ],
-      "success_metrics": [
-        "常见 provider 解析率>=95%",
-        "provider 解析失败降级路径100%命中",
-        "上下文注入影响范围可追踪"
-      ],
-      "acceptance_criteria": [
-        "新增 providers 核心类型与解析能力",
-        "team / hooks 能读取 provider 快照",
-        "异常输入下无主流程阻塞"
-      ],
-      "dependencies": [
-        "T03",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T04.1",
-          "pass": true,
-          "title": "移植 provider 类型与检测接口",
-          "scope": [
-            "src/providers/index.ts",
-            "src/providers/types.ts"
-          ],
-          "success_metrics": [
-            "provider 覆盖 GitHub/GitLab/Bitbucket/Gitea/Azure"
-          ]
-        },
-        {
-          "id": "T04.2",
-          "pass": true,
-          "title": "建立上下文注入管道",
-          "scope": [
-            "src/features/context-injector/index.ts",
-            "src/features/context-injector/collector.ts"
-          ],
-          "success_metrics": [
-            "上下文注入链路通过率>=98%"
-          ]
-        },
-        {
-          "id": "T04.3",
-          "pass": true,
-          "title": "编写 provider/注入回归测试",
-          "scope": [
-            "src/features/__tests__",
-            "src/providers/__tests__"
-          ],
-          "success_metrics": [
-            "非法/空输入场景覆盖"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_PROVIDER_CONTEXT_INJECTION",
-          "default": false,
-          "owner": "Interop"
-        }
-      ],
-      "rollback": {
-        "owner": "Interop",
-        "steps": [
-          "Disable provider/context injection.",
-          "Fall back to current config + role-router behavior.",
-          "Keep provider enrichment out of the main path until fallback coverage is green."
-        ]
-      }
-    },
-    {
-      "id": "T05",
-      "pass": true,
-      "layer": "Workflow",
-      "lane": "Workflow",
-      "priority": "P1",
-      "title": "迁移关键字策略与任务拆解能力",
-      "description": "引入 magic-keyword、delegation、task-decomposer 的可配置版本，形成可控路由与子任务分解。",
-      "scope": [
-        "src/features/magic-keywords.ts",
-        "src/features/delegation-*.ts",
-        "src/features/task-decomposer.ts",
-        "src/hooks/keyword-detector"
-      ],
-      "success_metrics": [
-        "关键字触发映射冲突100%覆盖",
-        "任务拆解后路由成功率>=95%",
-        "可通过 feature flag 关闭"
-      ],
-      "acceptance_criteria": [
-        "关键字可配置且有优先级体系",
-        "任务拆解规则可回放",
-        "拆解前后任务数与 token 预算可对齐"
-      ],
-      "dependencies": [
-        "T04"
-      ],
-      "subtasks": [
-        {
-          "id": "T05.1",
-          "pass": true,
-          "title": "建立关键词管道并对齐现有关键字栈",
-          "scope": [
-            "src/features/magic-keywords.ts",
-            "src/hooks/keyword-detector/index.ts"
-          ],
-          "success_metrics": [
-            "新增关键词测试>=20"
-          ],
-          "evidence": [
-            "src/features/magic-keywords.ts",
-            "src/hooks/keyword-detector/index.ts",
-            "src/features/__tests__/magic-keywords.test.ts",
-            "src/hooks/__tests__/keyword-detector.test.ts :: keyword detector swarm/team compatibility + keyword registry coverage"
-          ]
-        },
-        {
-          "id": "T05.2",
-          "pass": true,
-          "title": "实现 delegation-routing 与拒绝规则",
-          "scope": [
-            "src/features/delegation-routing/index.ts",
-            "src/features/delegation-enforcer.ts"
-          ],
-          "success_metrics": [
-            "拒绝规则可回退且记录原因"
-          ],
-          "evidence": [
-            "src/features/delegation-routing/index.ts",
-            "src/features/delegation-enforcer.ts",
-            "src/features/__tests__/delegation-routing.test.ts"
-          ]
-        },
-        {
-          "id": "T05.3",
-          "pass": true,
-          "title": "接入 task-decomposer 并输出子任务元信息",
-          "scope": [
-            "src/features/task-decomposer/index.ts",
-            "src/features/task-decomposer/types.ts"
-          ],
-          "success_metrics": [
-            "拆解后最小颗粒度不小于任务规模阈值"
-          ],
-          "evidence": [
-            "src/features/task-decomposer/index.ts",
-            "src/features/task-decomposer/types.ts",
-            "src/features/__tests__/task-decomposer.test.ts",
-            "src/cli/__tests__/team-decompose.test.ts"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_MAGIC_KEYWORD_ROUTER",
-          "default": false,
-          "owner": "Workflow"
-        }
-      ],
-      "rollback": {
-        "owner": "Workflow",
-        "steps": [
-          "Disable keyword routing/task decomposition extensions.",
-          "Use the current keyword stack and routing rules only.",
-          "Restore previous token/task budgeting if decomposition drifts."
-        ]
-      },
-      "evidence": [
-        "src/features/magic-keywords.ts",
-        "src/hooks/keyword-detector/index.ts",
-        "src/features/delegation-routing/index.ts",
-        "src/features/delegation-enforcer.ts",
-        "src/features/task-decomposer/index.ts",
-        "src/features/task-decomposer/types.ts",
-        "src/features/__tests__/magic-keywords.test.ts",
-        "src/features/__tests__/delegation-routing.test.ts",
-        "src/features/__tests__/task-decomposer.test.ts",
-        "src/cli/__tests__/team-decompose.test.ts",
-        "src/hooks/__tests__/keyword-detector.test.ts :: keyword detector swarm/team compatibility + keyword registry coverage"
-      ]
-    },
-    {
-      "id": "T06",
-      "pass": true,
-      "layer": "Team",
-      "lane": "Team",
-      "priority": "P1",
-      "title": "Team 运行时影子路由与可回退 facade（shadow-first）",
-      "description": "先实现只读 shadow 路由、队列映射与摘要差异观测，默认保持现有 runtime 为写路径主控；按开关分阶段引入 v2 写行为。",
-      "scope": [
-        "src/team/runtime.ts",
-        "src/team/task-router.ts",
-        "src/team/dispatch-queue.ts",
-        "src/team/summary-report.ts",
-        "src/team/unified-team.ts",
-        "src/team/mcp-team-bridge.ts"
-      ],
-      "success_metrics": [
-        "legacy runtime 回退可用率=100%",
-        "shadow 路由一致性差异可观测",
-        "任务摘要（task id/state/error）可追溯"
-      ],
-      "acceptance_criteria": [
-        "新增 runtime-v2 兼容入口（默认关闭）",
-        "team 路由有 confidence 与降级日志",
-        "队列状态与 worker 健康指标可导出"
-      ],
-      "dependencies": [
-        "T05",
-        "T14",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T06.1",
-          "pass": true,
-          "title": "实现 runtime-v2 兼容外壳（仅灰度）",
-          "scope": [
-            "src/team/runtime.ts",
-            "src/team/runtime-v2.ts"
-          ],
-          "success_metrics": [
-            "默认路径回退测试通过"
-          ]
-        },
-        {
-          "id": "T06.2",
-          "pass": true,
-          "title": "落地 task-router + dispatch-queue facade",
-          "scope": [
-            "src/team/task-router.ts",
-            "src/team/dispatch-queue.ts",
-            "src/team/state/dispatch.ts"
-          ],
-          "success_metrics": [
-            "路由决策命中率>=90%"
-          ]
-        },
-        {
-          "id": "T06.3",
-          "pass": true,
-          "title": "补齐 summary-report 与状态映射",
-          "scope": [
-            "src/team/summary-report.ts",
-            "src/team/role-router.ts",
-            "src/team/orchestrator.ts"
-          ],
-          "success_metrics": [
-            "摘要字段完整性>=95%"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_TEAM_TASK_ROUTER_SHADOW",
-          "default": false,
-          "owner": "Team"
-        },
-        {
-          "name": "OMB_TEAM_RUNTIME_V2",
-          "default": false,
-          "owner": "Team"
-        }
-      ],
-      "deliverables": [
-        "routing/assignment shadow diff 报告",
-        "runtime-v2 切换清单",
-        "legacy 回退检查清单"
-      ],
-      "rollback": {
-        "owner": "Team",
-        "steps": [
-          "Disable shadow routing and runtime-v2 flags.",
-          "Keep the legacy team runtime as the only write path.",
-          "Purge shadow artifacts only after the diff report is captured."
-        ]
-      }
-    },
-    {
-      "id": "T07",
-      "pass": true,
-      "layer": "Hooks",
-      "lane": "Hooks",
-      "priority": "P1",
-      "title": "扩展 hooks 生态与可插拔加载",
-      "description": "增强现有 hooks 加载器能力，接入 auto-slash/think-mode/project-memory/recovery 等高价值模块并做隔离降级。",
-      "scope": [
-        "src/hooks/extensibility",
-        "src/hooks/auto-slash-command",
-        "src/hooks/think-mode",
-        "src/hooks/recovery",
-        "src/hooks/skill-state"
-      ],
-      "success_metrics": [
-        "单点 hook 异常对主流程影响=0%（隔离）",
-        "hook 注册/注销 100% 受控",
-        "钩子执行日志可检索"
-      ],
-      "acceptance_criteria": [
-        "失败 hook 回退不阻断",
-        "新增 hook 的开关支持运行时配置",
-        "兼容旧 hooks 加载序列"
-      ],
-      "dependencies": [
-        "T06",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T07.1",
-          "pass": true,
-          "title": "统一 Hook 注册 schema 与错误处理",
-          "scope": [
-            "src/hooks/extensibility/index.ts",
-            "src/hooks/extensibility/loader.ts",
-            "src/hooks/extensibility/runtime.ts"
-          ],
-          "success_metrics": [
-            "注册失败告警>0时可快速定位"
-          ]
-        },
-        {
-          "id": "T07.2",
-          "pass": true,
-          "title": "迁移 auto-slash/think-mode/project-memory 核心逻辑",
-          "scope": [
-            "src/hooks/auto-slash-command",
-            "src/hooks/think-mode",
-            "src/hooks/project-memory"
-          ],
-          "success_metrics": [
-            "核心 hook 回归通过>=95%"
-          ]
-        },
-        {
-          "id": "T07.3",
-          "pass": true,
-          "title": "补齐 hook 回退与异常隔离测试",
-          "scope": [
-            "src/hooks/__tests__"
-          ],
-          "success_metrics": [
-            "hook 异常测试>=8"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_HOOKS_EXTENSIBILITY_V2",
-          "default": false,
-          "owner": "Hooks"
-        }
-      ],
-      "rollback": {
-        "owner": "Hooks",
-        "steps": [
-          "Disable the new hooks extensibility path.",
-          "Fall back to the current loader sequence.",
-          "Keep hook failures isolated from the main workflow."
-        ]
-      }
-    },
-    {
-      "id": "T08",
-      "pass": true,
-      "layer": "Tools",
-      "lane": "Tools",
-      "priority": "P1",
-      "title": "在现有 shared-memory/MCP 基础上补齐 bridge 与 schema 版本",
-      "description": "基于已有 shared-memory / mcp / tools 能力补齐 bridge 兼容层、payload versioning 与清理回路，不引入并行工具子系统。",
-      "scope": [
-        "src/mcp",
-        "src/tools",
-        "src/shared-memory",
-        "src/team/api-interop.ts",
-        "src/team/mcp-comm.ts"
-      ],
-      "success_metrics": [
-        "MCP 启停生命周期 100% 覆盖",
-        "schema 兼容率>=95%（含版本降级）",
-        "工具异常不影响运行"
-      ],
-      "acceptance_criteria": [
-        "统一 MCP server 配置与暴露方式",
-        "共享内存与状态清理逻辑完整",
-        "工具 schema 变更有版本记录"
-      ],
-      "dependencies": [
-        "T06",
-        "T14",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T08.1",
-          "pass": true,
-          "title": "补齐 state-tools / memory-tools / trace-tools",
-          "scope": [
-            "src/tools/state-tools.ts",
-            "src/tools/memory-tools.ts",
-            "src/tools/trace-tools.ts"
-          ],
-          "success_metrics": [
-            "工具列表用例通过"
-          ]
-        },
-        {
-          "id": "T08.2",
-          "pass": true,
-          "title": "补齐共享状态与清理机制",
-          "scope": [
-            "src/shared-memory",
-            "src/lib/shared-memory.ts",
-            "src/lib/file-lock.ts"
-          ],
-          "success_metrics": [
-            "资源清理测试通过>=90%"
-          ]
-        },
-        {
-          "id": "T08.3",
-          "pass": true,
-          "title": "统一 MCP 配置与 bridge 兼容",
-          "scope": [
-            "src/mcp/index.ts",
-            "src/mcp/standalone-server.ts",
-            "src/mcp/interop.ts"
-          ],
-          "success_metrics": [
-            "interop payload 兼容覆盖>=80%"
-          ]
-        }
-      ],
-      "deliverables": [
-        "versioned MCP schema 文档",
-        "compatibility fixture 套件",
-        "shared-memory 清理回归清单"
-      ],
-      "rollback": {
-        "owner": "Tools",
-        "steps": [
-          "Disable bridge/schema versioning changes.",
-          "Fall back to the current tool and MCP entrypoints.",
-          "Keep cleanup and shared-memory behavior on the legacy path."
-        ]
-      },
-      "feature_flags": [
-        {
-          "name": "OMB_BRIDGE_SCHEMA_VERSIONING",
-          "default": false,
-          "owner": "Tools"
-        }
-      ]
-    },
-    {
-      "id": "T09",
-      "pass": true,
-      "layer": "Quality",
-      "lane": "Quality",
-      "priority": "P2",
-      "title": "持久化与中断恢复能力",
-      "description": "引入后台任务、速率限制等待与 continuation 能力，提升长会话可恢复性。",
-      "scope": [
-        "src/features/background-tasks.ts",
-        "src/features/background-agent",
-        "src/features/rate-limit-wait",
-        "src/features/continuation-enforcement.ts",
-        "src/session-history",
-        "src/features/verification.ts"
-      ],
-      "success_metrics": [
-        "后台任务清理率=100%",
-        "中断恢复可复原率>=95%",
-        "速率限制后可生成恢复建议"
-      ],
-      "acceptance_criteria": [
-        "任务生命周期可追踪",
-        "后台守护器可启停",
-        "恢复链路覆盖正向与失败"
-      ],
-      "dependencies": [
-        "T08",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T09.1",
-          "pass": true,
-          "title": "新增后台任务入口与生命周期",
-          "scope": [
-            "src/features/background-tasks.ts",
-            "src/features/background-agent/concurrency.ts"
-          ],
-          "success_metrics": [
-            "未结束任务自动清理"
-          ]
-        },
-        {
-          "id": "T09.2",
-          "pass": true,
-          "title": "接入 rate-limit-wait 与 daemon 逻辑",
-          "scope": [
-            "src/features/rate-limit-wait/index.ts",
-            "src/features/rate-limit-wait/daemon.ts"
-          ],
-          "success_metrics": [
-            "rate-limit 场景恢复提示覆盖"
-          ]
-        },
-        {
-          "id": "T09.3",
-          "pass": true,
-          "title": "补齐 continuation 与历史检索",
-          "scope": [
-            "src/features/continuation-enforcement.ts",
-            "src/features/session-history-search/index.ts",
-            "src/session-history"
-          ],
-          "success_metrics": [
-            "恢复后上下文回填通过率>=90%"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "T10",
-      "pass": true,
-      "layer": "Experience",
-      "lane": "Experience",
-      "priority": "P2",
-      "title": "HUD、通知与可观测性增强",
-      "description": "完善 HUD 信息维度和通知策略，提升复杂执行场景可读性与事故追踪。",
-      "scope": [
-        "src/hud",
-        "src/notifications",
-        "src/openclaw",
-        "src/team/summary-report.ts"
-      ],
-      "success_metrics": [
-        "关键 HUD 字段无空值率>=95%",
-        "tmux 不可用时降级可见",
-        "通知模板通过校验"
-      ],
-      "acceptance_criteria": [
-        "HUD 支持队列/速率/worker 状态展示",
-        "通知限流与回退路径可配置",
-        "openclaw 事件映射可追踪"
-      ],
-      "dependencies": [
-        "T07",
-        "T08"
-      ],
-      "subtasks": [
-        {
-          "id": "T10.1",
-          "pass": true,
-          "title": "扩展 HUD 元素",
-          "scope": [
-            "src/hud/elements",
-            "src/hud/index.ts",
-            "src/hud/watch.ts"
-          ],
-          "success_metrics": [
-            "新增元素覆盖率>=3"
-          ]
-        },
-        {
-          "id": "T10.2",
-          "pass": true,
-          "title": "通知节流与回退策略",
-          "scope": [
-            "src/notifications/notifier.ts",
-            "src/notifications/dispatch-cooldown.ts",
-            "src/notifications/validation.ts"
-          ],
-          "success_metrics": [
-            "通知风控测试>=12"
-          ]
-        },
-        {
-          "id": "T10.3",
-          "pass": true,
-          "title": "openclaw 事件生命周期对齐",
-          "scope": [
-            "src/openclaw",
-            "src/hooks/session-end",
-            "src/team/summary-report.ts"
-          ],
-          "success_metrics": [
-            "事件字段映射一致率>=95%"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "T11",
-      "pass": true,
-      "layer": "Learning",
-      "lane": "Learning",
-      "priority": "P2",
-      "title": "学习/记忆增强收敛到现有 project-memory 与 session-history",
-      "description": "将 learner / notepad-wisdom 需求映射到现有 project-memory 与 session-history，不新增独立全局学习状态源。",
-      "scope": [
-        "src/hooks/project-memory",
-        "src/session-history",
-        "src/hooks/extensibility",
-        "src/config/codebuddy-hooks.ts"
-      ],
-      "success_metrics": [
-        "提取->持久化->注入闭环成功率>=90%",
-        "关闭学习能力后副作用=0",
-        "学习条目可回溯"
-      ],
-      "acceptance_criteria": [
-        "提取器支持触发与阈值控制",
-        "技能文件可清理和版本管理",
-        "注入前后输出差异可验证"
-      ],
-      "dependencies": [
-        "T09",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T11.1",
-          "pass": true,
-          "title": "实现 learner 抽取与 matcher",
-          "scope": [
-            "src/features/learner/index.ts",
-            "src/features/learner/detector.ts"
-          ],
-          "success_metrics": [
-            "匹配准确率指标>=85%"
-          ]
-        },
-        {
-          "id": "T11.2",
-          "pass": true,
-          "title": "接入 skill-state/notepad 持久化",
-          "scope": [
-            "src/hooks/skill-state",
-            "src/hooks/notepad",
-            "src/state/skill-active.ts"
-          ],
-          "success_metrics": [
-            "持久化写入一致性测试"
-          ]
-        },
-        {
-          "id": "T11.3",
-          "pass": true,
-          "title": "配置开关与文档",
-          "scope": [
-            "src/config/codebuddy-hooks.ts",
-            "README.md"
-          ],
-          "success_metrics": [
-            "开关缺省值清晰"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "T12",
-      "pass": true,
-      "layer": "Verification",
-      "lane": "Verification",
-      "priority": "P0",
-      "title": "移植验收与发布门禁基线",
-      "description": "建立可重复的移植验收框架与发布门禁：测试矩阵、CI 检查、迁移看板与报告链路。",
-      "scope": [
-        "src/verification",
+      "objective": "把 CodeBuddy/Codex、OMB/OMX、.codebuddy/.codex、CODEBUDDY_HOME/CODEX_HOME 等历史兼容集中到边界层，业务域内部只说一种 canonical 语言。",
+      "why": "当前仓库同时暴露 omb/omx 两个 bin，paths/setup/session/runtime/team 等路径与环境变量又在多处并行兼容。继续让兼容逻辑散落，会让后续重构半径持续变大。",
+      "target_files": [
         "package.json",
-        ".github/workflows",
-        "task.json"
+        "src/utils/paths.ts",
+        "src/cli/setup.ts",
+        "src/cli/index.ts",
+        "src/hooks/session.ts",
+        "src/team/runtime.ts",
+        "src/state/operations.ts"
       ],
-      "success_metrics": [
-        "每个 P0/P1/P2 任务都有 1 正向+1 回归测试",
-        "CI 门禁覆盖 lint/test/coverage",
-        "任务 pass 状态形成可追踪报告"
-      ],
-      "acceptance_criteria": [
-        "测试脚本与 CI 对齐",
-        "验收报告包含覆盖率与回归率",
-        "版本发布前有兼容性检查"
-      ],
-      "dependencies": [
-        "T14",
-        "T13",
-        "T01A"
-      ],
-      "subtasks": [
+      "observations": [
         {
-          "id": "T12.1",
-          "pass": true,
-          "title": "补齐移植专项测试套件",
-          "scope": [
-            "src/verification/verifier.ts",
-            "src/verification/ci-rules"
-          ],
-          "success_metrics": [
-            "用例总数覆盖所有新模块"
-          ]
+          "pass": false,
+          "text": "package.json 同时暴露 dist/cli/omb.js 与 dist/cli/omx.js。"
         },
         {
-          "id": "T12.2",
-          "pass": true,
-          "title": "加固 CI 门禁与脚本",
-          "scope": [
-            "package.json",
-            "package-lock.json",
-            ".github/workflows"
-          ],
-          "success_metrics": [
-            "CI 全量通过率>=95%"
-          ]
+          "pass": false,
+          "text": "src/utils/paths.ts 同时维护 CODEBUDDY_HOME/CODEX_HOME、OMB_ENTRY_PATH/OMX_ENTRY_PATH、.codebuddy/.codex 路径语义。"
         },
         {
-          "id": "T12.3",
-          "pass": true,
-          "title": "输出迁移报告与任务 pass 看板",
-          "scope": [
-            "task.json",
-            "CHANGELOG.md"
-          ],
-          "success_metrics": [
-            "报告与 task.json 一致"
-          ]
+          "pass": false,
+          "text": "src/cli/setup.ts 仍大量使用 codexHomeDir/codexConfigFile 等命名，并生成 .codex 兼容 alias。"
+        },
+        {
+          "pass": false,
+          "text": "src/hooks/session.ts 与 src/team/runtime.ts 仍有 .omb/.omx 双写或双读行为。"
+        },
+        {
+          "pass": false,
+          "text": "src/cli/index.ts 仍有 omx 升级/兼容语义残留。"
         }
       ],
-      "feature_flags": [
+      "tasks": [
         {
-          "name": "OMB_MIGRATION_RELEASE_GATES",
-          "default": false,
-          "owner": "Verification"
-        }
-      ],
-      "rollback": {
-        "owner": "Verification",
-        "steps": [
-          "Do not make migration gates release-blocking yet.",
-          "Keep verification artifacts advisory until CI coverage is green.",
-          "Revert task pass promotions that are not backed by evidence."
-        ]
-      }
-    },
-    {
-      "id": "T13",
-      "pass": true,
-      "layer": "Tools",
-      "lane": "Tools",
-      "priority": "P1",
-      "title": "Hook 插件 CLI 可见性与验收收口",
-      "description": "基于现有 hooks extensibility 运行时，补齐 CLI 入口、文档与验收用例，避免重复改动 loader/schema。",
-      "scope": [
-        "src/cli/hooks.ts",
-        "README.md",
-        "src/hooks/__tests__",
-        "src/hooks/extensibility/runtime.ts"
-      ],
-      "success_metrics": [
-        "插件禁用/启用覆盖率=100%",
-        "插件加载失败不阻断 CLI",
-        "插件签名/路径隔离测试>=90%"
-      ],
-      "acceptance_criteria": [
-        "建立插件元数据 schema",
-        "补齐插件状态日志",
-        "提供启停与校验命令"
-      ],
-      "dependencies": [
-        "T07",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T13.1",
+          "id": "E1-T01",
           "pass": true,
-          "title": "对齐插件元数据与日志模型",
-          "scope": [
-            "src/hooks/extensibility/types.ts",
-            "src/hooks/extensibility/runtime.ts"
+          "title": "新增 compat/legacy-boundary 模块并收拢所有历史 alias",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/compat/legacy-boundary.ts",
+            "src/utils/paths.ts",
+            "src/cli/setup.ts",
+            "src/hooks/session.ts",
+            "src/team/runtime.ts",
+            "src/state/operations.ts"
           ],
-          "success_metrics": [
-            "字段兼容性测试>=90%"
+          "problem": "兼容判断分散在多个模块里，任何新代码都容易继续复制 alias 逻辑。",
+          "change_spec": [
+            "新增一个唯一入口的 legacy boundary 模块，集中定义：环境变量别名、bin 别名、目录别名、状态根兼容、文案兼容。",
+            "要求业务模块只能调用 canonical API，例如 resolveCanonicalCodebuddyHome()/readLegacyAliasIfPresent() 之类的显式边界函数。",
+            "把散落在 paths/setup/session/runtime/state 里的 alias 分支迁移到该模块，禁止新模块直接读 CODEX_HOME / .codex / OMX_*。",
+            "为每种 alias 标记状态：active_compat、warn_only、read_only、write_disabled、removal_candidate。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "仓库中不再出现多处手写的 CODEX_HOME/.codex/OMX_* 兼容判断；兼容逻辑集中到 1 个模块或 1 个子目录。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "业务层调用点都改用 canonical 边界 API。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "每个 alias 都有清晰状态而不是隐式长期保留。"
+            }
+          ],
+          "depends_on": [],
+          "notes": "这是整个重构的地基，不先做这一层，后续任何拆分都会把旧名字一起扩散。"
+        },
+        {
+          "id": "E1-T02",
+          "pass": true,
+          "title": "把内部类型与变量名从 codex/omx 改成中性或 canonical 命名",
+          "priority": "P0",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts",
+            "src/cli/index.ts",
+            "src/utils/paths.ts",
+            "src/runtime/bridge.ts"
+          ],
+          "problem": "setup/paths/index 内部仍然大量使用 codexHomeDir、codexConfigFile、resolveCodexLaunchPolicy 等命名，导致读代码时分不清“当前概念”和“兼容概念”。",
+          "change_spec": [
+            "优先把内部变量/接口名改成 neutral 或 canonical，例如 scopeDirs.homeDir / configFile / nativeAgentsDir。",
+            "只在 boundary 层保留 legacy/codex/omx 命名；其余地方统一用 codebuddy/omb 或 domain-neutral 词汇。",
+            "将公共类型名同步重命名，避免把历史命名继续暴露给其他模块。",
+            "为重命名增加类型测试和导出兼容层，避免一次性破坏太多调用点。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "src/cli/setup.ts 的 ScopeDirectories 等核心类型不再用 codex* 命名承载 canonical 目录。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新命名能让代码阅读者一眼看出哪些是 canonical，哪些是 compatibility。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "对外暴露的兼容接口如需保留，必须单独放在 compat 命名空间。"
+            }
+          ],
+          "depends_on": [
+            "E1-T01"
           ]
         },
         {
-          "id": "T13.2",
+          "id": "E1-T03",
           "pass": true,
-          "title": "补齐插件生命周期验证",
-          "scope": [
-            "src/hooks/extensibility/dispatcher.ts",
-            "src/hooks/extensibility/sdk.ts"
-          ],
-          "success_metrics": [
-            "enable/disable 场景覆盖>=95%"
-          ]
-        },
-        {
-          "id": "T13.3",
-          "pass": true,
-          "title": "CLI 文档与验收用例",
-          "scope": [
-            "src/cli/hooks.ts",
-            "README.md",
-            "src/hooks/__tests__"
-          ],
-          "success_metrics": [
-            "文档与测试一致"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_HOOK_PLUGIN_CLI",
-          "default": false,
-          "owner": "Tools"
-        }
-      ],
-      "rollback": {
-        "owner": "Tools",
-        "steps": [
-          "Disable the hook plugin CLI surface.",
-          "Use the current hooks runtime without new CLI commands.",
-          "Restore previous plugin visibility rules if validation drifts."
-        ]
-      }
-    },
-    {
-      "id": "T14",
-      "pass": true,
-      "layer": "Interop",
-      "lane": "Interop",
-      "priority": "P0",
-      "title": "API 互操作契约与通信桥接",
-      "description": "建立统一 interop payload 与 runtime/bridge 错误码映射，实现兼容可回退的数据交换层。",
-      "scope": [
-        "src/team/api-interop.ts",
-        "src/team/contracts.ts",
-        "src/team/mcp-comm.ts",
-        "src/cli/team.ts"
-      ],
-      "success_metrics": [
-        "interop 命令调用成功率>=95%",
-        "schema 兼容校验覆盖>=90%",
-        "错误码可定位率=100%"
-      ],
-      "acceptance_criteria": [
-        "新增跨组件 payload 版本字段",
-        "兼容旧接口的回退响应不丢失语义",
-        "关键接口有一致性回归测试"
-      ],
-      "dependencies": [
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T14.1",
-          "pass": true,
-          "title": "定义 interop payload schema",
-          "scope": [
-            "src/team/api-interop.ts",
-            "src/team/contracts.ts"
-          ],
-          "success_metrics": [
-            "版本字段覆盖>1"
-          ]
-        },
-        {
-          "id": "T14.2",
-          "pass": true,
-          "title": "补齐通信错误码与降级映射",
-          "scope": [
-            "src/team/mcp-comm.ts",
+          "title": "统一 .omb/.omx 的读写策略，禁止隐式双写扩散",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/state/operations.ts",
+            "src/hooks/session.ts",
             "src/team/runtime.ts"
           ],
-          "success_metrics": [
-            "错误码覆盖率=100%"
+          "problem": "state/session/runtime 中存在双写 legacy 文件的行为；如果没有明确生命周期，最终会形成两个事实源。",
+          "change_spec": [
+            "定义 canonical state root，并写成 ADR：是 .omb 还是别的路径，只能有一个权威写入位置。",
+            "legacy root 最多保留 read-through 或 migration write-through，不能在所有写路径里默认双写。",
+            "对当前仍需兼容的 legacy root，明确哪些文件允许同步写，哪些仅在迁移期生成一次。",
+            "实现一次性迁移命令或 setup 阶段迁移，而不是长期在运行时每次写双份。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "写路径默认只写 canonical root；legacy root 不再由每个调用点自行双写。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "state/session/team runtime 的兼容行为被统一抽象，而不是散落在模块内部。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "有明确迁移策略和回滚策略。"
+            }
+          ],
+          "depends_on": [
+            "E1-T01"
           ]
         },
         {
-          "id": "T14.3",
+          "id": "E1-T04",
           "pass": true,
-          "title": "Interop 一致性 e2e",
-          "scope": [
-            "src/verification",
-            "src/cli/team.ts"
+          "title": "把 omx 别名从“主流程公开语义”降级为“受控兼容语义”",
+          "priority": "P1",
+          "scope": "product",
+          "risk": "medium",
+          "files": [
+            "package.json",
+            "src/cli/setup.ts",
+            "src/cli/index.ts",
+            "README.md",
+            "docs/**"
           ],
-          "success_metrics": [
-            "成功+失败场景各1条"
-          ]
-        }
-      ],
-      "feature_flags": [
-        {
-          "name": "OMB_INTEROP_VERSIONED_PAYLOAD",
-          "default": false,
-          "owner": "Interop"
-        }
-      ],
-      "deliverables": [
-        "版本化 payload 与兼容字段清单",
-        "golden 成功+失败 fixtures",
-        "错误码映射表"
-      ],
-      "rollback": {
-        "owner": "Interop",
-        "steps": [
-          "Keep legacy response aliases available.",
-          "Disable versioned payload emission until golden fixtures are green.",
-          "Route failures through the current interop envelope."
-        ]
-      }
-    },
-    {
-      "id": "T15",
-      "pass": true,
-      "layer": "Platform",
-      "lane": "Platform",
-      "priority": "P1",
-      "title": "auto-update 与发布可视化验收闭环",
-      "description": "形成可验证的更新、回退和发布流程，防止更新链路影响稳定性。",
-      "scope": [
-        "src/cli/update.ts",
-        "src/installer",
-        "src/verification",
-        ".github/workflows",
-        "package.json"
-      ],
-      "success_metrics": [
-        "update dry-run/rollback 用例通过率100%",
-        "更新检查失败不阻断主流程",
-        "3 天内发布关键失败可追溯"
-      ],
-      "acceptance_criteria": [
-        "新增 update contract 与发布前检查",
-        "CI 引入 release gate",
-        "发布文档包含回滚流程"
-      ],
-      "dependencies": [
-        "T03",
-        "T12",
-        "T01A"
-      ],
-      "subtasks": [
-        {
-          "id": "T15.1",
-          "pass": true,
-          "title": "健壮化 update API（dry-run/backoff/lock）",
-          "scope": [
-            "src/cli/update.ts",
-            "src/installer/index.ts"
+          "problem": "README 已明确 Primary command 是 omb，但 setup 日志与 CLI 兼容输出里仍把 omx 当成常态公开表述。",
+          "change_spec": [
+            "决定 omx 是否继续保留为 bin alias；如果保留，文案上标成 deprecated alias，而不是并列一等公民。",
+            "帮助信息、错误信息、setup 提示、docs 示例一律优先展示 omb。",
+            "若保留 omx，可只在兼容说明、迁移说明和特定警告里出现。",
+            "为未来移除 omx 预留版本节奏。"
           ],
-          "success_metrics": [
-            "重试策略>=2"
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "用户面向文案中，omb 是唯一主命令。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "omx 出现时一定带兼容/迁移语义，不再和 omb 并列。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "包管理脚本与 README/Docs 的示例口径一致。"
+            }
+          ],
+          "depends_on": [
+            "E1-T01",
+            "E1-T02"
           ]
         },
         {
-          "id": "T15.2",
+          "id": "E1-T05",
           "pass": true,
-          "title": "补齐发布兼容性清单",
-          "scope": [
-            "src/verification",
+          "title": "为 legacy alias 添加回归测试矩阵",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/**/__tests__/**",
+            "package.json"
+          ],
+          "problem": "当前 alias 行为跨 env/path/bin/state 多维度展开，没有一套集中测试矩阵就很容易回归。",
+          "change_spec": [
+            "增加 table-driven 测试：CODEBUDDY_HOME vs CODEX_HOME、.codebuddy vs .codex、omb vs omx、OMB_* vs OMX_*。",
+            "对 setup、session、state、worker bootstrap 分别补兼容回归用例。",
+            "把 legacy boundary 的状态机（read-only / warn-only / canonical-only）写成断言。",
+            "确保未来删 alias 时可以有针对性地下线测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增测试能覆盖 env/path/bin/state 四类兼容面。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "每种 alias 至少有 1 个正向用例和 1 个 canonical 优先级用例。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "兼容优先级不再依赖隐式实现细节。"
+            }
+          ],
+          "depends_on": [
+            "E1-T01"
+          ]
+        },
+        {
+          "id": "E1-T06",
+          "pass": true,
+          "title": "新增 deprecation-policy 文档并绑定版本节奏",
+          "priority": "P2",
+          "scope": "docs",
+          "risk": "medium",
+          "files": [
+            "docs/deprecation-policy.md",
+            "README.md",
             "CHANGELOG.md"
           ],
-          "success_metrics": [
-            "release manifest 通过率100%"
+          "problem": "兼容层越多，越需要明确的退役计划，否则所有“临时兼容”都会永久化。",
+          "change_spec": [
+            "新增文档列出所有 legacy alias、引入原因、当前状态、最早可移除版本、用户迁移方式。",
+            "README 只保留简短入口，详细内容放到 docs。",
+            "CHANGELOG 模板里补充 deprecation 标记格式。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "每个 legacy alias 都能在文档中查到状态与计划。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "贡献者知道新增兼容项时必须填写退役计划。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "版本发布时可以审核兼容债务净增/净减。"
+            }
+          ],
+          "depends_on": [
+            "E1-T01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-02",
+      "pass": false,
+      "title": "拆分 src/cli/index.ts，降低入口文件复杂度",
+      "priority": "P0",
+      "objective": "把超重 CLI 入口拆成命令注册、上下文构建、执行编排、清理回滚、展示输出几层。",
+      "why": "当前 main() 和周边辅助逻辑在一个大文件里同时承担命令判定、launch policy、worktree、session、hooks、team、cleanup、update prompt、config repair 等职责，回归半径过大。",
+      "target_files": [
+        "src/cli/index.ts",
+        "src/cli/commands/**",
+        "src/cli/runtime/**",
+        "src/cli/output/**"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "src/cli/index.ts 公开 main(args) 且 knownCommands/launch policy/cleanup/team 逻辑集中。"
+        },
+        {
+          "pass": false,
+          "text": "同一入口文件还负责 tmux/HUD/notify/worktree/session 等多个横切行为。"
+        },
+        {
+          "pass": false,
+          "text": "index.ts 中存在升级兼容/配置修复等非纯命令分发逻辑。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E2-T01",
+          "pass": true,
+          "title": "抽出 command registry 与命令描述对象",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/cli/index.ts",
+            "src/cli/command-registry.ts",
+            "src/cli/commands/**"
+          ],
+          "problem": "入口文件同时负责命令解析和具体命令行为，新增命令会继续堆大 index.ts。",
+          "change_spec": [
+            "把命令解析和命令实现分离：registry 只保存 name/aliases/help/handler。",
+            "main() 只做 parse -> buildContext -> dispatch -> formatExit。",
+            "help/version/status 等轻命令也纳入统一注册表，而不是零散 if/else。",
+            "为 nested help 和 commandOwnsLocalHelp 提供统一元数据。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "index.ts 中不再出现大段命令分发表。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增命令只需要新增 handler + metadata。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "help/aliases 可以从 registry 自动生成。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E2-T02",
+          "pass": true,
+          "title": "抽出 CLI bootstrap context，隔离 process/env/fs 读取",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/cli/index.ts",
+            "src/cli/runtime/bootstrap-context.ts"
+          ],
+          "problem": "当前入口大量直接读取 process.cwd/process.env/process.stdin.isTTY/isTmuxAvailable 等全局状态，测试困难。",
+          "change_spec": [
+            "定义 CliBootstrapContext：cwd/env/platform/tty/tmux/logger/pathResolver 等。",
+            "把读取全局状态的逻辑集中到 buildBootstrapContext()。",
+            "命令 handler 接收上下文对象，不直接耦合 process.*。",
+            "让 launch policy/worktree/session/notify temp 相关逻辑能通过注入上下文测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "核心命令 handler 不直接访问 process.*。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "launch policy 与环境判断可以用纯单元测试覆盖。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "CLI 在测试里可稳定模拟不同平台/TTY/tmux 组合。"
+            }
+          ],
+          "depends_on": [
+            "E2-T01"
           ]
         },
         {
-          "id": "T15.3",
+          "id": "E2-T03",
           "pass": true,
-          "title": "增加发布回归脚本",
-          "scope": [
-            "package.json",
-            ".github/workflows",
-            "src/verification/verifier.ts"
+          "title": "把 launch 流程拆成预处理、执行、收尾三个阶段",
+          "priority": "P0",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/cli/index.ts",
+            "src/cli/runtime/launch-pipeline.ts"
           ],
-          "success_metrics": [
-            "发布失败可快速阻断"
+          "problem": "launch path 混入 update prompt、star prompt、config repair、worktree 切换、policy 选择、session 启动、post-exit cleanup，难以推断失败点。",
+          "change_spec": [
+            "定义 LaunchPipeline：preflight、prepareWorkspace、openSession、postExitCleanup。",
+            "每阶段返回显式结果对象，而不是共享大量局部变量。",
+            "把 update prompt / star prompt / config repair 这些 preflight 任务移到 preflight stage。",
+            "对 direct / detached-tmux / inside-tmux 三种策略使用同一生命周期接口。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "launch 的阶段边界清晰，失败时能知道卡在第几阶段。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "每阶段都可以单测或 smoke test。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "launch pipeline 的 rollback 规则显式化。"
+            }
+          ],
+          "depends_on": [
+            "E2-T02"
+          ]
+        },
+        {
+          "id": "E2-T04",
+          "pass": true,
+          "title": "独立 cleanup / rollback 服务，避免入口文件保存太多清理细节",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/cli/index.ts",
+            "src/cli/runtime/cleanup.ts",
+            "src/team/runtime.ts"
+          ],
+          "problem": "pane cleanup、team rollback、worktree rollback、overlay strip 等清理逻辑横跨多个路径，当前入口容易同时持有太多资源句柄。",
+          "change_spec": [
+            "建立 CleanupPlan / CleanupAction 类型，按资源类型登记清理动作。",
+            "启动过程中资源一旦创建就注册到 cleanup plan，而不是靠 scattered try/catch/finally。",
+            "失败时由统一 cleanup executor 执行，并记录 partial failure。",
+            "团队模式下的 team runtime cleanup 也接入统一接口。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "rollback 错误会被结构化收集，而不是拼接在入口字符串里。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "入口文件不再手写多轮 pane/worktree/agents/session cleanup。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增资源类型时只需实现一类 cleanup adapter。"
+            }
+          ],
+          "depends_on": [
+            "E2-T03"
+          ]
+        },
+        {
+          "id": "E2-T05",
+          "pass": true,
+          "title": "统一 CLI 错误分类与退出码映射",
+          "priority": "P1",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/cli/index.ts",
+            "src/cli/runtime/errors.ts"
+          ],
+          "problem": "当前入口虽然有 classifyCodexExecFailure 一类工具，但整体错误体系仍然偏局部，命令间退出码与报错口径不够统一。",
+          "change_spec": [
+            "定义统一错误模型：usage error、environment error、launch error、runtime error、partial cleanup error。",
+            "所有命令返回 CommandResult，由上层统一映射 exit code 与 stderr 文案。",
+            "将 classifySpawnError/classifyCodexExecFailure 等纳入统一错误模块。",
+            "为 JSON 模式与人类可读模式分别定义错误输出格式。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "不同命令路径的退出码规则一致。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "stderr 信息不再依赖散落的 console.error 模板。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "自动化调用 CLI 时能稳定区分 usage vs runtime 失败。"
+            }
+          ],
+          "depends_on": [
+            "E2-T01"
+          ]
+        },
+        {
+          "id": "E2-T06",
+          "pass": true,
+          "title": "为 CLI 命令面增加 smoke tests 和 golden help tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/cli/__tests__/**",
+            "package.json"
+          ],
+          "problem": "入口拆分后需要一组高层 smoke test 保证命令外观不被回归。",
+          "change_spec": [
+            "对 help/version/setup/status/team/api 等关键命令补 smoke tests。",
+            "对 help 输出、usage 输出、deprecation 输出做 golden snapshot。",
+            "对 direct / detached tmux / inside tmux 的 command parse 补组合测试。",
+            "对 worktree + notify temp + launch policy 组合补最小冒烟用例。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "CLI 顶层行为可以通过少量高层测试快速回归。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "命令帮助文案变更会被显式 review，而不是悄悄漂移。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "高风险解析逻辑有组合测试覆盖。"
+            }
+          ],
+          "depends_on": [
+            "E2-T01",
+            "E2-T02"
           ]
         }
+      ]
+    },
+    {
+      "id": "EPIC-03",
+      "pass": false,
+      "title": "把 setup 安装器拆成 plan/apply 服务，减轻历史包袱堆积",
+      "priority": "P0",
+      "objective": "把 setup 从“大脚本”改成可审计的安装计划与执行器集合。",
+      "why": "setup.ts 目前同时做 scope 选择、legacy 迁移、gitignore、settings.json、model 升级、hook/AGENTS 安装、team CLI interop 验证，未来很容易成为一切历史逻辑的堆场。",
+      "target_files": [
+        "src/cli/setup.ts",
+        "src/config/**",
+        "src/setup/**"
       ],
-      "feature_flags": [
+      "observations": [
         {
-          "name": "OMB_UPDATE_RELEASE_GATES",
-          "default": false,
-          "owner": "Platform"
+          "pass": false,
+          "text": "resolveScopeDirectories 仍使用 codexHomeDir 等字段承载 canonical 路径。"
+        },
+        {
+          "pass": false,
+          "text": "setup 中存在 LEGACY_SCOPE_MIGRATION、LEGACY_SETUP_MODEL、.codex alias、legacy hooks 兼容与 CLI interop 验证。"
+        },
+        {
+          "pass": false,
+          "text": "日志中仍直接出现 legacy omx alias still works / omx setup 等兼容文案。"
         }
       ],
-      "rollback": {
-        "owner": "Platform",
-        "steps": [
-          "Disable new update/release gates.",
-          "Keep current release/update behavior authoritative.",
-          "Use the documented rollback flow before retrying a release cutover."
-        ]
-      }
+      "tasks": [
+        {
+          "id": "E3-T01",
+          "pass": true,
+          "title": "将 setup 改为 plan -> preview -> apply 三段式执行",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts",
+            "src/setup/plan.ts",
+            "src/setup/apply.ts"
+          ],
+          "problem": "现在 setup 是线性脚本，难以做 dry-run、差异预览、失败回滚与单元测试。",
+          "change_spec": [
+            "先根据 scope、当前文件系统状态、兼容状态生成 SetupPlan。",
+            "plan 中明确列出每个动作：copy/update/remove/symlink/warn/skip/backup/verify。",
+            "apply 只负责执行 plan，不再临时判断策略。",
+            "dry-run 和 verbose 都基于同一份 plan 输出。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "setup 逻辑可以在不触盘的情况下完整预演。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "每个动作都可被审计和快照测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "失败重试时可以只针对 plan/action 层修复。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E3-T02",
+          "pass": true,
+          "title": "重命名 ScopeDirectories 等核心类型，去掉 codex* 语义污染",
+          "priority": "P0",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts"
+          ],
+          "problem": "setup 的核心目录对象仍用 codexHomeDir/codexConfigFile/codexHooksFile 命名，阅读体验和后续抽象都会受污染。",
+          "change_spec": [
+            "把 ScopeDirectories 改成 neutral/canonical 命名，例如 homeDir/configFile/hooksFile。",
+            "历史 Codex alias 的存在通过 boundary 层解释，不在 core type 中表达。",
+            "把 ensureScopedSettingsJson 等 API 也改用 neutral 参数名。",
+            "同步修正文案和注释，避免“路径已经是 .codebuddy，变量却叫 codexHomeDir”的反差。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "setup 核心类型命名与真实目录含义一致。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "阅读 setup 代码时能区分 canonical 概念与兼容来源。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "后续抽模块时不会把 codex 语义继续传播。"
+            }
+          ],
+          "depends_on": [
+            "E1-T02"
+          ]
+        },
+        {
+          "id": "E3-T03",
+          "pass": true,
+          "title": "抽出 managed config merger，单独处理 config.toml/settings.json",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts",
+            "src/setup/config-merger.ts"
+          ],
+          "problem": "配置文件生成、owned fields、TUI ownership、settings bootstrap 等逻辑混在安装器里，不利于测试。",
+          "change_spec": [
+            "单独建立 config merger，输入现有 config + desired state + ownership policy，输出合并结果与 diagnostics。",
+            "把 settings.json bootstrap 也放到该模块，避免 setup 主流程直接关心模型字段。",
+            "将 TUI ownership 与 legacy model migration 规则抽成数据表，不写在长流程中。",
+            "对合并结果做 snapshot 测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "配置合并行为可以脱离 setup 单独测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "owned/unowned 字段边界清晰。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "model/settings/TUI 相关政策不再散落。"
+            }
+          ],
+          "depends_on": [
+            "E3-T01"
+          ]
+        },
+        {
+          "id": "E3-T04",
+          "pass": true,
+          "title": "抽出 prompts/skills/native-agents/AGENTS/hook 安装器集合",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts",
+            "src/setup/installers/**"
+          ],
+          "problem": "当前 setup 同时管多类资产的复制、备份、跳过与摘要统计，逻辑重复且噪声大。",
+          "change_spec": [
+            "为 prompts、skills、native agents、AGENTS、hooks 各建 installer。",
+            "所有 installer 使用统一的 ActionResult 和 Summary 结构。",
+            "备份、差异检测、目标路径重写等共性逻辑下沉到 shared installer utils。",
+            "让 setup 主流程只组合 installers。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "setup.ts 主文件长度显著下降。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "各类资产安装都复用统一结果模型。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "未来新增资产类型时无需继续加大 setup.ts。"
+            }
+          ],
+          "depends_on": [
+            "E3-T01"
+          ]
+        },
+        {
+          "id": "E3-T05",
+          "pass": true,
+          "title": "把 legacy model / legacy scope / legacy alias 策略改成数据驱动表",
+          "priority": "P1",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts",
+            "src/setup/compat-rules.ts"
+          ],
+          "problem": "LEGACY_SCOPE_MIGRATION、LEGACY_SETUP_MODEL、legacy project alias 等策略目前是散点常量，容易继续变成长串 if/else。",
+          "change_spec": [
+            "把迁移策略统一写入 compat rules 表：from/to/condition/message/auto_fix。",
+            "setup 只解释规则并执行，不再手写多个迁移分支。",
+            "为规则表增加测试，验证迁移顺序、冲突和幂等性。",
+            "把用户提示文案与动作策略绑定到同一条规则。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增迁移规则时只改数据表和测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "迁移顺序与优先级可以直接审阅。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "setup 主流程中不再充斥 legacy if/else。"
+            }
+          ],
+          "depends_on": [
+            "E3-T01"
+          ]
+        },
+        {
+          "id": "E3-T06",
+          "pass": true,
+          "title": "将 team CLI API interop 验证抽出为独立 verifier",
+          "priority": "P2",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/cli/setup.ts",
+            "src/setup/verifiers/team-api-interop.ts"
+          ],
+          "problem": "当前 setup 主流程直接内嵌 verifyTeamCliApiInterop 结果和 legacy 文案，不利于单测和复用。",
+          "change_spec": [
+            "把 CLI interop verifier 变成独立模块，输出结构化 diagnostics。",
+            "setup 只负责展示 verifier 结果。",
+            "verifier 支持被 doctor/CI 复用，而不是仅 setup 使用。",
+            "将 legacy alias 文案从 verifier 内剥离，交给展示层。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "team API interop 检查可单独运行与测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "doctor/setup/CI 可以共享同一 verifier。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "文案展示与实际校验逻辑解耦。"
+            }
+          ],
+          "depends_on": [
+            "E3-T01"
+          ]
+        },
+        {
+          "id": "E3-T07",
+          "pass": true,
+          "title": "为 setup 增加 dry-run diff、plan snapshot、migration regression tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/setup/__tests__/**",
+            "package.json"
+          ],
+          "problem": "setup 牵涉文件系统和兼容迁移，极度需要 snapshot 与 regression 测试。",
+          "change_spec": [
+            "为典型场景生成 SetupPlan snapshot：全新安装、项目级安装、legacy alias 已存在、legacy hooks 已存在、scope 迁移。",
+            "对 dry-run 输出与 action summary 做 golden tests。",
+            "对反复执行 setup 的幂等性做测试。",
+            "对失败后重新执行的恢复性做测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "setup 主要场景都有 plan snapshot。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "重复执行 setup 不应造成额外脏写或重复 alias。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "迁移相关回归可以在测试里被稳定发现。"
+            }
+          ],
+          "depends_on": [
+            "E3-T01",
+            "E3-T05"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-04",
+      "pass": false,
+      "title": "拆分 team runtime，把 monitor/dispatch/integration/cleanup 解耦",
+      "priority": "P0",
+      "objective": "把 team runtime 从大杂糅 orchestration 改为 scan -> decide -> act -> persist 四层。",
+      "why": "monitorTeam 当前同时做过期 claim 回收、worker 活性扫描、rebalancing、phase 推断、事件发射、commit 集成、mailbox 投递、snapshot 写回。这个函数过重，会让任何 team 逻辑改动都有高回归风险。",
+      "target_files": [
+        "src/team/runtime.ts",
+        "src/team/state.ts",
+        "src/team/**"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "monitorTeam 中可见 reclaimExpiredTaskClaim、worker scan、buildRebalanceDecisions、assignTask、phase reconcile、emitMonitorDerivedEvents、integrateWorkerCommitsIntoLeader、deliverPendingMailboxMessages、writeMonitorSnapshot 等多职责并存。"
+        },
+        {
+          "pass": false,
+          "text": "启动/rollback 路径里又混入 pane cleanup、prompt worker teardown、AGENTS cleanup、state cleanup、worktree rollback。"
+        },
+        {
+          "pass": false,
+          "text": "team/state.ts 持有大量 manifest/task/worker 读写与锁逻辑。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E4-T01",
+          "pass": true,
+          "title": "把 monitorTeam 拆成 scan/decide/actuate/persist 四步",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/team/runtime.ts",
+            "src/team/monitor/**"
+          ],
+          "problem": "目前 monitorTeam 的职责过多，单个逻辑点难以独立验证。",
+          "change_spec": [
+            "scan 层只读取 manifest/tasks/workers/heartbeats/mailbox/snapshot。",
+            "decide 层只基于 snapshot 生成 recommendations、assignments、phase target、events。",
+            "actuate 层处理真实副作用：assign、mailbox notify、commit integrate、phase write。",
+            "persist 层只保存 monitor snapshot 和统计信息。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "monitorTeam 本身变成薄 orchestration；核心决策函数可纯单测。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "scan 与 actuation 可以分别 mock。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "性能与失败定位更清晰。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E4-T02",
+          "pass": true,
+          "title": "引入 TeamMonitorSnapshot 与纯决策 reducer",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/team/runtime.ts",
+            "src/team/monitor/snapshot.ts",
+            "src/team/monitor/reducer.ts"
+          ],
+          "problem": "当前决策逻辑直接夹在 IO 代码里，测试时必须构造文件系统和 tmux 环境。",
+          "change_spec": [
+            "定义 TeamMonitorSnapshot，完整描述 tasks/workers/phase/mailbox/previousSnapshot/integration 状态。",
+            "实现纯 reducer：输入 snapshot，输出 decisions。",
+            "把 reclaimed claims、dead workers、non-reporting workers、verification gaps、phase target 统一从 reducer 产出。",
+            "减少 runtime.ts 内部对临时 Map/Set 的无约束散布。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "大部分 team 监控逻辑可以在不触碰文件系统时测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "决策结果具备稳定 schema，便于日志与回归。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "runtime.ts 中的业务判断显著减少。"
+            }
+          ],
+          "depends_on": [
+            "E4-T01"
+          ]
+        },
+        {
+          "id": "E4-T03",
+          "pass": true,
+          "title": "将任务再平衡策略抽成独立 policy 模块",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/team/runtime.ts",
+            "src/team/rebalance-policy.ts"
+          ],
+          "problem": "buildRebalanceDecisions 虽然已有抽象，但与 monitor 流程仍紧耦合，策略可见性不够。",
+          "change_spec": [
+            "把再平衡 policy 定义成独立输入输出契约。",
+            "区分 assign / recommend / noop / quarantine 这类策略结果，而不是主要靠 recommendation 文本。",
+            "策略里显式考虑 worker role、alive、status、claimed task、verification pending、draining 状态。",
+            "为 policy 增加 table-driven tests。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "再平衡逻辑可以被单独 review 和测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "recommendation 文本不再承担真正状态机语义。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增 worker 状态或 task 状态时只改 policy 合约。"
+            }
+          ],
+          "depends_on": [
+            "E4-T02"
+          ]
+        },
+        {
+          "id": "E4-T04",
+          "pass": true,
+          "title": "把 mailbox dispatch / replay / notify 行为独立成 transport service",
+          "priority": "P1",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/team/runtime.ts",
+            "src/runtime/bridge.ts",
+            "src/team/transport/**"
+          ],
+          "problem": "mailbox delivery、notify 去重、leader mailbox TTL 清理与 runtime bridge 的边界目前比较模糊。",
+          "change_spec": [
+            "为 mailbox/dispatch 建立统一 transport service，封装 notify/deliver/replay/readiness 等行为。",
+            "monitor 只发 transport intents，不直接操作 message_id 去重映射。",
+            "对 leader mailbox 的 TTL 清理也通过 service 表达，而不是 monitor 内部 ad hoc 清理。",
+            "把 runtime bridge 的读写模型接到 transport service，而不是让上层到处感知兼容文件。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "mailbox 与 dispatch 副作用由单一 service 管理。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "message notified/delivered 的幂等性规则固定下来。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "monitor 流程不再直接持有 transport 去重细节。"
+            }
+          ],
+          "depends_on": [
+            "E4-T01",
+            "E6-T02"
+          ]
+        },
+        {
+          "id": "E4-T05",
+          "pass": true,
+          "title": "把 worker commit 集成与冲突处理独立成 integration coordinator",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/team/runtime.ts",
+            "src/team/integration/**"
+          ],
+          "problem": "当前 runtime 直接处理 worker merge/integration 及失败通知，职责过杂。",
+          "change_spec": [
+            "抽出 integration coordinator，输入 worker commits + previous integration snapshot，输出 apply plan。",
+            "把自动 merge、conflict fallback、leader notification、retry policy 写成单独模块。",
+            "把集成结果记录结构化，不再只拼接到 recommendation 文本。",
+            "对 conflict auto-resolve 失败路径增加专门测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "集成逻辑从 monitor 主流程移出。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "冲突处理规则可单独测试和复用。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "leader 通知与 git 行为不会再跟 phase/rebalance 判断混在一起。"
+            }
+          ],
+          "depends_on": [
+            "E4-T01"
+          ]
+        },
+        {
+          "id": "E4-T06",
+          "pass": true,
+          "title": "把 team startup/rollback/teardown 统一成生命周期协调器",
+          "priority": "P1",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/team/runtime.ts",
+            "src/team/lifecycle/**",
+            "src/cli/index.ts"
+          ],
+          "problem": "team 启动失败时要清理 pane、prompt worker、AGENTS、instructions file、state、worktree，当前 rollback 路径太长太脆。",
+          "change_spec": [
+            "定义 TeamLifecycleCoordinator：provision -> activate -> rollback -> shutdown。",
+            "将 pane/worktree/prompt worker/agents/state cleanup 都实现为 lifecycle step。",
+            "任何 step 失败都以结构化 rollback report 返回。",
+            "CLI 与 team runtime 共用这一协调器，而不是分别写清理逻辑。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "team 启停生命周期有清晰 API。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "rollback 失败可定位到 step 级别。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "CLI 不再内嵌 team 特有清理细节。"
+            }
+          ],
+          "depends_on": [
+            "E2-T04",
+            "E4-T01"
+          ]
+        },
+        {
+          "id": "E4-T07",
+          "pass": true,
+          "title": "给 team runtime 增加 determinism、idempotency 与 failure-injection tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/team/__tests__/**",
+            "package.json"
+          ],
+          "problem": "team orchestration 本质上是高状态密度模块，没有高价值回归测试就很难安全重构。",
+          "change_spec": [
+            "对 monitor snapshot -> decision reducer 做 determinism tests。",
+            "对 mailbox notify/deliver、claim reclaim、phase reconcile 做 idempotency tests。",
+            "增加 failure-injection 场景：worker dead、mailbox malformed、integration conflict、cleanup partial failure。",
+            "补 startup rollback 和 shutdown ACK 相关高层集成测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "重构 team runtime 后能依赖测试验证行为未漂移。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "关键状态机路径至少各有 1 组 failure-injection 用例。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "团队运行时不再只能靠手测兜底。"
+            }
+          ],
+          "depends_on": [
+            "E4-T01",
+            "E4-T02",
+            "E4-T06"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-05",
+      "pass": false,
+      "title": "把 state 层从隐式初始化器改成显式上下文 API",
+      "priority": "P0",
+      "objective": "让 state 读写层保持纯粹：解析路径、校验模式、串行写、原子写；不要顺便初始化 tmux/hook/运行环境。",
+      "why": "state/operations.ts 当前不仅做读写，还会 initializeStateEnvironment 并动态导入 tmux-hook；同时混合 strict read、dual-write、mode normalization、withModeRuntimeContext 等多重职责。",
+      "target_files": [
+        "src/state/operations.ts",
+        "src/mcp/state-paths.ts",
+        "src/cli/tmux-hook.ts"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "state/operations.ts 有 per-path write queue 和 atomic write，这部分是好的，但又夹带 initializeStateEnvironment。"
+        },
+        {
+          "pass": false,
+          "text": "initializeStateEnvironment 会 mkdir 各 state dir，并动态 import ../cli/tmux-hook.js 调 ensureTmuxHookInitialized。"
+        },
+        {
+          "pass": false,
+          "text": "state_write 同时写 canonical path 和 legacy omxPath。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E5-T01",
+          "pass": true,
+          "title": "定义显式 StateContext，禁止 state API 直接从 process/env 推断一切",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/state/operations.ts",
+            "src/state/context.ts",
+            "src/mcp/state-paths.ts"
+          ],
+          "problem": "当前 executeStateOperation 会自己解析 cwd/session/scope，再顺手初始化环境，API 边界不够清晰。",
+          "change_spec": [
+            "定义 StateContext：cwd/sessionId/scope/readPolicy/writePolicy/runtimeHints。",
+            "把 resolveWorkingDirectoryForState/resolveStateScope 等结果打包成显式上下文。",
+            "executeStateOperation 接收显式上下文或标准化后的 args，而不是同时做解析与执行。",
+            "减少 API 对 process.cwd/process.env 的隐式依赖。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "state API 可以在测试里直接传入上下文而无需模拟全局环境。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "路径解析、状态执行、环境初始化的职责分离。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "出现错误时更容易判断是上下文问题还是 state IO 问题。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E5-T02",
+          "pass": true,
+          "title": "把 tmux hook 初始化从 state 层迁出",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/state/operations.ts",
+            "src/cli/tmux-hook.ts",
+            "src/cli/index.ts",
+            "src/cli/setup.ts"
+          ],
+          "problem": "读写状态时顺便 ensureTmuxHookInitialized 属于隐藏副作用，会让调用者对 state API 的期望失真。",
+          "change_spec": [
+            "删除 initializeStateEnvironment 中对 tmux-hook 的动态导入和初始化。",
+            "把 tmux hook 初始化移动到真正拥有运行时/CLI 生命周期的层，例如 launch/setup/preflight。",
+            "为 state 层补无副作用测试，确保 state_read 不再修改环境。",
+            "若仍需 lazy init，至少放在显式 initializeRuntimeEnvironment() API，而不是 state read/write 路径。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "state_read / state_get_status / state_list_active 不再产生 hook 初始化副作用。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "state_write 只负责状态文件，不负责 CLI runtime wiring。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "tmux hook 初始化位置可被明确追踪。"
+            }
+          ],
+          "depends_on": [
+            "E5-T01"
+          ]
+        },
+        {
+          "id": "E5-T03",
+          "pass": true,
+          "title": "抽出 atomic writer 与 path-scoped queue，形成共享基础设施",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/state/operations.ts",
+            "src/team/state.ts",
+            "src/shared/io/atomic-write.ts"
+          ],
+          "problem": "state/operations.ts 和 team/state.ts 都有原子写/锁/序列化诉求，但当前实现碎片化。",
+          "change_spec": [
+            "把 writeAtomicFile + stateWriteQueues 抽成 shared IO 基础设施。",
+            "定义可复用的 path-scoped serial executor。",
+            "让 team/state.ts 也使用同一原子写/串行策略，而不是各自重复实现。",
+            "为共享基础设施增加并发测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "state 与 team state 的写一致性策略统一。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "基础设施可被其他高状态密度模块复用。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "并发写入测试可以独立验证。"
+            }
+          ],
+          "depends_on": [
+            "E5-T01"
+          ]
+        },
+        {
+          "id": "E5-T04",
+          "pass": true,
+          "title": "拆分 strict readable modes 与 writable modes 的政策对象",
+          "priority": "P1",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/state/operations.ts"
+          ],
+          "problem": "当前 strict read modes、write normalization、ralph special-case 等规则混在同一文件，扩展性一般。",
+          "change_spec": [
+            "把 readable/writable/validated mode policy 写成显式表格。",
+            "Ralph 特殊校验与 artifact canonicalization 单独挂到 mode policy 上。",
+            "对 unsupported mode 的错误信息统一生成。",
+            "避免在 executeStateOperation 的 switch 中继续堆 mode 特例。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增 mode 时只需补 policy 表和测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "各 mode 的 strictness 与副作用边界清晰。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "executeStateOperation 的主干更短更稳定。"
+            }
+          ],
+          "depends_on": [
+            "E5-T01"
+          ]
+        },
+        {
+          "id": "E5-T05",
+          "pass": true,
+          "title": "补 state root 解析与 dual-read/dual-write 的 contract tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/state/__tests__/**"
+          ],
+          "problem": "state root 解析受到 session、scope、legacy root、多模式读写的共同影响，极易回归。",
+          "change_spec": [
+            "为 canonical root、legacy root、session-scoped root、project/user scope 分别建立 contract tests。",
+            "在决定只保留单写后，测试必须覆盖迁移后的兼容读策略。",
+            "加 malformed file、partial write、missing dirs 场景。",
+            "对 ralph/team 模式的特殊读优先级加断言。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "state root 行为在重构后仍然稳定。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "contract tests 能明确说明优先级和兼容策略。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "重构 state 层时不会靠人工记忆规则。"
+            }
+          ],
+          "depends_on": [
+            "E1-T03",
+            "E5-T01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-06",
+      "pass": false,
+      "title": "收敛 Rust/TypeScript runtime 的 authority model",
+      "priority": "P0",
+      "objective": "决定谁是真正状态权威，并让 bridge/compat 文件/direct mutation 围绕这一点收敛。",
+      "why": "runtime/bridge.ts 说明 TS 会通过 execCommand 调 Rust，又会读 Rust 输出的 compatibility JSON；与此同时 state/team runtime 仍有直接写状态的路径。双 authority 长期并存是高风险结构。",
+      "target_files": [
+        "src/runtime/bridge.ts",
+        "crates/**",
+        "src/team/runtime.ts",
+        "src/state/operations.ts"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "RuntimeBridge 通过 execFileSync 调 omx-runtime，支持 exec/snapshot/schema/init。"
+        },
+        {
+          "pass": false,
+          "text": "Bridge 还会 readAuthority/readReadiness/readBacklog/readDispatchRecords/readMailboxRecords，从 compatibility JSON 读状态。"
+        },
+        {
+          "pass": false,
+          "text": "Bridge 开关仍使用 OMX_RUNTIME_BRIDGE !== '0'。"
+        },
+        {
+          "pass": false,
+          "text": "TS 层仍存在对团队/状态文件的直接写入路径。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E6-T01",
+          "pass": true,
+          "title": "写一份 ADR：Rust runtime 与 TS orchestration 的权责边界",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "docs/adr/0001-runtime-authority.md",
+            "src/runtime/bridge.ts",
+            "src/team/runtime.ts",
+            "src/state/operations.ts"
+          ],
+          "problem": "如果不先决定 authority model，任何 bridge 重构都可能只是把复杂度搬家。",
+          "change_spec": [
+            "明确哪些状态由 Rust 拥有：authority/backlog/replay/mailbox/dispatch/lease 等。",
+            "明确哪些状态由 TS 拥有：CLI UX、setup、display、prompt generation、非 runtime 文件。",
+            "明确 compatibility JSON 是过渡接口、长期公共契约，还是仅内部调试产物。",
+            "定义 direct mutation 的允许区与禁止区。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "文档能回答“谁能写什么”“谁能读什么”“什么时候允许双写”。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "团队在改 runtime 行为时先看 ADR 而不是猜当前实现。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "后续任务的目标边界更明确。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E6-T02",
+          "pass": true,
+          "title": "当 bridge 启用时，禁止 TS 继续直接改写 Rust authority 域",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/runtime/bridge.ts",
+            "src/team/runtime.ts",
+            "src/state/operations.ts"
+          ],
+          "problem": "桥接已经存在，但 direct write 仍然遍布若干路径，容易造成状态漂移。",
+          "change_spec": [
+            "基于 ADR 列出 authority 域文件与 direct-write 黑名单。",
+            "bridge enabled 时，这些域只能通过 bridge/service 写入。",
+            "对遗留 direct write 点先加 runtime assertion 或 warning，分阶段清理。",
+            "为 bridge disabled 的 fallback 模式定义最小支持面，而不是让所有功能无限制回退。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "同一份 authority 状态不再同时被 Rust 与 TS 独立修改。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "fallback 模式的支持范围有清楚边界。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "漂移风险最高的 direct-write 点被消除或显式阻断。"
+            }
+          ],
+          "depends_on": [
+            "E6-T01"
+          ]
+        },
+        {
+          "id": "E6-T03",
+          "pass": true,
+          "title": "给 bridge 增加 schema/version/command contract tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/runtime/bridge.ts",
+            "crates/**",
+            "src/runtime/__tests__/**"
+          ],
+          "problem": "bridge 目前在 validateSchemaOnce 中做基础命令检查，但契约还不够系统。",
+          "change_spec": [
+            "为 commands/events/snapshot schema 建立契约测试。",
+            "对 compatibility JSON 的 shape 也加测试，明确是 public contract 还是 temporary contract。",
+            "在 Rust/TS 两侧都加入 schema_version 断言与升级提示。",
+            "为 binary 不存在、schema 不匹配、timeout、stderr 错误等路径补测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "TS 类型与 Rust schema 不匹配时能在测试中尽早失败。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "升级 runtime binary 时不再依赖人工目测。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "bridge 错误路径更可控。"
+            }
+          ],
+          "depends_on": [
+            "E6-T01"
+          ]
+        },
+        {
+          "id": "E6-T04",
+          "pass": true,
+          "title": "重命名/统一 runtime feature flag，避免 OMX 命名继续扩散",
+          "priority": "P1",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/runtime/bridge.ts",
+            "src/utils/paths.ts",
+            "docs/**"
+          ],
+          "problem": "bridge 启用位仍是 OMX_RUNTIME_BRIDGE，与 canonical 命名方向不一致。",
+          "change_spec": [
+            "引入 canonical flag（如 OMB_RUNTIME_BRIDGE），旧 flag 仅在 compat boundary 接受。",
+            "统一 runtime binary env 名称与优先级。",
+            "帮助文档和 debug 文档统一使用 canonical 名称。",
+            "为 env alias 优先级加测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "用户和贡献者只需要记一个 canonical runtime flag。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "旧 OMX flag 只在 compat 层出现。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "runtime debug 文档口径一致。"
+            }
+          ],
+          "depends_on": [
+            "E1-T01",
+            "E6-T01"
+          ]
+        },
+        {
+          "id": "E6-T05",
+          "pass": true,
+          "title": "决定 compatibility JSON 的长期命运：正式化或淘汰",
+          "priority": "P1",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/runtime/bridge.ts",
+            "crates/**",
+            "docs/adr/0002-runtime-compat-files.md"
+          ],
+          "problem": "当前 bridge 明确从 authority.json/readiness.json/backlog.json/dispatch.json/mailbox.json 读兼容文件，但这些文件的产品定位不清楚。",
+          "change_spec": [
+            "如果这些 JSON 需要长期存在，就为每个文件定义 schema、version、backward-compat policy。",
+            "如果只是过渡层，就规划用 snapshot/API 替代它们，并给出删除路径。",
+            "为外部模块提供单一读接口，不要让各处直接假定文件名。",
+            "把调试用途与运行时用途分开。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "compat 文件不再是“看起来像公共接口，实际上没人负责”的灰色地带。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "外部代码通过稳定接口读取 runtime 状态。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "删或留都有时间表。"
+            }
+          ],
+          "depends_on": [
+            "E6-T01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-07",
+      "pass": false,
+      "title": "统一 AGENTS.md 与 worker instructions 的所有权模型",
+      "priority": "P0",
+      "objective": "让 AGENTS 相关文件只有一个 owner，避免 session overlay、worker bootstrap、worktree root 注入互相踩踏。",
+      "why": "agents-overlay.ts 会直接 strip/append AGENTS.md 并带锁；worker-bootstrap.ts 又会组合 user/project AGENTS 与 overlay，并处理 skip-worktree、恢复、instructions file。两个模块都在“拥有”AGENTS 生态，边界不够清楚。",
+      "target_files": [
+        "src/hooks/agents-overlay.ts",
+        "src/team/worker-bootstrap.ts",
+        "templates/AGENTS.md"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "agents-overlay.ts 直接对 AGENTS.md 做 strip existing overlay -> append new overlay，并维护 .omb/state/agents-md.lock。"
+        },
+        {
+          "pass": false,
+          "text": "worker-bootstrap.ts 会组合 codebuddyHome()/codexHome()/project AGENTS.md 生成 worker-agents.md 和 worker role AGENTS.md。"
+        },
+        {
+          "pass": false,
+          "text": "worker-bootstrap.ts 中还存在 skip-worktree 清理和 crash-safe best-effort 恢复路径。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E7-T01",
+          "pass": true,
+          "title": "定义 AGENTS 所有权模型：root file、generated file、overlay file 各自谁负责",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/hooks/agents-overlay.ts",
+            "src/team/worker-bootstrap.ts",
+            "docs/adr/0003-agents-ownership.md"
+          ],
+          "problem": "现状是多个模块都能改 AGENTS 世界的不同文件，但没有统一 owner 定义。",
+          "change_spec": [
+            "区分三类文件：用户/仓库原始 AGENTS、会话 overlay 产物、team worker instructions 产物。",
+            "为每类文件指定单一 owner 模块和单一修改入口。",
+            "禁止多个模块在未经协调的情况下同时写同一路径。",
+            "把所有权模型写进 ADR。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "任何 AGENTS 路径都能回答“谁负责生成、谁负责恢复、谁负责清理”。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "不再出现多个模块都能直接 mutate 同一文件的情况。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "贡献者新增 AGENTS 逻辑时有统一入口。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E7-T02",
+          "pass": true,
+          "title": "优先使用生成的 instructions file，减少直接改写仓库根 AGENTS.md",
+          "priority": "P0",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/hooks/agents-overlay.ts",
+            "src/team/worker-bootstrap.ts",
+            "src/config/**"
+          ],
+          "problem": "直接改写仓库根 AGENTS.md 容易和用户手工编辑、git 状态、skip-worktree 发生冲突。",
+          "change_spec": [
+            "优先让会话和 worker 读取 .omb/state 下生成的 instructions file。",
+            "只有在底层 CLI 硬性要求固定文件名时，才考虑受控同步到根 AGENTS.md。",
+            "能通过 model instructions file 或 sidecar file 完成的场景，不再改 repo tracked file。",
+            "把当前 root mutation 能去掉的都去掉。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "绝大多数路径下不会直接改写项目根 AGENTS.md。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "用户仓库的 tracked 文件被动修改次数显著下降。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "AGENTS 相关 git 脏状态与恢复失败概率下降。"
+            }
+          ],
+          "depends_on": [
+            "E7-T01"
+          ]
+        },
+        {
+          "id": "E7-T03",
+          "pass": true,
+          "title": "合并两套 AGENTS lock 实现，形成共享锁基础设施",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/hooks/agents-overlay.ts",
+            "src/team/worker-bootstrap.ts",
+            "src/shared/locks/agents-lock.ts"
+          ],
+          "problem": "agents-overlay 与 worker-bootstrap 都各自实现了锁、owner metadata、stale 检测与 timeout，重复且易漂移。",
+          "change_spec": [
+            "抽出共享 lock helper，统一 lock path、owner file、stale 策略、timeout 与日志格式。",
+            "所有 AGENTS 写路径都通过统一 withAgentsLock()。",
+            "把 lock 的 observability 也统一，例如 lock owner / waited_ms / stale_reaped。",
+            "为锁 helper 增加并发与 stale reaping tests。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "仓库中只保留一套 AGENTS 锁实现。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "锁行为与错误输出一致。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "并发覆盖和 stale reaping 规则统一。"
+            }
+          ],
+          "depends_on": [
+            "E7-T01"
+          ]
+        },
+        {
+          "id": "E7-T04",
+          "pass": true,
+          "title": "建立 crash-safe 备份账本，而不是仅 best-effort 恢复",
+          "priority": "P1",
+          "scope": "reliability",
+          "risk": "medium",
+          "files": [
+            "src/team/worker-bootstrap.ts",
+            "src/hooks/agents-overlay.ts",
+            "src/team/agents-recovery.ts"
+          ],
+          "problem": "当前有 backup/restore 思路，但很多路径仍是 best-effort cleanup；进程崩溃后恢复能力不够显式。",
+          "change_spec": [
+            "为所有会写文件的 AGENTS 流程记录恢复账本：原路径、是否存在、原内容 hash、skip-worktree 状态、生成时间、owner pid/session。",
+            "在启动与退出时都尝试对账恢复。",
+            "提供手工恢复命令，例如 omb doctor/cleanup 可扫描并修复残留 AGENTS 产物。",
+            "崩溃后的 orphaned files/locks/backup 进入可观测状态。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "异常退出后有明确的自动/手动恢复路径。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "恢复不再依赖“希望 finally 执行成功”。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "AGENTS 残留可以被 doctor/cleanup 检出。"
+            }
+          ],
+          "depends_on": [
+            "E7-T01"
+          ]
+        },
+        {
+          "id": "E7-T05",
+          "pass": true,
+          "title": "重新设计 overlay 组装与截断策略，保证可解释与可测试",
+          "priority": "P1",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/hooks/agents-overlay.ts"
+          ],
+          "problem": "overlay 目前会收集 codebase map、active modes、notepad、memory、explore guidance，再按 MAX_OVERLAY_SIZE 截断；优先级与丢弃策略需要更显式。",
+          "change_spec": [
+            "把 overlay section 优先级写成数据表，而不是散落在 join/cap 逻辑里。",
+            "定义 mandatory/optional/evictable section，明确超长时先丢哪些。",
+            "对 section 生成、strip、rebuild 做 golden tests。",
+            "让 overlay diagnostics 可输出“被截掉了什么、为什么”。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "超长 overlay 的行为可预测、可测试、可解释。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "重要 section 不会因新增低优先级 section 而意外消失。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "stripOverlay / appendOverlay 的 roundtrip 行为稳定。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E7-T06",
+          "pass": true,
+          "title": "为 skip-worktree、manual edits、tracked/untracked 场景补恢复测试",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/team/worker-bootstrap.ts",
+            "src/hooks/__tests__/**",
+            "src/team/__tests__/**"
+          ],
+          "problem": "AGENTS 最脆弱的不是正常路径，而是 tracked 文件、用户手工编辑、skip-worktree 没恢复、崩溃中断等边角场景。",
+          "change_spec": [
+            "增加 tracked AGENTS.md + skip-worktree 应用与回收测试。",
+            "增加用户在运行中手工修改 AGENTS.md 的冲突处理测试。",
+            "增加 root file 不存在 / 初始为空 / 已带旧 overlay / backup 缺失 等用例。",
+            "校验 worker-agents.md 与 worker role AGENTS.md 的生成与删除幂等性。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "最容易把仓库搞脏的 AGENTS 场景有测试兜底。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "skip-worktree 清理路径可回归。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "手工编辑冲突处理有明确定义。"
+            }
+          ],
+          "depends_on": [
+            "E7-T03",
+            "E7-T04"
+          ]
+        },
+        {
+          "id": "E7-T07",
+          "pass": true,
+          "title": "给 worker instructions 组合链路去重并显式标注来源顺序",
+          "priority": "P2",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/team/worker-bootstrap.ts"
+          ],
+          "problem": "writeTeamWorkerInstructionsFile 会组合 user AGENTS、legacy user AGENTS、project AGENTS、overlay，再叠加 role overlay；来源顺序与去重策略需要更清楚。",
+          "change_spec": [
+            "把 source order 写成显式配置：canonical user -> legacy user -> project -> team overlay -> role overlay。",
+            "对重复内容、阴影掉的 skill 引用、空文件、相同路径 alias 做去重说明。",
+            "在生成文件头部写 metadata，标注来源列表与生成时间。",
+            "为来源顺序和去重规则加测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "worker instructions 的内容来源可追溯。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "legacy/canonical 重复内容不会被重复注入。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "排查 worker 提示异常时可知道是哪个来源导致。"
+            }
+          ],
+          "depends_on": [
+            "E7-T01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-08",
+      "pass": false,
+      "title": "整理 session 生命周期与状态根卫生",
+      "priority": "P1",
+      "objective": "让 session stale 检测、metrics reset、history archive、state root 选择形成一致的生命周期模型。",
+      "why": "session.ts 对 Linux 的 pid_start_ticks/cmdline 校验很认真，但同时仍双写 omb/omx session.json；metrics/hud reset、archive、日志也和 canonical root 收敛问题耦合。",
+      "target_files": [
+        "src/hooks/session.ts",
+        "src/utils/paths.ts",
+        "src/cli/index.ts"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "session.ts 明确使用 PID liveness + Linux identity 校验 stale，不靠年龄阈值。"
+        },
+        {
+          "pass": false,
+          "text": "writeSessionStart 会同时写 ombStateDir 与 omxStateDir。"
+        },
+        {
+          "pass": false,
+          "text": "resetSessionMetrics 负责 .omb/metrics.json 与 hud-state.json 的初始化。"
+        },
+        {
+          "pass": false,
+          "text": "writeSessionEnd 负责 archive 到 logs 并删除 session.json。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E8-T01",
+          "pass": true,
+          "title": "将 session 存储根收敛到 canonical root，legacy root 只读或迁移",
+          "priority": "P1",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/hooks/session.ts",
+            "src/utils/paths.ts"
+          ],
+          "problem": "session 的双写与 state 收敛问题一致，如果不处理会持续制造两个事实位置。",
+          "change_spec": [
+            "参考 E1/E5 的 state root 策略，把 session root 也统一到 canonical root。",
+            "legacy session.json 改为一次性迁移或兼容只读。",
+            "readSessionState 优先级与迁移逻辑明确化。",
+            "对 session history 也统一到单一日志根。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "session 不再默认双写两个 root。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "read/write 规则文档化并有测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "session archive 与 canonical root 一致。"
+            }
+          ],
+          "depends_on": [
+            "E1-T03"
+          ]
+        },
+        {
+          "id": "E8-T02",
+          "pass": true,
+          "title": "抽出跨平台 PID identity adapter，避免 Linux 逻辑内嵌在 session 主文件",
+          "priority": "P1",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/hooks/session.ts",
+            "src/runtime/process-identity.ts"
+          ],
+          "problem": "session.ts 当前直接解析 /proc/<pid>/stat 与 cmdline，Linux 逻辑与 session 生命周期耦合较紧。",
+          "change_spec": [
+            "把 LinuxProcessIdentity 读取与 normalize 迁到独立 adapter。",
+            "保留 Linux 严格校验优势，但让 session 主逻辑只依赖抽象接口。",
+            "为非 Linux 平台保留可扩展的 identity provider 协议。",
+            "为 adapter 单独加解析测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "session.ts 更聚焦 session 生命周期，而不是平台细节。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "PID identity 逻辑可单独测试和复用。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "未来若加 macOS/Windows identity 策略更容易扩展。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E8-T03",
+          "pass": true,
+          "title": "把 metrics/hud reset 的职责移到会话启动协调器",
+          "priority": "P2",
+          "scope": "refactor",
+          "risk": "medium",
+          "files": [
+            "src/hooks/session.ts",
+            "src/cli/index.ts",
+            "src/cli/runtime/launch-pipeline.ts"
+          ],
+          "problem": "resetSessionMetrics 本质上是 launch lifecycle 的一部分，不应该长期和 session file 读写混在一起。",
+          "change_spec": [
+            "由 launch/session coordinator 负责启动时 metrics/hud reset。",
+            "session.ts 保留 read/write/archive/stale check 等核心职责。",
+            "重置行为显式挂在会话启动阶段，而不是外部调用者自行决定顺序。",
+            "为 metrics reset 时机补测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "session 文件逻辑和 UI metrics 逻辑解耦。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新会话启动前后的状态更可预测。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "launch pipeline 的职责划分更清晰。"
+            }
+          ],
+          "depends_on": [
+            "E2-T03"
+          ]
+        },
+        {
+          "id": "E8-T04",
+          "pass": true,
+          "title": "为 session stale 检测补 PID 复用、cmdline 缺失、跨平台 fallback tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/hooks/__tests__/session.test.ts"
+          ],
+          "problem": "当前 stale 检测逻辑正确方向很强，但需要更系统的回归测试。",
+          "change_spec": [
+            "覆盖 PID dead、PID reused、startTicks mismatch、cmdline mismatch、cmdline missing、non-linux passthrough。",
+            "覆盖 state.pid_start_ticks 缺失时判 stale 的行为。",
+            "覆盖 malformed session.json / legacy session.json 的读取优先级。",
+            "对 history archive 与 end cleanup 增加最小测试。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "stale 检测的高风险边缘情况都有测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "跨平台行为能被清楚描述。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "session 误判导致的错误恢复风险下降。"
+            }
+          ],
+          "depends_on": [
+            "E8-T02"
+          ]
+        },
+        {
+          "id": "E8-T05",
+          "pass": true,
+          "title": "为会话日志增加 retention/rotation 与 doctor 可观测性",
+          "priority": "P2",
+          "scope": "reliability",
+          "risk": "medium",
+          "files": [
+            "src/hooks/session.ts",
+            "src/cli/doctor.ts",
+            "docs/**"
+          ],
+          "problem": "appendToLog 目前会持续写 daily JSONL，但缺少 retention 与可视化诊断策略。",
+          "change_spec": [
+            "定义会话日志保留策略和清理命令。",
+            "doctor 命令增加 session 日志摘要与最近一次 crash/stale 信息。",
+            "明确 metrics.json、hud-state.json、session-history.jsonl 的用途与保留周期。",
+            "对日志格式做简单 schema 约束。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "日志不会无限制膨胀。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "doctor 可以帮助定位 session 生命周期问题。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "会话相关状态文件的定位更清晰。"
+            }
+          ],
+          "depends_on": []
+        }
+      ]
+    },
+    {
+      "id": "EPIC-09",
+      "pass": false,
+      "title": "把 explore routing 从提示性启发式提升为可测试契约",
+      "priority": "P1",
+      "objective": "让“何时优先 omb explore”成为显式、可测试、可解释的路由规则，而不是主要靠文案和 prompt guidance。",
+      "why": "explore-routing.ts 当前明确写了“simple read-only exploration task strongly prefer omb explore”一类指导，但若缺少 contract tests，未来改 prompt/command surface 时很容易漂移。",
+      "target_files": [
+        "src/hooks/explore-routing.ts",
+        "src/hooks/agents-overlay.ts",
+        "docs/**"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "explore-routing.ts 存在 simple read-only exploration 优先走 omb explore 的指导文本。"
+        },
+        {
+          "pass": false,
+          "text": "该路由信息会被注入 AGENTS overlay，属于提示层决策信号。"
+        },
+        {
+          "pass": false,
+          "text": "仓库的 coverage 文档也承认 hook pipeline 中存在 partial workaround，而非全原生钩子能力。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E9-T01",
+          "pass": true,
+          "title": "定义 ExploreRoutingRule 表与显式输入输出模型",
+          "priority": "P1",
+          "scope": "architecture",
+          "risk": "medium",
+          "files": [
+            "src/hooks/explore-routing.ts",
+            "src/hooks/explore-routing-rules.ts"
+          ],
+          "problem": "当前规则更像文本模板的一部分，而不是一套显式 contract。",
+          "change_spec": [
+            "把 routing 规则抽成数据：task kind、read_only、file mutation intent、confidence、preferred surface、fallback surface。",
+            "buildExploreRoutingGuidance 只消费规则表生成提示文本。",
+            "为未来支持更多 surfaces 预留扩展位。",
+            "把 example 文案与真实规则共源。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "Explore 路由规则可被程序化测试。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "提示文本与实际策略来自同一规则源。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新增 surface 时不会只改文案忘了改行为。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E9-T02",
+          "pass": true,
+          "title": "给典型用户请求增加 table-driven contract tests",
+          "priority": "P1",
+          "scope": "testing",
+          "risk": "medium",
+          "files": [
+            "src/hooks/__tests__/explore-routing.test.ts"
+          ],
+          "problem": "最需要稳定的是用户请求到 preferred surface 的映射，而不是某段提示文本本身。",
+          "change_spec": [
+            "覆盖符号查找、文件关系、只读 grep、架构梳理、需要改代码、需要跑命令、需要多步验证等典型请求。",
+            "断言 preferred surface、fallback、以及是否属于 simple exploration。",
+            "对边界请求加保守策略测试，避免误把可变更任务路由到只读 surface。",
+            "把 examples 直接从规则表导出到测试样本。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "改 routing 规则时会触发明确测试变化。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "只读探索与会改代码的任务边界更稳。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "用户可感知的路由行为不再全靠 prompt heuristics。"
+            }
+          ],
+          "depends_on": [
+            "E9-T01"
+          ]
+        },
+        {
+          "id": "E9-T03",
+          "pass": true,
+          "title": "为 routing 决策增加 explainability 输出",
+          "priority": "P2",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "src/hooks/explore-routing.ts",
+            "src/hooks/agents-overlay.ts"
+          ],
+          "problem": "当路由不符合预期时，目前很难知道是哪个规则触发的。",
+          "change_spec": [
+            "在 debug 模式下输出 matched rule / rejected reasons / fallback reason。",
+            "让 overlay 生成时可以附带简洁的 routing diagnostics，而不是只给最终建议文本。",
+            "避免 explainability 文本污染正常 prompt，debug 模式单独开启。",
+            "日志格式统一。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "开发者可以定位某个请求为什么被视为 simple exploration。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "debug 不会污染默认体验。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "规则误命中时更容易排查。"
+            }
+          ],
+          "depends_on": [
+            "E9-T01"
+          ]
+        },
+        {
+          "id": "E9-T04",
+          "pass": true,
+          "title": "同步文档与示例，确保 README/skills/overlay 文案一致",
+          "priority": "P2",
+          "scope": "docs",
+          "risk": "medium",
+          "files": [
+            "README.md",
+            "docs/**",
+            "skills/**",
+            "src/hooks/explore-routing.ts"
+          ],
+          "problem": "探索路由一旦更新，README/skill 文案/overlay 文案很容易出现多套说法。",
+          "change_spec": [
+            "梳理 explore surface 相关说明，只保留一份 canonical 描述来源。",
+            "README 讲“何时推荐 explore”，细节放 docs。",
+            "skills 或 prompts 中引用 explore 的例子从统一源生成或至少统一维护。",
+            "避免例子过时。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "文档和实现口径一致。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "示例不会出现一个地方说“优先 explore”，另一个地方说“直接 launch”之类冲突。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "修改规则时需要同步文档检查。"
+            }
+          ],
+          "depends_on": [
+            "E9-T01"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "EPIC-10",
+      "pass": false,
+      "title": "清理项目身份漂移，补强 CI/文档/贡献者工作流",
+      "priority": "P1",
+      "objective": "让仓库从“迁移中的项目”收敛为“清晰、自我一致的项目”。",
+      "why": "README 已经把项目定义为 CodeBuddy CLI 的 orchestration layer，但 COVERAGE.md 仍以 oh-my-claudecode parity 为目标；governance.ts 注释还写着 ported from oh-my-claudecode；Contributing 中还强调 dist/team 与 dist/state 覆盖率门槛以及需要手工 unset OMB_TEAM_*。这些都说明身份与工程边界还没完全收口。",
+      "target_files": [
+        "README.md",
+        "COVERAGE.md",
+        "CONTRIBUTING.md",
+        "src/team/governance.ts",
+        ".github/**",
+        "package.json"
+      ],
+      "observations": [
+        {
+          "pass": false,
+          "text": "README 把项目描述为 CodeBuddy CLI orchestration layer，并列出 tmux/worktree、MCP/CLI parity、AGENTS scaffolding 等能力。"
+        },
+        {
+          "pass": false,
+          "text": "COVERAGE.md 的标题仍是 parity with oh-my-claudecode，并列出多处 Codex/OMC/workaround 表述。"
+        },
+        {
+          "pass": false,
+          "text": "src/team/governance.ts 注释写着 Ported from oh-my-claudecode/src/team/governance.ts。"
+        },
+        {
+          "pass": false,
+          "text": "CONTRIBUTING.md 中 CI gate 仍针对 dist/team/** 与 dist/state/**，并要求手动 unset 一组 OMB_TEAM_* 环境变量。"
+        }
+      ],
+      "tasks": [
+        {
+          "id": "E10-T01",
+          "pass": true,
+          "title": "清理 OMC/Claude/Codex 残留注释与文档身份漂移",
+          "priority": "P1",
+          "scope": "docs",
+          "risk": "medium",
+          "files": [
+            "COVERAGE.md",
+            "README.md",
+            "CHANGELOG.md",
+            "src/team/governance.ts",
+            "docs/**"
+          ],
+          "problem": "项目已经改名和改定位，但大量“ported from”“parity with oh-my-claudecode”“Codex hooks workaround”残留会持续拖累认知。",
+          "change_spec": [
+            "统一决定哪些 lineage 信息保留在历史/credits，哪些不再出现在主文档。",
+            "将 code comment 中对旧项目的引用挪到必要位置，而非出现在核心模块头注释。",
+            "COVERAGE.md 改成面向当前项目能力与现状，而不是长期对照旧项目的身份。",
+            "README/CHANGELOG/Docs 的命名语义统一。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "主文档读起来像一个完整项目，而不是迁移记录。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "lineage 信息仍可查，但不会干扰日常维护。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "项目身份与命名保持一致。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E10-T02",
+          "pass": true,
+          "title": "新增架构总览文档，明确 CLI/setup/runtime/state/team/AGENTS/Rust 的边界",
+          "priority": "P1",
+          "scope": "docs",
+          "risk": "medium",
+          "files": [
+            "docs/architecture-overview.md",
+            "README.md"
+          ],
+          "problem": "当前系统复杂度已经超过“靠读源码慢慢猜”的阶段，需要一份对新贡献者友好的总览。",
+          "change_spec": [
+            "用 1 张模块图 + 1 组边界说明描述：CLI、setup、team runtime、state、bridge、AGENTS、worker bootstrap。",
+            "明确哪些模块是 pure decision，哪些是 side-effect adapters，哪些是 compat boundary。",
+            "给出启动路径、team monitor 路径、state write 路径三条典型调用链。",
+            "README 只链接，不重复展开太多细节。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "新贡献者能在 10 分钟内建立系统心智图。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "后续重构时可以对照文档检查边界是否变脏。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "文档不与实现明显脱节。"
+            }
+          ],
+          "depends_on": [
+            "E4-T01",
+            "E5-T01",
+            "E6-T01",
+            "E7-T01"
+          ]
+        },
+        {
+          "id": "E10-T03",
+          "pass": true,
+          "title": "复核覆盖率策略：critical gate 应优先对 src 而不是 dist 生效",
+          "priority": "P1",
+          "scope": "quality",
+          "risk": "medium",
+          "files": [
+            "CONTRIBUTING.md",
+            "package.json",
+            ".github/workflows/**"
+          ],
+          "problem": "当前贡献文档明确 critical coverage gate 针对 dist/team/** 与 dist/state/**。构建产物做 gate 虽然能工作，但对源码重构的定位价值有限。",
+          "change_spec": [
+            "评估是否可以把 critical coverage gate 切换到 src/team/** 与 src/state/**，或同时保留 src + dist 两层。",
+            "如果必须对 dist gate，也要补一份文档解释原因。",
+            "确保 coverage 报表路径与 PR review 体验一致。",
+            "把 gate 选择写进 contributing。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "覆盖率门槛的目标对象有清晰理由。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "贡献者能快速定位低覆盖源码，而不是只看编译产物路径。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "CI 报表更利于 review。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E10-T04",
+          "pass": true,
+          "title": "提供清理 OMB_TEAM_* 环境变量的脚本或测试 harness",
+          "priority": "P2",
+          "scope": "devex",
+          "risk": "medium",
+          "files": [
+            "CONTRIBUTING.md",
+            "scripts/**",
+            "package.json"
+          ],
+          "problem": "贡献文档要求手动 unset 一组 OMB_TEAM_* 变量，说明测试与环境污染之间耦合偏高。",
+          "change_spec": [
+            "提供测试前清理团队环境变量的脚本或 npm script。",
+            "让 team/state 关键测试默认在隔离环境下启动。",
+            "如果有必要，把 env sanitation 放进测试 harness，而不是依赖贡献者手工 unset。",
+            "在 contributing 文档中保留简单说明即可。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "本地跑 team/state 测试不再依赖手工 unset。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "贡献者不容易因为继承 worker 环境导致假失败。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "测试环境卫生更自动化。"
+            }
+          ],
+          "depends_on": []
+        },
+        {
+          "id": "E10-T05",
+          "pass": true,
+          "title": "把 deprecation / architecture / testing policy 加入 PR checklist",
+          "priority": "P2",
+          "scope": "process",
+          "risk": "medium",
+          "files": [
+            ".github/pull_request_template.md",
+            "CONTRIBUTING.md"
+          ],
+          "problem": "当前 PR checklist 偏通用，没有把本项目最脆弱的兼容、运行时、AGENTS、team state 风险明确纳入审查。",
+          "change_spec": [
+            "PR checklist 增加：是否新增兼容项、是否触碰 authority 域、是否需要 AGENTS/rollback 测试、是否需要 docs 更新。",
+            "对 team/runtime/state/setup 相关改动加最低测试要求。",
+            "对任何新增 alias 要求提供 removal plan。",
+            "把这些要求写入模板而不只靠 reviewer 记忆。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "高风险改动在 PR 层就能被提醒。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "兼容债务不会默默增加。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "review 标准更一致。"
+            }
+          ],
+          "depends_on": [
+            "E1-T06",
+            "E6-T01"
+          ]
+        },
+        {
+          "id": "E10-T06",
+          "pass": true,
+          "title": "整理 release checklist，加入 setup/team/runtime/AGENTS 回归项",
+          "priority": "P2",
+          "scope": "release",
+          "risk": "medium",
+          "files": [
+            "RELEASE_BODY.md",
+            "CONTRIBUTING.md",
+            "docs/**"
+          ],
+          "problem": "当前系统风险点集中在 setup、team runtime、AGENTS、compat layer，仅靠普通 test pass 不足以覆盖发布风险。",
+          "change_spec": [
+            "在 release checklist 中加入：fresh setup、legacy alias migration、team startup/monitor/shutdown、AGENTS cleanup、session stale recovery。",
+            "增加最小人工验证脚本或 smoke commands。",
+            "对 binary/bridge 版本同步加入检查项。",
+            "把关键 release blockers 列出来。"
+          ],
+          "acceptance": [
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "发版前的高风险路径会被系统性验证。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "bridge/setup/AGENTS 类回归更难漏掉。"
+            },
+            {
+              "pass": false,
+              "kind": "acceptance",
+              "text": "release review 可重复执行。"
+            }
+          ],
+          "depends_on": []
+        }
+      ]
+    }
+  ],
+  "suggested_commit_slices": [
+    {
+      "id": "SLICE-01",
+      "pass": false,
+      "title": "compat boundary + canonical naming",
+      "tasks": [
+        "E1-T01",
+        "E1-T02",
+        "E1-T03",
+        "E1-T05",
+        "E1-T06"
+      ]
+    },
+    {
+      "id": "SLICE-02",
+      "pass": false,
+      "title": "CLI registry + bootstrap context + error model",
+      "tasks": [
+        "E2-T01",
+        "E2-T02",
+        "E2-T05",
+        "E2-T06"
+      ]
+    },
+    {
+      "id": "SLICE-03",
+      "pass": false,
+      "title": "launch pipeline + cleanup plan",
+      "tasks": [
+        "E2-T03",
+        "E2-T04",
+        "E8-T03"
+      ]
+    },
+    {
+      "id": "SLICE-04",
+      "pass": false,
+      "title": "setup plan/apply + config merger + installers",
+      "tasks": [
+        "E3-T01",
+        "E3-T02",
+        "E3-T03",
+        "E3-T04",
+        "E3-T05",
+        "E3-T07"
+      ]
+    },
+    {
+      "id": "SLICE-05",
+      "pass": false,
+      "title": "team runtime reducer split",
+      "tasks": [
+        "E4-T01",
+        "E4-T02",
+        "E4-T03",
+        "E4-T07"
+      ]
+    },
+    {
+      "id": "SLICE-06",
+      "pass": false,
+      "title": "state purity + shared atomic IO",
+      "tasks": [
+        "E5-T01",
+        "E5-T02",
+        "E5-T03",
+        "E5-T04",
+        "E5-T05"
+      ]
+    },
+    {
+      "id": "SLICE-07",
+      "pass": false,
+      "title": "runtime authority ADR + bridge contracts",
+      "tasks": [
+        "E6-T01",
+        "E6-T02",
+        "E6-T03",
+        "E6-T04",
+        "E6-T05"
+      ]
+    },
+    {
+      "id": "SLICE-08",
+      "pass": false,
+      "title": "AGENTS ownership + recovery + tests",
+      "tasks": [
+        "E7-T01",
+        "E7-T02",
+        "E7-T03",
+        "E7-T04",
+        "E7-T05",
+        "E7-T06",
+        "E7-T07"
+      ]
+    },
+    {
+      "id": "SLICE-09",
+      "pass": false,
+      "title": "session hygiene + routing contracts",
+      "tasks": [
+        "E8-T01",
+        "E8-T02",
+        "E8-T04",
+        "E8-T05",
+        "E9-T01",
+        "E9-T02",
+        "E9-T03",
+        "E9-T04"
+      ]
+    },
+    {
+      "id": "SLICE-10",
+      "pass": false,
+      "title": "docs/CI/release consolidation",
+      "tasks": [
+        "E10-T01",
+        "E10-T02",
+        "E10-T03",
+        "E10-T04",
+        "E10-T05",
+        "E10-T06"
+      ]
+    }
+  ],
+  "non_goals_for_now": [
+    {
+      "pass": false,
+      "text": "不优先新增新功能 surface；先把现有边界、兼容、恢复、测试收口。"
+    },
+    {
+      "pass": false,
+      "text": "不建议一开始就全量重写 team runtime；应先建立 reducer/service 边界。"
+    },
+    {
+      "pass": false,
+      "text": "不建议在 authority 未定之前大规模迁移 Rust/TS 代码所有权。"
+    },
+    {
+      "pass": false,
+      "text": "不建议继续扩散 omx/codex 命名；任何新增兼容都必须进入 compat boundary。"
     }
   ]
 }

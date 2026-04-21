@@ -6,7 +6,6 @@
  * Permissions are advisory (injected into worker prompts) — not mechanical
  * enforcement. Relies on the LLM following instructions.
  *
- * Ported from oh-my-claudecode/src/team/permissions.ts
  */
 
 import { isAbsolute, relative, join } from "path";

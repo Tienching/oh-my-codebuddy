@@ -4,8 +4,6 @@
  * Provides normalization functions that merge partial governance and
  * transport policy configs with defaults, ensuring all required fields
  * exist. Supports backward compatibility with legacy policy shapes.
- *
- * Ported from oh-my-claudecode/src/team/governance.ts
  */
 
 // ── Types ──────────────────────────────────────────────────────────────

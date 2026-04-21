@@ -7,8 +7,19 @@
 
 import { readFile, writeFile, mkdir, unlink, appendFile } from 'fs/promises';
 import { join } from 'path';
-import { existsSync, readFileSync } from 'fs';
-import { ombStateDir, ombLogsDir, omxStateDir } from '../utils/paths.js';
+import { existsSync } from 'fs';
+import { ombStateDir, ombLogsDir } from '../utils/paths.js';
+import {
+  resolveCanonicalStateDir,
+  resolveLegacyStateDir,
+  shouldDualWrite,
+} from '../compat/legacy-boundary.js';
+import {
+  type ProcessIdentity,
+  type ProcessIdentityAdapter,
+  getProcessIdentityAdapter,
+  normalizeCmdline,
+} from '../runtime/process-identity.js';
 
 export interface SessionState {
   session_id: string;
@@ -34,7 +45,7 @@ function historyPath(cwd: string): string {
 }
 
 function legacySessionPath(cwd: string): string {
-  return join(omxStateDir(cwd), SESSION_FILE);
+  return join(resolveLegacyStateDir(cwd), SESSION_FILE);
 }
 
 /**
@@ -85,15 +96,11 @@ export async function readSessionState(cwd: string): Promise<SessionState | null
   return null;
 }
 
-interface LinuxProcessIdentity {
-  startTicks: number;
-  cmdline: string | null;
-}
-
 interface SessionStaleCheckOptions {
   platform?: NodeJS.Platform;
   isPidAlive?: (pid: number) => boolean;
-  readLinuxIdentity?: (pid: number) => LinuxProcessIdentity | null;
+  readLinuxIdentity?: (pid: number) => ProcessIdentity | null;
+  identityAdapter?: ProcessIdentityAdapter;
 }
 
 interface SessionStartOptions {
@@ -101,56 +108,8 @@ interface SessionStartOptions {
   platform?: NodeJS.Platform;
 }
 
-function defaultIsPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function parseLinuxProcStartTicks(statContent: string): number | null {
-  const commandEnd = statContent.lastIndexOf(')');
-  if (commandEnd === -1) return null;
-
-  const remainder = statContent.slice(commandEnd + 1).trim();
-  const fields = remainder.split(/\s+/);
-  if (fields.length <= 19) return null;
-
-  const startTicks = Number(fields[19]);
-  return Number.isFinite(startTicks) ? startTicks : null;
-}
-
-function normalizeCmdline(cmdline: string | null | undefined): string | null {
-  if (!cmdline) return null;
-  const normalized = cmdline.replace(/\s+/g, ' ').trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function readLinuxProcessIdentity(pid: number): LinuxProcessIdentity | null {
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf-8');
-    const startTicks = parseLinuxProcStartTicks(stat);
-    if (startTicks == null) return null;
-
-    let cmdline: string | null = null;
-    try {
-      cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf-8')
-        .replace(/\u0000+/g, ' ')
-        .trim();
-    } catch {
-      cmdline = null;
-    }
-
-    return {
-      startTicks,
-      cmdline: normalizeCmdline(cmdline),
-    };
-  } catch {
-    return null;
-  }
-}
+// Process identity logic has been extracted to src/runtime/process-identity.ts
+// Use the adapter interface for testability and platform flexibility.
 
 /**
  * Check if a session is stale.
@@ -164,13 +123,14 @@ export function isSessionStale(
 ): boolean {
   if (!Number.isInteger(state.pid) || state.pid <= 0) return true;
 
-  const isPidAlive = options.isPidAlive ?? defaultIsPidAlive;
+  const adapter = options.identityAdapter ?? getProcessIdentityAdapter(options.platform);
+  const isPidAlive = options.isPidAlive ?? ((pid: number) => adapter.isPidAlive(pid));
   if (!isPidAlive(state.pid)) return true;
 
   const platform = options.platform ?? process.platform;
   if (platform !== 'linux') return false;
 
-  const readIdentity = options.readLinuxIdentity ?? readLinuxProcessIdentity;
+  const readIdentity = options.readLinuxIdentity ?? ((pid: number) => adapter.readIdentity(pid));
   const liveIdentity = readIdentity(state.pid);
   if (!liveIdentity) return true;
 
@@ -188,23 +148,28 @@ export function isSessionStale(
 
 /**
  * Write session start state.
+ * Writes to canonical path always; writes to legacy path only when dual-write is active.
  */
 export async function writeSessionStart(
   cwd: string,
   sessionId: string,
   options: SessionStartOptions = {},
 ): Promise<void> {
-  const stateDir = ombStateDir(cwd);
-  const modernStateDir = omxStateDir(cwd);
+  const stateDir = resolveCanonicalStateDir(cwd);
   await mkdir(stateDir, { recursive: true });
-  await mkdir(modernStateDir, { recursive: true });
+
+  const dualWriteOmx = shouldDualWrite('.omb');
+  if (dualWriteOmx) {
+    const legacyDir = resolveLegacyStateDir(cwd);
+    await mkdir(legacyDir, { recursive: true });
+  }
+
   const pid = Number.isInteger(options.pid) && options.pid && options.pid > 0
     ? options.pid
     : process.pid;
   const platform = options.platform ?? process.platform;
-  const linuxIdentity = platform === 'linux'
-    ? readLinuxProcessIdentity(pid)
-    : null;
+  const adapter = getProcessIdentityAdapter(platform);
+  const linuxIdentity = adapter.readIdentity(pid);
 
   const state: SessionState = {
     session_id: sessionId,
@@ -218,7 +183,9 @@ export async function writeSessionStart(
 
   const serialized = JSON.stringify(state, null, 2);
   await writeFile(sessionPath(cwd), serialized);
-  await writeFile(legacySessionPath(cwd), serialized);
+  if (dualWriteOmx) {
+    await writeFile(legacySessionPath(cwd), serialized);
+  }
   await appendToLog(cwd, {
     event: 'session_start',
     session_id: sessionId,

@@ -1,15 +1,14 @@
 # oh-my-codebuddy Feature Coverage Matrix
 
-**Target: >=90% parity with oh-my-claudecode (excluding MCP tools)**
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-04-21
 
 ## Coverage Summary
 
-| Category | OMC Features | OMB Implemented | Coverage |
-|----------|-------------|-----------------|----------|
+| Category | Features | Implemented | Coverage |
+|----------|----------|-------------|----------|
 | Agent Definitions | 29 | 29 | 100% |
 | Skills/Commands | 30 | 30 | 100% |
-| AGENTS.md (CLAUDE.md equiv) | 1 | 1 | 100% |
+| AGENTS.md Management | 1 | 1 | 100% |
 | CLI (setup/doctor/help/etc) | 7 | 7 | 100% |
 | Config Generation | 1 | 1 | 100% |
 | Mode State Management | 9 modes | 9 modes | 100% |
@@ -31,8 +30,8 @@
 
 ### Agent Definitions / Role Catalog (29/29 = 100%)
 
-| OMC Agent | OMB Status | Mechanism |
-|-----------|-----------|-----------|
+| Agent | Status | Mechanism |
+|-------|--------|-----------|
 | analyst | DONE | prompts/analyst.md |
 | api-reviewer | DONE | prompts/api-reviewer.md |
 | architect | DONE | prompts/architect.md |
@@ -67,8 +66,8 @@
 
 ### Skills (30/30 = 100%)
 
-| OMC Skill | OMB Status | Mechanism |
-|-----------|-----------|-----------|
+| Skill | Status | Mechanism |
+|-------|--------|-----------|
 | autopilot | DONE | ~/.codex/skills/autopilot/SKILL.md |
 | ralph | DONE | ~/.codex/skills/ralph/SKILL.md |
 | ultrawork (`ulw` alias) | DONE | ~/.codex/skills/ultrawork/SKILL.md |
@@ -115,8 +114,8 @@
 
 ### Hook Pipeline (6 full + 3 partial out of 9 = ~89%)
 
-| OMC Hook Event | OMB Equivalent | Capability |
-|---------------|---------------|------------|
+| Hook Event | OMB Equivalent | Capability |
+|------------|---------------|------------|
 | SessionStart | AGENTS.md native + runtime overlay (preLaunch) | FULL+ |
 | PreToolUse | AGENTS.md inline guidance | PARTIAL (no interception) |
 | PostToolUse | notify config hook + tmux prompt injection workaround | FULL* |
@@ -131,24 +130,24 @@
 
 ### Infrastructure
 
-| Component | OMC | OMB Status |
-|-----------|-----|-----------|
-| CLI (setup) | DONE | DONE |
-| CLI (doctor) | DONE | DONE |
-| CLI (help) | DONE | DONE |
-| CLI (version) | DONE | DONE |
-| CLI (status) | DONE | DONE |
-| CLI (cancel) | DONE | DONE |
-| Config generator | DONE | DONE |
-| AGENTS.md template | DONE | DONE |
-| State MCP server | DONE | DONE |
-| Memory MCP server | DONE | DONE |
-| Notify hook script | DONE | DONE |
-| Keyword detector | DONE | DONE |
-| Hook emulation layer | N/A | DONE |
-| Mode base lifecycle | DONE | DONE |
-| Verification protocol | DONE | DONE |
-| Notification system | DONE | DONE |
+| Component | Status |
+|-----------|--------|
+| CLI (setup) | DONE |
+| CLI (doctor) | DONE |
+| CLI (help) | DONE |
+| CLI (version) | DONE |
+| CLI (status) | DONE |
+| CLI (cancel) | DONE |
+| Config generator | DONE |
+| AGENTS.md template | DONE |
+| State MCP server | DONE |
+| Memory MCP server | DONE |
+| Notify hook script | DONE |
+| Keyword detector | DONE |
+| Hook emulation layer | DONE |
+| Mode base lifecycle | DONE |
+| Verification protocol | DONE |
+| Notification system | DONE |
 
 ## Known Gaps
 
@@ -157,14 +156,12 @@
 3. **PreCompact hook** - No event interception. Workaround: AGENTS.md overlay includes compaction survival instructions that tell the model to checkpoint state before compaction.
 4. **Session end** - No real-time event. Workaround: `omb` wrapper detects Codex exit via blocking execSync and runs postLaunch cleanup (overlay strip, session archive, mode cancellation).
 5. **Full LSP protocol** - LSP tools use pragmatic wrappers (tsc, grep, regex) rather than full LSP protocol. Missing: lsp_goto_definition, lsp_prepare_rename, lsp_rename, lsp_code_actions, lsp_code_action_resolve (5 tools need real LSP).
-6. **Python REPL** - Not yet ported. Needed only by scientist agent. Low priority for v0.1.0.
+6. **Python REPL** - Not yet implemented. Needed only by scientist agent. Low priority.
 
 ## Upstream Contribution Path
 
-To achieve 100% hook parity, these changes need to be contributed to CodeBuddy CLI:
+To achieve full hook coverage, these changes need to be contributed to CodeBuddy CLI:
 1. Add `BeforeToolUse` hook event to `codex-rs/hooks/`
 2. Add `UserPromptSubmit` hook event
 3. Add external hook configuration in `config.toml` (currently only `notify`)
 4. Add hook context injection (hook stdout -> system message)
-
-RFC tracking: TBD

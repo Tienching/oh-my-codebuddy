@@ -4,10 +4,9 @@
  * Main routing engine that determines which model tier to use for a given task.
  * Combines signal extraction, scoring, and rules evaluation.
  *
- * Adapted from oh-my-claudecode for oh-my-codebuddy:
- * - Output uses OMB model types (spark/standard/frontier/inherit)
- * - Includes reasoningEffort in all routing decisions
- * - Uses OMB model resolution (getSparkDefaultModel, etc.)
+ * Output uses OMB model types (spark/standard/frontier/inherit),
+ * includes reasoningEffort in all routing decisions, and uses
+ * OMB model resolution (getSparkDefaultModel, etc.)
  * - Removes escalation/deprecated APIs
  * - quickTierForAgent uses OMB's agent catalog from definitions.ts
  */

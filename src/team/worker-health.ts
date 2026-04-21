@@ -6,7 +6,6 @@
  * dead workers, hung workers (tmux alive but heartbeat stale),
  * quarantined workers, and at-risk workers with consecutive errors.
  *
- * Ported from oh-my-claudecode/src/team/worker-health.ts
  */
 
 import { existsSync, readFileSync } from "fs";

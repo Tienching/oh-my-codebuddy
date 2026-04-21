@@ -6,7 +6,6 @@
  * compaction. Writes a checkpoint to .omb/state/checkpoints/ and returns a
  * system message injected into the post-compaction context.
  *
- * Ported from oh-my-claudecode/src/hooks/pre-compact/
  */
 
 import { existsSync } from "fs";

@@ -6,7 +6,6 @@
  * simulation (Git 2.38+), with a file-overlap heuristic fallback for
  * older Git versions.
  *
- * Ported from oh-my-claudecode/src/team/merge-coordinator.ts
  */
 
 import { execSync } from "child_process";

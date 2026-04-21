@@ -8,7 +8,6 @@
  * Includes critical escape hatches: user abort, rate limit, auth errors,
  * context limits, and explicit cancel commands.
  *
- * Ported from oh-my-claudecode/src/hooks/persistent-mode/
  */
 
 import { existsSync, readFileSync } from "fs";

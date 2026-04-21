@@ -5,10 +5,8 @@
  * sub-agent tasks to appropriate model tiers (spark/standard/frontier)
  * based on task complexity.
  *
- * Adapted from oh-my-claudecode's model-routing for oh-my-codebuddy:
- * - Model tiers: spark (LOW) / standard (MEDIUM) / frontier (HIGH)
- * - Includes reasoningEffort in routing decisions
- * - No Claude-specific provider logic
+ * Model tiers: spark (LOW) / standard (MEDIUM) / frontier (HIGH),
+ * includes reasoningEffort in routing decisions.
  */
 
 import {

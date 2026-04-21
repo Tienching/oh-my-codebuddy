@@ -2,7 +2,6 @@
  * OMB HUD - ANSI Color Utilities
  *
  * Terminal color codes for statusline rendering.
- * Ported from oh-my-claudecode.
  */
 
 // ANSI escape codes

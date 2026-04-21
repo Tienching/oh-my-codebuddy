@@ -6,7 +6,6 @@
  * the worker is considered exhausted and no further restarts are allowed
  * until manual intervention or successful recovery clears the state.
  *
- * Ported from oh-my-claudecode/src/team/worker-restart.ts
  */
 
 import { existsSync } from "fs";
