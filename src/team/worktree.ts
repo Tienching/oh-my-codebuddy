@@ -2,6 +2,10 @@ import { execFile as execFileCb, execFileSync, spawnSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 import { basename, dirname, join, resolve } from 'path';
 import { promisify } from 'util';
+import {
+  assertCurrentTaskBranchAvailable,
+  upsertCurrentTaskBaseline,
+} from './current-task-baseline.js';
 
 const execFilePromise = promisify(execFileCb);
 
@@ -43,6 +47,11 @@ export interface EnsureWorktreeResult {
   created: boolean;
   reused: boolean;
   createdBranch: boolean;
+  dirty?: boolean;
+}
+
+export interface EnsureWorktreeOptions {
+  allowDirtyReuse?: boolean;
 }
 
 interface GitWorktreeEntry {
@@ -177,6 +186,17 @@ function listWorktrees(repoRoot: string): GitWorktreeEntry[] {
   }
 
   return entries;
+}
+
+function pruneStaleWorktreePath(repoRoot: string, worktreePath: string): void {
+  const result = spawnSync('git', ['worktree', 'prune'], {
+    cwd: repoRoot,
+    encoding: 'utf-8',
+    windowsHide: true,
+  });
+  if (result.status === 0) return;
+  const stderr = (result.stderr || '').trim();
+  throw new Error(stderr || `worktree_prune_failed:${worktreePath}`);
 }
 
 function resolveBranchName(input: WorktreePlanInput): string | null {
@@ -354,10 +374,18 @@ export function planWorktreeTarget(input: WorktreePlanInput): PlannedWorktreeTar
   };
 }
 
-export function ensureWorktree(plan: PlannedWorktreeTarget | { enabled: false }): EnsureWorktreeResult | { enabled: false } {
+export function ensureWorktree(
+  plan: PlannedWorktreeTarget | { enabled: false },
+  options: EnsureWorktreeOptions = {},
+): EnsureWorktreeResult | { enabled: false } {
   if (!plan.enabled) return { enabled: false };
 
-  const allWorktrees = listWorktrees(plan.repoRoot);
+  let allWorktrees = listWorktrees(plan.repoRoot);
+  const staleAtPath = findWorktreeByPath(allWorktrees, plan.worktreePath);
+  if (staleAtPath && !existsSync(staleAtPath.path)) {
+    pruneStaleWorktreePath(plan.repoRoot, staleAtPath.path);
+    allWorktrees = listWorktrees(plan.repoRoot);
+  }
   const existingAtPath = findWorktreeByPath(allWorktrees, plan.worktreePath)
     ?? readWorktreeEntryFromPath(plan.repoRoot, plan.worktreePath);
   const expectedBranchRef = plan.branchName ? `refs/heads/${plan.branchName}` : null;
@@ -371,11 +399,12 @@ export function ensureWorktree(plan: PlannedWorktreeTarget | { enabled: false })
       throw new Error(`worktree_target_mismatch:${plan.worktreePath}`);
     }
 
-    if (isWorktreeDirty(plan.worktreePath)) {
+    const dirty = isWorktreeDirty(plan.worktreePath);
+    if (dirty && !options.allowDirtyReuse) {
       throw new Error(`worktree_dirty:${plan.worktreePath}`);
     }
 
-    return {
+    const reused = {
       enabled: true,
       repoRoot: plan.repoRoot,
       worktreePath: resolve(plan.worktreePath),
@@ -384,7 +413,19 @@ export function ensureWorktree(plan: PlannedWorktreeTarget | { enabled: false })
       created: false,
       reused: true,
       createdBranch: false,
-    };
+      ...(dirty ? { dirty: true } : {}),
+    } satisfies EnsureWorktreeResult;
+
+    if (plan.branchName) {
+      upsertCurrentTaskBaseline(plan.repoRoot, {
+        branch_name: plan.branchName,
+        worktree_path: reused.worktreePath,
+        base_ref: plan.baseRef,
+        status: 'active',
+      });
+    }
+
+    return reused;
   }
 
   if (existsSync(plan.worktreePath)) {
@@ -393,6 +434,10 @@ export function ensureWorktree(plan: PlannedWorktreeTarget | { enabled: false })
 
   if (plan.branchName && hasBranchInUse(allWorktrees, plan.branchName, plan.worktreePath)) {
     throw new Error(`branch_in_use:${plan.branchName}`);
+  }
+
+  if (plan.branchName) {
+    assertCurrentTaskBranchAvailable(plan.repoRoot, plan.branchName, plan.worktreePath);
   }
 
   mkdirSync(dirname(plan.worktreePath), { recursive: true });
@@ -421,7 +466,7 @@ export function ensureWorktree(plan: PlannedWorktreeTarget | { enabled: false })
     throw new Error(stderr || `worktree_add_failed:${addArgs.join(' ')}`);
   }
 
-  return {
+  const ensured = {
     enabled: true,
     repoRoot: plan.repoRoot,
     worktreePath: resolve(plan.worktreePath),
@@ -430,7 +475,18 @@ export function ensureWorktree(plan: PlannedWorktreeTarget | { enabled: false })
     created: true,
     reused: false,
     createdBranch: Boolean(plan.branchName && !branchAlreadyExisted),
-  };
+  } satisfies EnsureWorktreeResult;
+
+  if (plan.branchName) {
+    upsertCurrentTaskBaseline(plan.repoRoot, {
+      branch_name: plan.branchName,
+      worktree_path: ensured.worktreePath,
+      base_ref: plan.baseRef,
+      status: 'active',
+    });
+  }
+
+  return ensured;
 }
 
 export interface RollbackWorktreeOptions {

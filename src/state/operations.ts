@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, unlink } from 'node:fs/promises';
+import { mkdir, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { withModeRuntimeContext } from './mode-state-context.js';
@@ -17,15 +17,27 @@ import {
 import { ensureCanonicalRalphArtifacts } from '../ralph/persistence.js';
 import { RALPH_PHASES, validateAndNormalizeRalphState } from '../ralph/contract.js';
 import { writeAtomicFile, createPathScopedWriteQueue } from '../shared/io/atomic-write.js';
+import {
+  SKILL_ACTIVE_STATE_MODE,
+  readSkillActiveState,
+  syncCanonicalSkillStateForMode,
+  writeSkillActiveStateCopies,
+} from './skill-active.js';
+import { applyRunOutcomeContract } from '../runtime/run-outcome.js';
+import { syncRunStateFromModeState } from '../runtime/run-state.js';
+import { isTrackedWorkflowMode } from './workflow-transition.js';
+import { reconcileWorkflowTransition } from './workflow-transition-reconcile.js';
 
 export const SUPPORTED_STATE_READ_MODES = [
   'autopilot',
+  'autoresearch',
   'team',
   'ralph',
   'ultrawork',
   'ultraqa',
   'ralplan',
   'deep-interview',
+  'skill-active',
 ] as const;
 
 export type SupportedStateReadMode = (typeof SUPPORTED_STATE_READ_MODES)[number];
@@ -55,11 +67,40 @@ function validateStrictReadableMode(mode: unknown): string {
   return normalized;
 }
 
-async function ensureStateDir(cwd: string, effectiveSessionId?: string): Promise<void> {
+async function initializeStateEnvironment(cwd: string, effectiveSessionId?: string): Promise<void> {
   await mkdir(getStateDir(cwd), { recursive: true });
   if (effectiveSessionId) {
     await mkdir(getStateDir(cwd, effectiveSessionId), { recursive: true });
   }
+  const { ensureTmuxHookInitialized } = await import('../cli/tmux-hook.js');
+  await ensureTmuxHookInitialized(cwd);
+}
+
+async function listStateSessionIds(cwd: string): Promise<string[]> {
+  const sessionsDir = join(getStateDir(cwd), 'sessions');
+  if (!existsSync(sessionsDir)) return [];
+  const entries = await readdir(sessionsDir, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((entry) => entry.trim().length > 0);
+}
+
+async function writeClearedSessionScopedModeState(
+  path: string,
+  mode: string,
+  sessionId: string,
+): Promise<void> {
+  const nowIso = new Date().toISOString();
+  const clearedState = withModeRuntimeContext({}, {
+    mode,
+    active: false,
+    current_phase: 'cleared',
+    updated_at: nowIso,
+    completed_at: nowIso,
+    session_id: sessionId,
+  });
+  await writeAtomicFile(path, JSON.stringify(clearedState, null, 2));
 }
 
 export async function listStateStatuses(
@@ -97,7 +138,6 @@ export async function listStateStatuses(
   return statuses;
 }
 
-
 export async function listActiveStateModes(
   workingDirectory?: string,
   explicitSessionId?: string,
@@ -130,15 +170,12 @@ export async function executeStateOperation(
   try {
     const stateScope = await resolveStateScope(cwd, explicitSessionId);
     const effectiveSessionId = stateScope.sessionId;
-    await ensureStateDir(cwd, effectiveSessionId);
+    await initializeStateEnvironment(cwd, effectiveSessionId);
 
     switch (name) {
       case 'state_read': {
         const mode = validateStrictReadableMode(rawArgs.mode);
-        // Read canonical first, then fall back to scoped paths for read-through compat
-        const canonicalPath = getStatePath(mode, cwd, effectiveSessionId);
-        const scopedPaths = await getReadScopedStatePaths(mode, cwd, explicitSessionId);
-        const paths = [canonicalPath, ...scopedPaths.filter((p) => p !== canonicalPath)];
+        const paths = await getReadScopedStatePaths(mode, cwd, explicitSessionId);
         const path = paths.find((candidate) => existsSync(candidate));
         if (!path) {
           return { payload: { exists: false, mode } };
@@ -158,6 +195,8 @@ export async function executeStateOperation(
           ...fields
         } = rawArgs;
         let validationError: string | null = null;
+        let transitionMessage: string | undefined;
+        let ensureRalphArtifacts = false;
 
         await writeQueue.withWriteLock(path, async () => {
           let existing: Record<string, unknown> = {};
@@ -174,6 +213,31 @@ export async function executeStateOperation(
             ...fields,
             ...((customState as Record<string, unknown>) || {}),
           } as Record<string, unknown>;
+
+          const explicitRunOutcome = Object.prototype.hasOwnProperty.call(fields, 'run_outcome')
+            || (
+              customState != null
+              && Object.prototype.hasOwnProperty.call(customState as Record<string, unknown>, 'run_outcome')
+            );
+          if (!explicitRunOutcome) {
+            delete mergedRaw.run_outcome;
+          }
+          const explicitLifecycleOutcome = Object.prototype.hasOwnProperty.call(fields, 'lifecycle_outcome')
+            || (
+              customState != null
+              && Object.prototype.hasOwnProperty.call(customState as Record<string, unknown>, 'lifecycle_outcome')
+            );
+          if (!explicitLifecycleOutcome) {
+            delete mergedRaw.lifecycle_outcome;
+          }
+          const explicitTerminalOutcome = Object.prototype.hasOwnProperty.call(fields, 'terminal_outcome')
+            || (
+              customState != null
+              && Object.prototype.hasOwnProperty.call(customState as Record<string, unknown>, 'terminal_outcome')
+            );
+          if (!explicitTerminalOutcome) {
+            delete mergedRaw.terminal_outcome;
+          }
 
           if (
             mode === 'ralph' &&
@@ -198,7 +262,40 @@ export async function executeStateOperation(
               validation.state.ralph_phase_normalized_from = originalPhase;
             }
             Object.assign(mergedRaw, validation.state);
-            await ensureCanonicalRalphArtifacts(cwd, effectiveSessionId);
+            ensureRalphArtifacts = true;
+          }
+
+          if (mode !== SKILL_ACTIVE_STATE_MODE) {
+            const runOutcomeValidation = applyRunOutcomeContract(mergedRaw);
+            if (!runOutcomeValidation.ok || !runOutcomeValidation.state) {
+              validationError = runOutcomeValidation.error || 'Invalid run outcome state';
+              return;
+            }
+            Object.assign(mergedRaw, runOutcomeValidation.state);
+          }
+
+          if (isTrackedWorkflowMode(mode) && mergedRaw.active === true) {
+            try {
+              if (!effectiveSessionId) {
+                for (const sessionId of await listStateSessionIds(cwd)) {
+                  const sessionTransition = await reconcileWorkflowTransition(cwd, mode, {
+                    action: 'write',
+                    sessionId,
+                    source: 'state-server',
+                  });
+                  transitionMessage ??= sessionTransition.transitionMessage;
+                }
+              }
+              const transition = await reconcileWorkflowTransition(cwd, mode, {
+                action: 'write',
+                sessionId: effectiveSessionId,
+                source: 'state-server',
+              });
+              transitionMessage ??= transition.transitionMessage;
+            } catch (error) {
+              validationError = (error as Error).message;
+              return;
+            }
           }
 
           const merged = withModeRuntimeContext(existing, mergedRaw);
@@ -213,7 +310,34 @@ export async function executeStateOperation(
           };
         }
 
-        return { payload: { success: true, mode, path } };
+        if (mode === SKILL_ACTIVE_STATE_MODE) {
+          const state = await readSkillActiveState(path);
+          if (state) {
+            await writeSkillActiveStateCopies(cwd, state, effectiveSessionId);
+          }
+        } else {
+          if (mode === 'ralph' && ensureRalphArtifacts) {
+            await ensureCanonicalRalphArtifacts(cwd, effectiveSessionId);
+          }
+          const data = JSON.parse(await readFile(path, 'utf-8')) as Record<string, unknown>;
+          await syncCanonicalSkillStateForMode({
+            cwd,
+            mode,
+            active: data.active === true,
+            currentPhase: typeof data.current_phase === 'string' ? data.current_phase : undefined,
+            sessionId: effectiveSessionId,
+          });
+          await syncRunStateFromModeState(data, cwd, effectiveSessionId);
+        }
+
+        return {
+          payload: {
+            success: true,
+            mode,
+            path,
+            ...(transitionMessage ? { transition: transitionMessage } : {}),
+          },
+        };
       }
 
       case 'state_clear': {
@@ -222,8 +346,28 @@ export async function executeStateOperation(
 
         if (!allSessions) {
           const path = getStatePath(mode, cwd, effectiveSessionId);
-          if (existsSync(path)) {
-            await unlink(path);
+          if (
+            mode !== SKILL_ACTIVE_STATE_MODE &&
+            effectiveSessionId &&
+            existsSync(getStatePath(mode, cwd))
+          ) {
+            await writeClearedSessionScopedModeState(path, mode, effectiveSessionId);
+          } else if (existsSync(path)) {
+            await import('node:fs/promises').then(({ unlink }) => unlink(path));
+          }
+          if (mode !== SKILL_ACTIVE_STATE_MODE) {
+            await syncCanonicalSkillStateForMode({
+              cwd,
+              mode,
+              active: false,
+              sessionId: effectiveSessionId,
+            });
+            await syncRunStateFromModeState({
+              mode,
+              active: false,
+              current_phase: 'cleared',
+              completed_at: new Date().toISOString(),
+            }, cwd, effectiveSessionId);
           }
           return { payload: { cleared: true, mode, path } };
         }
@@ -232,8 +376,16 @@ export async function executeStateOperation(
         const paths = await getAllScopedStatePaths(mode, cwd);
         for (const path of paths) {
           if (!existsSync(path)) continue;
-          await unlink(path);
+          await import('node:fs/promises').then(({ unlink }) => unlink(path));
           removedPaths.add(path);
+        }
+
+        if (mode !== SKILL_ACTIVE_STATE_MODE) {
+          await syncCanonicalSkillStateForMode({
+            cwd,
+            mode,
+            active: false,
+          });
         }
 
         return {

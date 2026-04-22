@@ -93,4 +93,51 @@ describe('skill-active state helpers', () => {
       }]);
     });
   });
+
+  it('preserves root-scoped team state when a session-scoped ralph overlap is activated', async () => {
+    await withTempRepo('omx-skill-active-team-ralph-', async (cwd) => {
+      await mkdir(join(cwd, '.omx', 'state'), { recursive: true });
+      await writeSkillActiveStateCopies(cwd, {
+        active: true,
+        skill: 'team',
+        phase: 'running',
+        active_skills: [{ skill: 'team', phase: 'running', active: true }],
+      });
+
+      await syncCanonicalSkillStateForMode({
+        cwd,
+        mode: 'ralph',
+        active: true,
+        currentPhase: 'executing',
+        sessionId: 'sess-overlap',
+        nowIso: '2026-04-09T00:00:00.000Z',
+      });
+
+      const rootState = JSON.parse(
+        await readFile(join(cwd, '.omx', 'state', 'skill-active-state.json'), 'utf-8'),
+      ) as { active_skills?: Array<{ skill: string; phase?: string; session_id?: string }> };
+      assert.deepEqual(
+        rootState.active_skills?.map(({ skill, phase, session_id }) => ({
+          skill,
+          phase,
+          session_id,
+        })),
+        [{ skill: 'team', phase: 'running', session_id: undefined }],
+      );
+
+      const sessionState = await readVisibleSkillActiveState(cwd, 'sess-overlap');
+      assert.ok(sessionState);
+      assert.deepEqual(
+        listActiveSkills(sessionState).map(({ skill, phase, session_id }) => ({
+          skill,
+          phase,
+          session_id,
+        })),
+        [
+          { skill: 'team', phase: 'running', session_id: undefined },
+          { skill: 'ralph', phase: 'executing', session_id: 'sess-overlap' },
+        ],
+      );
+    });
+  });
 });

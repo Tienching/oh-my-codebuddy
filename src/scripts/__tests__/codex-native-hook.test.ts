@@ -1555,6 +1555,109 @@ esac
     }
   });
 
+  it("blocks Stop while autoresearch is active without validator completion", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-native-hook-stop-autoresearch-"));
+    try {
+      const stateDir = join(cwd, ".omx", "state");
+      await mkdir(join(stateDir, "sessions", "sess-stop-autoresearch"), { recursive: true });
+      await writeJson(join(stateDir, "session.json"), { session_id: "sess-stop-autoresearch", cwd });
+      await writeJson(join(stateDir, "sessions", "sess-stop-autoresearch", "autoresearch-state.json"), {
+        active: true,
+        mode: "autoresearch",
+        current_phase: "executing",
+        session_id: "sess-stop-autoresearch",
+        validation_mode: "mission-validator-script",
+        mission_validator_command: "node scripts/validate.js",
+        completion_artifact_path: '.omb/specs/autoresearch-demo/completion.json',
+      });
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "Stop",
+          cwd,
+          session_id: "sess-stop-autoresearch",
+        },
+        { cwd },
+      );
+
+      assert.deepEqual(result.outputJson, {
+        decision: "block",
+        reason: "OMB autoresearch is still active (phase: executing); continue until validator evidence is complete before stopping.",
+        stopReason: "autoresearch_executing",
+        systemMessage: "OMB autoresearch is still active (phase: executing); continue until validator evidence is complete before stopping.",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("allows Stop once autoresearch validator evidence is complete", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-native-hook-stop-autoresearch-complete-"));
+    try {
+      const stateDir = join(cwd, ".omx", "state");
+      const specDir = join(cwd, '.omb', 'specs', 'autoresearch-demo');
+      await mkdir(join(stateDir, "sessions", "sess-stop-autoresearch-complete"), { recursive: true });
+      await mkdir(specDir, { recursive: true });
+      await writeJson(join(stateDir, "session.json"), { session_id: "sess-stop-autoresearch-complete", cwd });
+      await writeJson(join(stateDir, "sessions", "sess-stop-autoresearch-complete", "autoresearch-state.json"), {
+        active: true,
+        mode: "autoresearch",
+        current_phase: "executing",
+        session_id: "sess-stop-autoresearch-complete",
+        validation_mode: "mission-validator-script",
+        mission_validator_command: "node scripts/validate.js",
+        completion_artifact_path: '.omb/specs/autoresearch-demo/completion.json',
+      });
+      await writeJson(join(specDir, 'completion.json'), { status: 'passed', passed: true });
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "Stop",
+          cwd,
+          session_id: "sess-stop-autoresearch-complete",
+        },
+        { cwd },
+      );
+
+      assert.equal(result.outputJson, null);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("does not block Stop from stale root autoresearch state when the explicit session has no scoped autoresearch state", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-native-hook-stop-stale-root-autoresearch-"));
+    try {
+      const stateDir = join(cwd, ".omx", "state");
+      const specDir = join(cwd, '.omb', 'specs', 'autoresearch-demo');
+      await mkdir(stateDir, { recursive: true });
+      await mkdir(specDir, { recursive: true });
+      await writeJson(join(stateDir, "session.json"), { session_id: "sess-stop-main", cwd });
+      await writeJson(join(stateDir, 'autoresearch-state.json'), {
+        active: true,
+        mode: 'autoresearch',
+        current_phase: 'executing',
+        validation_mode: 'mission-validator-script',
+        mission_validator_command: 'node scripts/validate.js',
+        completion_artifact_path: '.omb/specs/autoresearch-demo/completion.json',
+      });
+      await writeJson(join(specDir, 'completion.json'), { status: 'running' });
+
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "Stop",
+          cwd,
+          session_id: "sess-stop-main",
+        },
+        { cwd },
+      );
+
+      assert.equal(result.outputJson, null);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it("does not re-block Ralph when Stop already continued once", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omx-native-hook-stop-ralph-once-"));
     try {

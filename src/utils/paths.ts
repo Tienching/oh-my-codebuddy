@@ -76,6 +76,17 @@ export function resolveOmxCliEntryPath(
     packageRootDir?: string;
   } = {},
 ): string | null {
+  const directArgvEntry = (() => {
+    const rawArgv1 = typeof options.argv1 === 'string' ? options.argv1.trim() : '';
+    if (rawArgv1 === '') return null;
+    const resolvedArgv1 = resolveLauncherPath(
+      rawArgv1,
+      String(options.env?.[OMX_STARTUP_CWD_ENV] ?? '').trim() || options.cwd || process.cwd(),
+    );
+    return isCliEntryPath(resolvedArgv1) ? resolvedArgv1 : null;
+  })();
+  if (directArgvEntry) return directArgvEntry;
+
   const entry = resolveOmxEntryPath(options);
   if (isCliEntryPath(entry)) return entry;
 
@@ -187,9 +198,19 @@ export function ombNotepadPath(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omb", "notepad.md");
 }
 
+/** oh-my-codebuddy wiki directory (.omb/wiki/) */
+export function ombWikiDir(projectRoot?: string): string {
+  return join(projectRoot || process.cwd(), '.omb', 'wiki');
+}
+
 /** oh-my-codebuddy plans directory (.omb/plans/) */
 export function ombPlansDir(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omb", "plans");
+}
+
+/** oh-my-codebuddy adapters directory (.omb/adapters/) */
+export function ombAdaptersDir(projectRoot?: string): string {
+  return join(projectRoot || process.cwd(), '.omb', 'adapters');
 }
 
 /** oh-my-codebuddy logs directory (.omb/logs/) */
@@ -339,9 +360,31 @@ export function omxNotepadPath(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omx", "notepad.md");
 }
 
+/** OMB compatibility wiki directory (.omx/wiki/) — compat-only, with .omb canonical fallback */
+export function omxWikiDir(projectRoot?: string): string {
+  const root = projectRoot || process.cwd();
+  const canonical = ombWikiDir(root);
+  const legacy = join(root, '.omx', 'wiki');
+  if (existsSync(canonical) || !existsSync(legacy)) {
+    return canonical;
+  }
+  return legacy;
+}
+
 /** OMB compatibility plans directory (.omx/plans/) — compat-only */
 export function omxPlansDir(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".omx", "plans");
+}
+
+/** OMB compatibility adapters directory (.omx/adapters/) — compat-only, with .omb canonical fallback */
+export function omxAdaptersDir(projectRoot?: string): string {
+  const root = projectRoot || process.cwd();
+  const canonical = ombAdaptersDir(root);
+  const legacy = join(root, '.omx', 'adapters');
+  if (existsSync(canonical) || !existsSync(legacy)) {
+    return canonical;
+  }
+  return legacy;
 }
 
 /** OMB compatibility logs directory (.omx/logs/) — compat-only */

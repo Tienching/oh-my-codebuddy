@@ -1,13 +1,19 @@
-import { existsSync } from 'fs';
-import { mkdir, readFile, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { ombStateDir, omxStateDir } from '../utils/paths.js';
+import {
+  assertWorkflowTransitionAllowed,
+  isTrackedWorkflowMode,
+  pickPrimaryWorkflowMode,
+} from './workflow-transition.js';
 
 export const SKILL_ACTIVE_STATE_MODE = 'skill-active';
 export const SKILL_ACTIVE_STATE_FILE = `${SKILL_ACTIVE_STATE_MODE}-state.json`;
 
 export const CANONICAL_WORKFLOW_SKILLS = [
   'autopilot',
+  'autoresearch',
   'team',
   'ralph',
   'ultrawork',
@@ -64,13 +70,40 @@ function safeString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
-function filterEntriesForSession(
-  entries: SkillActiveEntry[],
-  sessionId?: string,
-): SkillActiveEntry[] {
+function entryKey(entry: Pick<SkillActiveEntry, 'skill' | 'session_id'>): string {
+  return `${entry.skill}::${safeString(entry.session_id).trim()}`;
+}
+
+function filterRootEntriesForSession(entries: SkillActiveEntry[], sessionId?: string): SkillActiveEntry[] {
   const normalizedSessionId = safeString(sessionId).trim();
   if (!normalizedSessionId) return entries;
-  return entries.filter((entry) => safeString(entry.session_id).trim() === normalizedSessionId);
+  return entries.filter((entry) => {
+    const entrySessionId = safeString(entry.session_id).trim();
+    return entrySessionId.length === 0 || entrySessionId === normalizedSessionId;
+  });
+}
+
+function filterSessionOnlyEntries(
+  sessionState: SkillActiveStateLike | null,
+  rootEntries: SkillActiveEntry[],
+  sessionId: string,
+): SkillActiveEntry[] {
+  const inheritedEntries = filterRootEntriesForSession(rootEntries, sessionId);
+  return listActiveSkills(sessionState ?? {}).flatMap((entry) => {
+    const normalizedSessionId = safeString(entry.session_id).trim() || sessionId;
+    if (normalizedSessionId !== sessionId) return [];
+    const normalizedEntry = normalizedSessionId === safeString(entry.session_id).trim()
+      ? entry
+      : { ...entry, session_id: sessionId };
+    const inherited = inheritedEntries.some((rootEntry) => (
+      rootEntry.skill === normalizedEntry.skill
+      && (
+        safeString(rootEntry.session_id).trim() === ''
+        || safeString(rootEntry.session_id).trim() === normalizedSessionId
+      )
+    ));
+    return inherited ? [] : [normalizedEntry];
+  });
 }
 
 function normalizeSkillActiveEntry(raw: unknown): SkillActiveEntry | null {
@@ -100,13 +133,13 @@ export function listActiveSkills(raw: unknown): SkillActiveEntry[] {
     for (const candidate of state.active_skills) {
       const normalized = normalizeSkillActiveEntry(candidate);
       if (!normalized || normalized.active === false) continue;
-      deduped.set(normalized.skill, normalized);
+      deduped.set(entryKey(normalized), normalized);
     }
   }
 
   const topLevelSkill = safeString(state.skill).trim();
   if (deduped.size === 0 && state.active === true && topLevelSkill) {
-    deduped.set(topLevelSkill, {
+    const topLevelEntry = {
       skill: topLevelSkill,
       phase: safeString(state.phase).trim() || undefined,
       active: true,
@@ -115,7 +148,8 @@ export function listActiveSkills(raw: unknown): SkillActiveEntry[] {
       session_id: safeString(state.session_id).trim() || undefined,
       thread_id: safeString(state.thread_id).trim() || undefined,
       turn_id: safeString(state.turn_id).trim() || undefined,
-    });
+    } satisfies SkillActiveEntry;
+    deduped.set(entryKey(topLevelEntry), topLevelEntry);
   }
 
   return [...deduped.values()];
@@ -180,48 +214,67 @@ export async function readSkillActiveState(path: string): Promise<SkillActiveSta
   }
 }
 
+async function writeMaybe(path: string, payload: string | null): Promise<void> {
+  if (payload === null) {
+    if (existsSync(path)) {
+      await unlink(path).catch(() => {});
+    }
+    return;
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, payload);
+}
+
 export async function writeSkillActiveStateCopies(
   cwd: string,
   state: SkillActiveStateLike,
   sessionId?: string,
+  rootState?: SkillActiveStateLike | null,
 ): Promise<void> {
   const canonical = getSkillActiveStatePaths(cwd, sessionId);
   const legacy = getLegacySkillActiveStatePaths(cwd, sessionId);
-  const payload = JSON.stringify(state, null, 2);
+  const normalized = JSON.stringify({ version: 1, ...state }, null, 2);
+  const normalizedRoot = rootState === null
+    ? null
+    : JSON.stringify({ version: 1, ...(rootState ?? state) }, null, 2);
 
-  await mkdir(dirname(canonical.rootPath), { recursive: true });
-  await writeFile(canonical.rootPath, payload);
+  await writeMaybe(canonical.rootPath, normalizedRoot);
+  if (legacy.rootPath !== canonical.rootPath) {
+    await writeMaybe(legacy.rootPath, normalizedRoot);
+  }
 
   if (canonical.sessionPath) {
-    await mkdir(dirname(canonical.sessionPath), { recursive: true });
-    await writeFile(canonical.sessionPath, payload);
+    await writeMaybe(canonical.sessionPath, normalized);
   }
-
-  if (legacy.rootPath !== canonical.rootPath) {
-    await mkdir(dirname(legacy.rootPath), { recursive: true });
-    await writeFile(legacy.rootPath, payload);
-  }
-
   if (legacy.sessionPath && legacy.sessionPath !== canonical.sessionPath) {
-    await mkdir(dirname(legacy.sessionPath), { recursive: true });
-    await writeFile(legacy.sessionPath, payload);
+    await writeMaybe(legacy.sessionPath, normalized);
   }
+}
+
+async function readFirstExisting(paths: Array<string | undefined>): Promise<SkillActiveStateLike | null> {
+  for (const path of paths) {
+    if (!path || !existsSync(path)) continue;
+    const state = await readSkillActiveState(path);
+    if (state) return state;
+  }
+  return null;
 }
 
 export async function readVisibleSkillActiveState(cwd: string, sessionId?: string): Promise<SkillActiveStateLike | null> {
   const canonical = getSkillActiveStatePaths(cwd, sessionId);
   const legacy = getLegacySkillActiveStatePaths(cwd, sessionId);
-  if (canonical.sessionPath && existsSync(canonical.sessionPath)) {
-    return readSkillActiveState(canonical.sessionPath);
+
+  const rootState = await readFirstExisting([canonical.rootPath, legacy.rootPath]);
+  if (!sessionId) {
+    return rootState;
   }
-  if (legacy.sessionPath && existsSync(legacy.sessionPath)) {
-    return readSkillActiveState(legacy.sessionPath);
-  }
-  if (existsSync(canonical.rootPath)) {
-    return readSkillActiveState(canonical.rootPath);
-  }
-  if (!existsSync(legacy.rootPath)) return null;
-  return readSkillActiveState(legacy.rootPath);
+
+  const sessionState = await readFirstExisting([canonical.sessionPath, legacy.sessionPath]);
+  if (!sessionState) return null;
+  return normalizeSkillActiveState({
+    ...(sessionState ?? {}),
+    session_id: safeString(sessionState.session_id).trim() || sessionId,
+  });
 }
 
 export function tracksCanonicalWorkflowSkill(mode: string): mode is CanonicalWorkflowSkill {
@@ -242,43 +295,146 @@ export async function syncCanonicalSkillStateForMode(options: SyncCanonicalSkill
   } = options;
 
   if (!tracksCanonicalWorkflowSkill(mode)) return;
+  const { rootPath, sessionPath } = getSkillActiveStatePaths(cwd, sessionId);
+  const existingRoot = await readSkillActiveState(rootPath);
+  const existingSession = sessionPath ? await readSkillActiveState(sessionPath) : null;
+  if (!existingRoot && !existingSession && !active) return;
 
-  const { rootPath } = getSkillActiveStatePaths(cwd, sessionId);
-  const existing = await readSkillActiveState(rootPath);
-  if (!existing && !active) return;
+  const normalizedSessionId = safeString(sessionId).trim();
+  const rootEntries = normalizedSessionId
+    ? listActiveSkills(existingRoot ?? {}).filter((entry) => {
+      const entrySessionId = safeString(entry.session_id).trim();
+      return entrySessionId.length === 0 || entrySessionId === normalizedSessionId;
+    })
+    : listActiveSkills(existingRoot ?? {});
+  const sessionOnlyEntries = normalizedSessionId
+    ? listActiveSkills(existingSession ?? {}).filter((entry) => (
+      (safeString(entry.session_id).trim() || normalizedSessionId) === normalizedSessionId
+      && !rootEntries.some((rootEntry) => (
+        rootEntry.skill === entry.skill
+        && safeString(rootEntry.session_id).trim() === (safeString(entry.session_id).trim() || normalizedSessionId)
+      ))
+    )).map((entry) => (
+      safeString(entry.session_id).trim() ? entry : { ...entry, session_id: normalizedSessionId }
+    ))
+    : [];
+  const visibleEntries = normalizedSessionId
+    ? [...rootEntries, ...sessionOnlyEntries]
+    : [...rootEntries];
 
-  const entries = filterEntriesForSession(listActiveSkills(existing ?? {}), sessionId);
-  const filtered = entries.filter((entry) => entry.skill !== mode);
+  if (active && isTrackedWorkflowMode(mode)) {
+    const currentWorkflowModes = visibleEntries
+      .map((entry) => entry.skill)
+      .filter(isTrackedWorkflowMode);
+    assertWorkflowTransitionAllowed(currentWorkflowModes, mode, 'write');
+  }
+
+  const applyEntriesToState = (
+    base: SkillActiveStateLike | null,
+    entries: SkillActiveEntry[],
+    fallbackMode: string,
+  ): SkillActiveStateLike => {
+    const currentPrimary = safeString(base?.skill).trim();
+    const primarySkill = pickPrimaryWorkflowMode(
+      [currentPrimary, ...entries.map((entry) => entry.skill), fallbackMode].filter(Boolean),
+    ) ?? fallbackMode;
+    const primaryEntry = entries.find((entry) => entry.skill === primarySkill) ?? entries[0];
+    return {
+      ...(base ?? {}),
+      version: 1,
+      active: entries.length > 0,
+      skill: primaryEntry?.skill || primarySkill || fallbackMode,
+      keyword: safeString(base?.keyword).trim(),
+      phase: primaryEntry?.phase || safeString(base?.phase).trim(),
+      activated_at: primaryEntry?.activated_at || safeString(base?.activated_at).trim() || nowIso,
+      updated_at: nowIso,
+      source: safeString(base?.source).trim() || source,
+      session_id: primaryEntry?.session_id || safeString(base?.session_id).trim() || undefined,
+      thread_id: primaryEntry?.thread_id || safeString(base?.thread_id).trim() || undefined,
+      turn_id: primaryEntry?.turn_id || safeString(base?.turn_id).trim() || undefined,
+      active_skills: entries,
+    };
+  };
+
+  if (normalizedSessionId) {
+    const nextSessionEntries = sessionOnlyEntries.filter((entry) => entry.skill !== mode);
+    if (active) {
+      nextSessionEntries.push({
+        skill: mode,
+        phase: safeString(currentPhase).trim() || undefined,
+        active: true,
+        activated_at: sessionOnlyEntries.find((entry) => entry.skill === mode)?.activated_at || nowIso,
+        updated_at: nowIso,
+        session_id: normalizedSessionId,
+        thread_id: safeString(threadId).trim() || undefined,
+        turn_id: safeString(turnId).trim() || undefined,
+      });
+    }
+
+    const nextRootEntries = rootEntries.filter((entry) => !(
+      entry.skill === mode
+      && safeString(entry.session_id).trim() === normalizedSessionId
+    ));
+
+    const nextSessionState = applyEntriesToState(
+      existingSession ?? existingRoot,
+      [...nextRootEntries, ...nextSessionEntries],
+      mode,
+    );
+    const nextRootState = nextRootEntries.length > 0
+      ? applyEntriesToState(existingRoot, nextRootEntries, mode)
+      : applyEntriesToState(
+        existingSession ?? existingRoot,
+        active ? nextSessionEntries : [],
+        mode,
+      );
+    await writeSkillActiveStateCopies(cwd, nextSessionState, sessionId, nextRootState);
+    return;
+  }
+
+  const nextRootEntries = rootEntries.filter((entry) => entry.skill !== mode);
   if (active) {
-    filtered.push({
+    nextRootEntries.push({
       skill: mode,
       phase: safeString(currentPhase).trim() || undefined,
       active: true,
-      activated_at: entries.find((entry) => entry.skill === mode)?.activated_at || nowIso,
+      activated_at: rootEntries.find((entry) => entry.skill === mode)?.activated_at || nowIso,
       updated_at: nowIso,
-      session_id: safeString(sessionId).trim() || undefined,
+      session_id: undefined,
       thread_id: safeString(threadId).trim() || undefined,
       turn_id: safeString(turnId).trim() || undefined,
     });
   }
 
-  const currentPrimary = safeString(existing?.skill).trim();
-  const primaryEntry = filtered.find((entry) => entry.skill === currentPrimary) ?? filtered[0];
-  const nextState: SkillActiveStateLike = {
-    ...(existing ?? {}),
-    version: 1,
-    active: filtered.length > 0,
-    skill: primaryEntry?.skill || currentPrimary || mode,
-    keyword: safeString(existing?.keyword).trim(),
-    phase: primaryEntry?.phase || safeString(currentPhase).trim() || safeString(existing?.phase).trim(),
-    activated_at: primaryEntry?.activated_at || safeString(existing?.activated_at).trim() || nowIso,
-    updated_at: nowIso,
-    source: safeString(existing?.source).trim() || source,
-    session_id: safeString(sessionId).trim() || safeString(existing?.session_id).trim() || undefined,
-    thread_id: safeString(threadId).trim() || safeString(existing?.thread_id).trim() || undefined,
-    turn_id: safeString(turnId).trim() || safeString(existing?.turn_id).trim() || undefined,
-    active_skills: filtered.length > 0 ? filtered : [],
-  };
+  const nextRootState = applyEntriesToState(existingRoot, nextRootEntries, mode);
+  await writeSkillActiveStateCopies(cwd, nextRootState, undefined, nextRootState);
 
-  await writeSkillActiveStateCopies(cwd, nextState, sessionId);
+  const sessionsDir = join(omxStateDir(cwd), 'sessions');
+  if (!existsSync(sessionsDir)) return;
+
+  const sessionIds = await readdir(sessionsDir).catch(() => []);
+  for (const candidate of sessionIds) {
+    const candidateSessionId = safeString(candidate).trim();
+    if (!candidateSessionId) continue;
+
+    const candidateSessionPath = join(sessionsDir, candidateSessionId, SKILL_ACTIVE_STATE_FILE);
+    if (!existsSync(candidateSessionPath)) continue;
+
+    const existingSessionState = await readSkillActiveState(candidateSessionPath);
+    const candidateSessionEntries = filterSessionOnlyEntries(existingSessionState, rootEntries, candidateSessionId);
+    const nextVisibleRootEntries = filterRootEntriesForSession(nextRootEntries, candidateSessionId);
+    const nextSessionEntries = [...nextVisibleRootEntries, ...candidateSessionEntries];
+
+    if (nextSessionEntries.length === 0) {
+      await unlink(candidateSessionPath).catch(() => {});
+      continue;
+    }
+
+    const nextSessionState = applyEntriesToState(
+      existingSessionState ?? existingRoot,
+      nextSessionEntries,
+      nextSessionEntries[0]?.skill || mode,
+    );
+    await writeSkillActiveStateCopies(cwd, nextSessionState, candidateSessionId, nextRootState);
+  }
 }

@@ -19,7 +19,7 @@ describe('state operations Ralph phase contract', () => {
       });
       assert.equal(response.isError, undefined);
 
-      const file = join(wd, '.omx', 'state', 'ralph-state.json');
+      const file = join(wd, '.omb', 'state', 'ralph-state.json');
       const state = JSON.parse(await readFile(file, 'utf-8'));
       assert.equal(state.current_phase, 'executing');
       assert.equal(state.ralph_phase_normalized_from, 'execution');

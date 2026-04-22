@@ -1,7 +1,7 @@
 /**
- * OMB State Management MCP Server
+ * OMX State Management MCP Server
  * Provides state read/write/clear/list tools for workflow modes
- * Storage: .omb/state/{mode}-state.json
+ * Storage: .omx/state/{mode}-state.json
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -37,10 +37,15 @@ import {
 	writeSkillActiveStateCopies,
 } from "../state/skill-active.js";
 import {
+	isTrackedWorkflowMode,
+} from "../state/workflow-transition.js";
+import { reconcileWorkflowTransition } from "../state/workflow-transition-reconcile.js";
+import {
 	RALPH_PHASES,
 	validateAndNormalizeRalphState,
 } from "../ralph/contract.js";
 import { ensureCanonicalRalphArtifacts } from "../ralph/persistence.js";
+import { applyRunOutcomeContract } from "../runtime/run-outcome.js";
 import { autoStartStdioMcpServer } from "./bootstrap.js";
 import {
 	LEGACY_TEAM_MCP_TOOLS,
@@ -49,6 +54,7 @@ import {
 
 const SUPPORTED_MODES = [
 	"autopilot",
+	"autoresearch",
 	"team",
 	"ralph",
 	"ultrawork",
@@ -68,6 +74,16 @@ const STATE_TOOL_NAMES = new Set([
 const TEAM_COMM_TOOL_NAMES: Set<string> = new Set([...LEGACY_TEAM_MCP_TOOLS]);
 
 const stateWriteQueues = new Map<string, Promise<void>>();
+
+async function listStateSessionIds(cwd: string): Promise<string[]> {
+	const sessionsDir = join(getStateDir(cwd), "sessions");
+	if (!existsSync(sessionsDir)) return [];
+	const entries = await readdir(sessionsDir, { withFileTypes: true }).catch(() => []);
+	return entries
+		.filter((entry) => entry.isDirectory())
+		.map((entry) => entry.name)
+		.filter((entry) => entry.trim().length > 0);
+}
 
 async function withStateWriteLock<T>(
 	path: string,
@@ -103,8 +119,25 @@ async function writeAtomicFile(path: string, data: string): Promise<void> {
 	}
 }
 
+async function writeClearedSessionScopedModeState(
+	path: string,
+	mode: string,
+	sessionId: string,
+): Promise<void> {
+	const nowIso = new Date().toISOString();
+	const clearedState = withModeRuntimeContext({}, {
+		mode,
+		active: false,
+		current_phase: "cleared",
+		updated_at: nowIso,
+		completed_at: nowIso,
+		session_id: sessionId,
+	});
+	await writeAtomicFile(path, JSON.stringify(clearedState, null, 2));
+}
+
 const server = new Server(
-	{ name: "omb-state", version: "0.1.0" },
+	{ name: "omx-state", version: "0.1.0" },
 	{ capabilities: { tools: {} } },
 );
 
@@ -149,6 +182,19 @@ export function buildStateServerTools() {
 					task_description: { type: "string" },
 					started_at: { type: "string" },
 					completed_at: { type: "string" },
+					run_outcome: {
+						type: "string",
+						enum: ["continue", "finish", "blocked_on_user", "failed", "cancelled"],
+					},
+					lifecycle_outcome: {
+						type: "string",
+						enum: ["finished", "blocked", "failed", "userinterlude", "askuserQuestion"],
+					},
+					terminal_outcome: {
+						type: "string",
+						enum: ["finished", "blocked", "failed", "userinterlude", "askuserQuestion"],
+						description: "Legacy alias for lifecycle_outcome; canonical writes should prefer lifecycle_outcome.",
+					},
 					error: { type: "string" },
 					state: { type: "object", description: "Additional custom fields" },
 					workingDirectory: { type: "string" },
@@ -274,7 +320,7 @@ export async function handleStateToolCall(request: {
 			const hint = buildLegacyTeamDeprecationHint(
 				name as (typeof LEGACY_TEAM_MCP_TOOLS)[number],
 				(args as Record<string, unknown>) ?? {},
-			).replace('Use CLI interop: omx team api', 'Use CLI interop: omb team api');
+			);
 			return {
 				content: [
 					{
@@ -334,11 +380,13 @@ export async function handleStateToolCall(request: {
 					session_id: _sid,
 					state: customState,
 					...fields
-				} = args as Record<string, unknown>;
-				let validationError: string | null = null;
-				await withStateWriteLock(path, async () => {
-					let existing: Record<string, unknown> = {};
-					if (existsSync(path)) {
+					} = args as Record<string, unknown>;
+					let validationError: string | null = null;
+					let transitionMessage: string | undefined;
+					let ensureRalphArtifacts = false;
+					await withStateWriteLock(path, async () => {
+						let existing: Record<string, unknown> = {};
+						if (existsSync(path)) {
 						try {
 							existing = JSON.parse(await readFile(path, "utf-8"));
 						} catch (e) {
@@ -348,20 +396,44 @@ export async function handleStateToolCall(request: {
 						}
 					}
 
-					const mergedRaw = {
-						...existing,
-						...fields,
-						...((customState as Record<string, unknown>) || {}),
-					} as Record<string, unknown>;
-					if (
-						mode === "ralph" &&
-						effectiveSessionId &&
+						const mergedRaw = {
+							...existing,
+							...fields,
+							...((customState as Record<string, unknown>) || {}),
+						} as Record<string, unknown>;
+						const explicitRunOutcome = Object.prototype.hasOwnProperty.call(fields, "run_outcome")
+							|| (
+								customState != null
+								&& Object.prototype.hasOwnProperty.call(customState as Record<string, unknown>, "run_outcome")
+							);
+						if (!explicitRunOutcome) {
+							delete mergedRaw.run_outcome;
+						}
+						const explicitLifecycleOutcome = Object.prototype.hasOwnProperty.call(fields, "lifecycle_outcome")
+							|| (
+								customState != null
+								&& Object.prototype.hasOwnProperty.call(customState as Record<string, unknown>, "lifecycle_outcome")
+							);
+						if (!explicitLifecycleOutcome) {
+							delete mergedRaw.lifecycle_outcome;
+						}
+						const explicitTerminalOutcome = Object.prototype.hasOwnProperty.call(fields, "terminal_outcome")
+							|| (
+								customState != null
+								&& Object.prototype.hasOwnProperty.call(customState as Record<string, unknown>, "terminal_outcome")
+							);
+						if (!explicitTerminalOutcome) {
+							delete mergedRaw.terminal_outcome;
+						}
+						if (
+							mode === "ralph" &&
+							effectiveSessionId &&
 						typeof mergedRaw.owner_omx_session_id !== "string"
 					) {
 						mergedRaw.owner_omx_session_id = effectiveSessionId;
 					}
 
-					if (mode === "ralph") {
+						if (mode === "ralph") {
 						const originalPhase = mergedRaw.current_phase;
 						const validation = validateAndNormalizeRalphState(mergedRaw);
 						if (!validation.ok || !validation.state) {
@@ -374,16 +446,48 @@ export async function handleStateToolCall(request: {
 							typeof originalPhase === "string" &&
 							typeof validation.state.current_phase === "string" &&
 							validation.state.current_phase !== originalPhase
-						) {
-							validation.state.ralph_phase_normalized_from = originalPhase;
+							) {
+								validation.state.ralph_phase_normalized_from = originalPhase;
+							}
+							Object.assign(mergedRaw, validation.state);
+							ensureRalphArtifacts = true;
 						}
-						Object.assign(mergedRaw, validation.state);
-						await ensureCanonicalRalphArtifacts(cwd, effectiveSessionId);
-					}
+						if (mode !== SKILL_ACTIVE_STATE_MODE) {
+							const runOutcomeValidation = applyRunOutcomeContract(mergedRaw);
+							if (!runOutcomeValidation.ok || !runOutcomeValidation.state) {
+								validationError =
+									runOutcomeValidation.error || "Invalid run outcome state";
+								return;
+							}
+							Object.assign(mergedRaw, runOutcomeValidation.state);
+						}
+						if (isTrackedWorkflowMode(mode) && mergedRaw.active === true) {
+							try {
+								if (!effectiveSessionId) {
+									for (const sessionId of await listStateSessionIds(cwd)) {
+										const sessionTransition = await reconcileWorkflowTransition(cwd, mode, {
+											action: "write",
+											sessionId,
+											source: "state-server",
+										});
+										transitionMessage ??= sessionTransition.transitionMessage;
+									}
+								}
+								const transition = await reconcileWorkflowTransition(cwd, mode, {
+									action: "write",
+									sessionId: effectiveSessionId,
+									source: "state-server",
+								});
+								transitionMessage ??= transition.transitionMessage;
+							} catch (error) {
+								validationError = (error as Error).message;
+								return;
+							}
+						}
 
-					const merged = withModeRuntimeContext(existing, mergedRaw);
-					await writeAtomicFile(path, JSON.stringify(merged, null, 2));
-				});
+						const merged = withModeRuntimeContext(existing, mergedRaw);
+						await writeAtomicFile(path, JSON.stringify(merged, null, 2));
+					});
 				if (validationError) {
 					return {
 						content: [
@@ -394,16 +498,19 @@ export async function handleStateToolCall(request: {
 						],
 						isError: true,
 					};
-				}
-				if (mode === SKILL_ACTIVE_STATE_MODE) {
-					const state = await readSkillActiveState(path);
-					if (state) {
-						await writeSkillActiveStateCopies(cwd, state, effectiveSessionId);
 					}
-				} else {
-					const data = JSON.parse(await readFile(path, "utf-8")) as Record<string, unknown>;
-					await syncCanonicalSkillStateForMode({
-						cwd,
+					if (mode === SKILL_ACTIVE_STATE_MODE) {
+						const state = await readSkillActiveState(path);
+						if (state) {
+							await writeSkillActiveStateCopies(cwd, state, effectiveSessionId);
+						}
+					} else {
+						if (mode === "ralph" && ensureRalphArtifacts) {
+							await ensureCanonicalRalphArtifacts(cwd, effectiveSessionId);
+						}
+						const data = JSON.parse(await readFile(path, "utf-8")) as Record<string, unknown>;
+						await syncCanonicalSkillStateForMode({
+							cwd,
 						mode,
 						active: data.active === true,
 						currentPhase: typeof data.current_phase === "string" ? data.current_phase : undefined,
@@ -414,7 +521,12 @@ export async function handleStateToolCall(request: {
 					content: [
 						{
 							type: "text",
-							text: JSON.stringify({ success: true, mode, path }),
+							text: JSON.stringify({
+								success: true,
+								mode,
+								path,
+								...(transitionMessage ? { transition: transitionMessage } : {}),
+							}),
 						},
 					],
 				};
@@ -427,7 +539,13 @@ export async function handleStateToolCall(request: {
 
 				if (!allSessions) {
 					const path = getStatePath(mode, cwd, effectiveSessionId);
-					if (existsSync(path)) {
+					if (
+						mode !== SKILL_ACTIVE_STATE_MODE &&
+						effectiveSessionId &&
+						existsSync(getStatePath(mode, cwd))
+					) {
+						await writeClearedSessionScopedModeState(path, mode, effectiveSessionId);
+					} else if (existsSync(path)) {
 						await unlink(path);
 					}
 					if (mode !== SKILL_ACTIVE_STATE_MODE) {

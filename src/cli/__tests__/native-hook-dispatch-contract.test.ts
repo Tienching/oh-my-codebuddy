@@ -5,10 +5,8 @@ import { describe, it } from 'node:test';
 
 describe('native hook dispatch contract', () => {
   it('force-enables native hook dispatch in the CLI path', async () => {
-    const source = await readFile(join(process.cwd(), 'src', 'cli', 'index.ts'), 'utf-8');
-    assert.match(
-      source,
-      /async function emitNativeHookEvent[\s\S]*?await dispatchHookEvent\(payload,\s*\{\s*cwd,\s*enabled:\s*true,\s*\}\);/,
-    );
+    const source = await readFile(join(process.cwd(), 'src', 'cli', 'runtime', 'launch-pipeline.ts'), 'utf-8');
+    assert.match(source, /async function emitNativeHookEvent/);
+    assert.match(source, /await dispatchHookEvent\(payload,\s*\{\s*cwd,\s*enabled:\s*true\s*\}\);/);
   });
 });

@@ -55,6 +55,7 @@ export const KEYWORD_TRIGGER_DEFINITIONS: readonly KeywordTriggerDefinition[] = 
   { keyword: 'code-review', skill: 'code-review', priority: 6, guidance: 'Activate code-review workflow' },
   { keyword: 'review code', skill: 'code-review', priority: 6, guidance: 'Activate code-review workflow' },
   { keyword: 'security review', skill: 'security-review', priority: 6, guidance: 'Activate security-review workflow' },
+  { keyword: 'autoresearch', skill: 'autoresearch', priority: 8, guidance: 'Activate autoresearch workflow' },
 ] as const;
 
 export function compareKeywordMatches(a: { priority: number; keyword: string }, b: { priority: number; keyword: string }): number {

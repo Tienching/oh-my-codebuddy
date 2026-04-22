@@ -1379,7 +1379,9 @@ exit 0
       assert.deepEqual(skillState.input_lock?.blocked_inputs, DEEP_INTERVIEW_BLOCKED_APPROVAL_INPUTS);
       assert.match(skillState.input_lock?.message || '', /Deep interview is active/i);
 
-      const modeState = JSON.parse(await readFile(join(stateDir, 'deep-interview-state.json'), 'utf-8')) as {
+      const modeState = JSON.parse(
+        await readFile(join(stateDir, 'sessions', 'sess-managed', 'deep-interview-state.json'), 'utf-8'),
+      ) as {
         active: boolean;
         mode: string;
         current_phase: string;

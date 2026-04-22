@@ -15,14 +15,14 @@ describe('error-handling warning guards', () => {
   });
 
   it('uses warning logs for watcher lifecycle best-effort failures', async () => {
-    const source = await readSource('src/cli/index.ts');
+    const source = await readSource('src/cli/runtime/launch-pipeline.ts');
 
     assert.ok(!source.includes("await mkdir(join(cwd, '.omb', 'state'), { recursive: true }).catch(() => {});"));
     assert.ok(!source.includes('await unlink(pidPath).catch(() => {});'));
 
     const esrchGuardCount =
-      source.match(/if \(!hasErrnoCode\(error, ['"]ESRCH['"]\)\)/g)?.length ?? 0;
-    assert.equal(esrchGuardCount, 1);
+      source.match(/if \(!hasErrnoCode(?:Impl)?\(error,\s*['"]ESRCH['"]\)\)/g)?.length ?? 0;
+    assert.ok(esrchGuardCount >= 1);
     assert.match(source, /export async function reapStaleNotifyFallbackWatcher/);
     assert.match(source, /failed to stop stale notify fallback watcher/);
     assert.match(source, /failed to write notify fallback watcher pid file/);

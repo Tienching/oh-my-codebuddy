@@ -9,6 +9,7 @@ import {
 } from "../state/skill-active.js";
 import { readSubagentSessionSummary } from "../subagents/tracker.js";
 import { resolveActiveTeamStateRoot } from "../team/state-root.js";
+import { readAutoresearchCompletionStatus, readAutoresearchModeState } from "../autoresearch/skill-validation.js";
 import {
   appendTeamEvent,
   readTeamLeaderAttention,
@@ -23,6 +24,8 @@ import {
   recordSkillActivation,
   type SkillActiveState,
 } from "../hooks/keyword-detector.js";
+import { triagePrompt } from "../hooks/triage-heuristic.js";
+import { readTriageConfig } from "../hooks/triage-config.js";
 import {
   detectStallPattern,
   loadAutoNudgeConfig,
@@ -176,6 +179,20 @@ function isNonTerminalPhase(value: unknown): boolean {
 function formatPhase(value: unknown, fallback = "active"): string {
   const phase = safeString(value).trim();
   return phase || fallback;
+}
+
+async function readActiveAutoresearchState(
+  cwd: string,
+  sessionId?: string,
+): Promise<Record<string, unknown> | null> {
+  const normalizedSessionId = sessionId?.trim() || undefined;
+  const state = normalizedSessionId
+    ? await readStopSessionPinnedState("autoresearch-state.json", cwd, normalizedSessionId)
+    : await readAutoresearchModeState(cwd);
+  if (normalizedSessionId && !state) return null;
+  if (state?.active !== true) return null;
+  if (!isNonTerminalPhase(state.current_phase ?? state.currentPhase ?? 'executing')) return null;
+  return state;
 }
 
 async function readActiveRalphState(stateDir: string): Promise<Record<string, unknown> | null> {
@@ -427,10 +444,14 @@ async function buildSessionStartContext(
   return sections.join("\n\n");
 }
 
-function buildAdditionalContextMessage(prompt: string, skillState?: SkillActiveState | null): string | null {
+function buildAdditionalContextMessage(
+  prompt: string,
+  skillState?: SkillActiveState | null,
+  advisoryContext?: string | null,
+): string | null {
   if (!prompt) return null;
   const match = detectPrimaryKeyword(prompt);
-  if (!match) return null;
+  if (!match) return advisoryContext ?? null;
 
   if (match.skill === "team") {
     const initializedStateMessage = skillState?.initialized_mode && skillState.initialized_state_path
@@ -989,6 +1010,26 @@ async function buildStopHookOutput(
   const ralphState = await readActiveRalphState(stateDir);
   const stopHookActive = payload.stop_hook_active === true || payload.stopHookActive === true;
   if (!ralphState) {
+    const autoresearchState = await readActiveAutoresearchState(cwd, sessionId);
+    if (autoresearchState) {
+      const completion = await readAutoresearchCompletionStatus(cwd, sessionId.trim());
+      if (!completion.complete) {
+        const currentPhase = safeString(autoresearchState.current_phase ?? autoresearchState.currentPhase).trim() || 'executing';
+        const systemMessage = `OMB autoresearch is still active (phase: ${currentPhase}); continue until validator evidence is complete before stopping.`;
+        return await maybeReturnRepeatableStopOutput(
+          payload,
+          stateDir,
+          buildRepeatableStopSignature(payload, 'autoresearch-stop', `${currentPhase}|${completion.reason}`),
+          {
+            decision: 'block',
+            reason: systemMessage,
+            stopReason: `autoresearch_${currentPhase}`,
+            systemMessage,
+          },
+        );
+      }
+    }
+
     const teamWorkerOutput = await buildTeamWorkerStopOutput(cwd);
     if (!stopHookActive && hasTeamWorkerContext()) return teamWorkerOutput;
 
@@ -1084,6 +1125,7 @@ export async function dispatchCodexNativeHook(
 
   const omxEventName = mapCodexHookEventToOmxEvent(hookEventName);
   let skillState: SkillActiveState | null = null;
+  let triageAdditionalContext: string | null = null;
 
   const sessionId = safeString(payload.session_id ?? payload.sessionId).trim();
   const threadId = safeString(payload.thread_id ?? payload.threadId).trim();
@@ -1106,6 +1148,30 @@ export async function dispatchCodexNativeHook(
         turnId,
       });
     }
+    if (prompt && skillState === null) {
+      try {
+        if (readTriageConfig().enabled) {
+          const decision = triagePrompt(prompt);
+          if (decision.lane === 'HEAVY') {
+            triageAdditionalContext =
+              'OMB native UserPromptSubmit triage detected a multi-step goal with no workflow keyword. This is advisory prompt-routing context only; it did not activate autopilot or initialize workflow state. Prefer the existing autopilot-style workflow if AGENTS.md/runtime conditions allow it, unless newer user context narrows or opts out.';
+          } else if (decision.lane === 'LIGHT') {
+            if (decision.destination === 'explore') {
+              triageAdditionalContext =
+                'OMB native UserPromptSubmit triage detected a read-only/question-shaped request with no workflow keyword. This is advisory prompt-routing context only. Prefer the explore role surface rather than escalating to autopilot.';
+            } else if (decision.destination === 'executor') {
+              triageAdditionalContext =
+                'OMB native UserPromptSubmit triage detected a narrow edit-shaped request with no workflow keyword. This is advisory prompt-routing context only. Prefer the executor role surface rather than autopilot.';
+            } else if (decision.destination === 'designer') {
+              triageAdditionalContext =
+                'OMB native UserPromptSubmit triage detected a visual/style request with no workflow keyword. This is advisory prompt-routing context only. Prefer the designer role surface.';
+            }
+          }
+        }
+      } catch {
+        triageAdditionalContext = null;
+      }
+    }
     await reconcileHudForPromptSubmit(cwd).catch(() => {});
   }
 
@@ -1127,7 +1193,7 @@ export async function dispatchCodexNativeHook(
   if (hookEventName === "SessionStart" || hookEventName === "UserPromptSubmit") {
     const additionalContext = hookEventName === "SessionStart"
       ? await buildSessionStartContext(cwd, sessionId)
-      : buildAdditionalContextMessage(readPromptText(payload), skillState);
+      : buildAdditionalContextMessage(readPromptText(payload), skillState, triageAdditionalContext);
     if (additionalContext) {
       outputJson = {
         hookSpecificOutput: {
