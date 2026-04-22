@@ -10,6 +10,7 @@ dist/
 .omx/
 
 # Local agent/worktree artifacts (never commit)
+.codebuddy/*.local.md
 .claude/
 .claire/
 .agents/
