@@ -22,6 +22,8 @@ import { teamCommand } from "./team.js";
 import { ralphCommand } from "./ralph.js";
 import { askCommand } from "./ask.js";
 import { stateCommand } from "./state.js";
+import { adaptCommand } from "./adapt.js";
+import { questionCommand } from "./question.js";
 import {
   cleanupCommand,
   type CleanupDependencies,
@@ -148,7 +150,7 @@ function getReasoningUsage(): string {
 
 type CliCommand =
   | "launch" | "exec" | "setup" | "agents" | "agents-init" | "deepinit"
-  | "uninstall" | "doctor" | "cleanup" | "ask" | "explore" | "sparkshell"
+  | "uninstall" | "doctor" | "cleanup" | "ask" | "adapt" | "question" | "explore" | "sparkshell"
   | "team" | "session" | "resume" | "version" | "tmux-hook" | "hooks"
   | "hud" | "state" | "status" | "cancel" | "help" | "reasoning" | string;
 
@@ -183,7 +185,7 @@ export async function resolveCommandTemplateLaunchPrompt(
 // commandOwnsLocalHelp is imported above and re-exported for backward compat
 
 const NESTED_HELP_COMMANDS = new Set<CliCommand>([
-  "ask", "cleanup", "autoresearch", "agents", "agents-init", "deepinit",
+  "ask", "adapt", "question", "cleanup", "autoresearch", "agents", "agents-init", "deepinit",
   "exec", "hooks", "hud", "state", "ralph", "resume", "session",
   "sparkshell", "team", "tmux-hook",
 ]);
@@ -203,6 +205,8 @@ Usage:
   {cmd} cleanup   Kill orphaned {acronym} MCP server processes and remove stale .omb /tmp directories
   {cmd} doctor --team  Check team/swarm runtime health diagnostics
   {cmd} ask       Ask local provider CLI (claude|gemini) and write artifact output
+  {cmd} adapt     Scaffold OMB-owned adapter foundations for persistent external targets
+  {cmd} question  Blocking question entrypoint for controlled user questions
   {cmd} resume    Resume a previous interactive {product} session
   {cmd} explore   Default read-only exploration entrypoint (may adaptively use sparkshell backend)
   {cmd} session   Search prior local session transcripts and history artifacts
@@ -270,7 +274,7 @@ Options:
 export async function main(args: string[]): Promise<void> {
   const knownCommands = new Set([
     "launch", "exec", "setup", "agents", "agents-init", "deepinit",
-    "uninstall", "doctor", "cleanup", "ask", "autoresearch", "explore",
+    "uninstall", "doctor", "cleanup", "ask", "adapt", "question", "autoresearch", "explore",
     "sparkshell", "team", "ralph", "session", "resume", "version",
     "tmux-hook", "hooks", "hud", "state", "status", "cancel", "help",
     "--help", "-h",
@@ -331,6 +335,12 @@ export async function main(args: string[]): Promise<void> {
       }
       case "ask":
         await askCommand(args.slice(1));
+        break;
+      case "adapt":
+        await adaptCommand(args.slice(1));
+        break;
+      case "question":
+        await questionCommand(args.slice(1));
         break;
       case "cleanup":
         await cleanupCommand(args.slice(1));
