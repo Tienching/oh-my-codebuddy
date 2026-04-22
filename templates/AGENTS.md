@@ -161,7 +161,7 @@ Rules:
 - Child agents should report recommended handoffs upward.
 - Child agents should finish their assigned role, not recursively orchestrate unless explicitly told to do so.
 - Prefer inheriting the leader model by omitting `spawn_agent.model` unless a task truly requires a different model.
-- Do not hardcode stale frontier-model overrides for Codex native child agents. If an explicit frontier override is necessary, use the current frontier default from `OMB_DEFAULT_FRONTIER_MODEL` (legacy alias: `OMX_DEFAULT_FRONTIER_MODEL`) / the repo model contract (currently `gpt-5.4`), not older values such as `gpt-5.2`.
+- Do not hardcode stale frontier-model overrides for CodeBuddy native subagents. If an explicit frontier override is necessary, use the current frontier default from `OMB_DEFAULT_FRONTIER_MODEL` (legacy alias: `OMX_DEFAULT_FRONTIER_MODEL`) / the repo model contract (currently `gpt-5.4`), not older values such as `gpt-5.2`.
 - Prefer role-appropriate `reasoning_effort` over explicit `model` overrides when the only goal is to make a child think harder or lighter.
 </child_agent_protocol>
 
@@ -177,7 +177,7 @@ Match role to task shape:
 - Standard: `executor`, `debugger`, `test-engineer`
 - High complexity: `architect`, `executor`, `critic`
 
-For Codex native child agents, model routing defaults to inheritance/current repo defaults unless the caller has a concrete reason to override it.
+For CodeBuddy native subagents, model routing defaults to inheritance/current repo defaults unless the caller has a concrete reason to override it.
 </model_routing>
 
 ---
@@ -208,7 +208,7 @@ The `deep-interview` skill is the Socratic deep interview workflow and includes 
 Runtime availability gate:
 - Treat `autopilot`, `ralph`, `ultrawork`, `ultraqa`, `team`/`swarm`, and `ecomode` as **OMB runtime workflows**, not generic prompt aliases.
 - Auto-activate those runtime workflows only when the current session is actually running under OMB CLI/runtime (for example, launched via `omb`, with OMB session overlay/runtime state available, or when the user explicitly asks to run `omb ...` in the shell; `omx ...` remains the compatibility alias).
-- In Codex App or plain Codex sessions without OMB runtime, do **not** treat those keywords alone as activation. Explain that they require OMB CLI runtime support, and continue with the nearest App-safe surface (`deep-interview`, `ralplan`, `plan`, `/prompts:*`, or native subagents) unless the user explicitly wants you to launch OMB from the shell.
+- In CodeBuddy App or plain CodeBuddy sessions without OMB runtime, do **not** treat those keywords alone as activation. Explain that they require OMB CLI runtime support, and continue with the nearest App-safe surface (`deep-interview`, `ralplan`, `plan`, `/prompts:*`, or native subagents) unless the user explicitly wants you to launch OMB from the shell.
 
 | Keyword(s) | Skill | Action |
 |-------------|-------|--------|

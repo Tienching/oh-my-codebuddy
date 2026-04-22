@@ -91,6 +91,23 @@ Setup installs and refreshes:
 - config and managed hooks
 - HUD / notification wiring
 
+### 4. Smoke-test the install
+
+Do not stop at setup alone. Verify the runtime surfaces you actually plan to use:
+
+```bash
+omb doctor
+omb --help
+omb team --help
+omb explore --prompt "find where team state is written"
+```
+
+If you plan to use team mode, also verify tmux is available:
+
+```bash
+tmux -V
+```
+
 ---
 
 ## Fast start
@@ -240,6 +257,10 @@ That is why macOS/Linux remains the recommended default.
 - [Agent catalog](./docs/agents.html)
 - [Skills reference](./docs/skills.html)
 - [Integrations](./docs/integrations.html)
+- [Troubleshooting](./docs/troubleshooting.md)
+- [State model](./docs/STATE_MODEL.md)
+- [Explicit terminal stop model](./docs/contracts/explicit-terminal-stop-model.md)
+- [Multi-state transition contract](./docs/contracts/multi-state-transition-contract.md)
 - [CodeBuddy native hook mapping](./docs/codex-native-hooks.md)
 - [OpenClaw / notification gateway guide](./docs/openclaw-integration.md)
 - [Contributing](./CONTRIBUTING.md)

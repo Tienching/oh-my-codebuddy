@@ -15,8 +15,6 @@ This skill activates when:
 - After implementing a major feature
 - User wants quality assessment
 
-## What It Does
-
 ## GPT-5.4 Guidance Alignment
 
 - Default to concise, evidence-dense progress and completion reporting unless the user or risk level requires more detail.
@@ -24,29 +22,48 @@ This skill activates when:
 - If correctness depends on additional inspection, retrieval, execution, or verification, keep using the relevant tools until the review is grounded.
 - Continue through clear, low-risk, reversible next steps automatically; ask only when the next step is materially branching, destructive, or preference-dependent.
 
-Delegates to the `code-reviewer` agent (THOROUGH tier) for deep analysis:
+Delegates to the `code-reviewer` and `architect` agents in parallel for a two-lane review:
 
 1. **Identify Changes**
    - Run `git diff` to find changed files
    - Determine scope of review (specific files or entire PR)
 
-2. **Review Categories**
+2. **Launch Parallel Review Lanes**
+   - **`code-reviewer` lane** - owns spec compliance, security, code quality, performance, and maintainability findings
+   - **`architect` lane** - owns the devil's-advocate / design-tradeoff perspective
+   - Both lanes run in parallel and produce distinct outputs before final synthesis
+
+3. **Review Categories**
    - **Security** - Hardcoded secrets, injection risks, XSS, CSRF
    - **Code Quality** - Function size, complexity, nesting depth
    - **Performance** - Algorithm efficiency, N+1 queries, caching
    - **Best Practices** - Naming, documentation, error handling
    - **Maintainability** - Duplication, coupling, testability
 
-3. **Severity Rating**
+4. **Severity Rating**
    - **CRITICAL** - Security vulnerability (must fix before merge)
    - **HIGH** - Bug or major code smell (should fix before merge)
    - **MEDIUM** - Minor issue (fix when possible)
    - **LOW** - Style/suggestion (consider fixing)
 
-4. **Specific Recommendations**
+5. **Architectural Status Contract**
+   - **CLEAR** - No unresolved architectural blocker was found
+   - **WATCH** - Non-blocking design/tradeoff concern that must appear in the final synthesis
+   - **BLOCK** - Unresolved design concern that prevents a merge-ready verdict
+
+6. **Specific Recommendations**
    - File:line locations for each issue
    - Concrete fix suggestions
    - Code examples where applicable
+
+7. **Final Synthesis**
+   - Combine the `code-reviewer` recommendation and the architect status into one final verdict
+   - Deterministic merge gating rules:
+     - If architect status is **BLOCK**, final recommendation is **REQUEST CHANGES**
+     - Else if `code-reviewer` recommendation is **REQUEST CHANGES**, final recommendation is **REQUEST CHANGES**
+     - Else if architect status is **WATCH**, final recommendation is **COMMENT**
+     - Else final recommendation follows the `code-reviewer` lane
+   - The final report must make architect blockers impossible to miss
 
 ## Agent Delegation
 
@@ -57,6 +74,8 @@ delegate(
   prompt="CODE REVIEW TASK
 
 Review code changes for quality, security, and maintainability.
+
+This is the code/spec/security lane. Do not absorb architectural ownership.
 
 Scope: [git diff or specific files]
 
@@ -74,15 +93,38 @@ Output: Code review report with:
 - Fix recommendations
 - Approval recommendation (APPROVE / REQUEST CHANGES / COMMENT)"
 )
+
+delegate(
+  role="architect",
+  tier="THOROUGH",
+  prompt="ARCHITECTURE / DEVIL'S-ADVOCATE REVIEW TASK
+
+Review the same code changes from the architecture/tradeoff perspective.
+
+Scope: [git diff or specific files]
+
+Focus:
+- System boundaries and interfaces
+- Hidden coupling or long-term maintainability risks
+- Tradeoff tension the main reviewer might miss
+- Strongest counterargument against approving as-is
+
+Output:
+- Architectural Status: CLEAR / WATCH / BLOCK
+- File:line evidence for each concern
+- Concrete tradeoff or design recommendation"
+)
+
+Run both lanes in parallel, then synthesize them with the deterministic rules above.
 ```
 
-## External Model Consultation (Preferred)
+## External Reasoning Cross-Check (Preferred)
 
-The code-reviewer agent SHOULD consult Codex for cross-validation.
+The code-reviewer agent SHOULD consult the external reasoning surface for cross-validation. In OMB, that surface is currently exposed through the `ask_codex` compatibility MCP tool.
 
 ### Protocol
 1. **Form your OWN review FIRST** - Complete the review independently
-2. **Consult for validation** - Cross-check findings with Codex
+2. **Consult for validation** - Cross-check findings with the external reasoning surface
 3. **Critically evaluate** - Never blindly adopt external findings
 4. **Graceful fallback** - Never block if tools unavailable
 
@@ -103,7 +145,7 @@ Before first MCP tool use, call `ToolSearch("mcp")` to discover deferred MCP too
 Use `mcp__x__ask_codex` with `agent_role: "code-reviewer"`.
 If ToolSearch finds no MCP tools, fall back to the `code-reviewer` agent.
 
-**Note:** Codex calls can take up to 1 hour. Consider the review timeline before consulting.
+**Note:** External reasoning calls through the `ask_codex` compatibility MCP surface can take up to 1 hour. Consider the review timeline before consulting.
 
 ## Output Format
 
