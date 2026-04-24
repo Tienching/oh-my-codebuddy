@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { addGeneratedAgentsMarker, isOmxGeneratedAgentsMd, OMB_GENERATED_AGENTS_MARKER } from '../agents-md.js';
+import { addGeneratedAgentsMarker, isOmbGeneratedAgentsMd, OMB_GENERATED_AGENTS_MARKER } from '../agents-md.js';
 
 describe('agents-md helpers', () => {
   it('inserts the generated marker after the autonomy directive block', () => {
@@ -17,7 +17,7 @@ describe('agents-md helpers', () => {
 
     assert.match(
       result,
-      /<!-- END AUTONOMY DIRECTIVE -->\n<!-- omx:generated:agents-md -->\n# oh-my-codebuddy - Intelligent Multi-Agent Orchestration/,
+      /<!-- END AUTONOMY DIRECTIVE -->\n<!-- omb:generated:agents-md -->\n# oh-my-codebuddy - Intelligent Multi-Agent Orchestration/,
     );
   });
 
@@ -35,6 +35,6 @@ describe('agents-md helpers', () => {
       '# oh-my-codebuddy - Intelligent Multi-Agent Orchestration',
     ].join('\n');
 
-    assert.equal(isOmxGeneratedAgentsMd(content), true);
+    assert.equal(isOmbGeneratedAgentsMd(content), true);
   });
 });

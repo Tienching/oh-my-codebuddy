@@ -1,7 +1,7 @@
 import { delimiter, isAbsolute, join, relative, resolve as resolvePath } from 'path';
 import { existsSync } from 'fs';
 import { readdir, readFile } from 'fs/promises';
-import { ombStateDir, omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 
 export const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export const STATE_MODE_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
@@ -141,16 +141,16 @@ function enforceWorkingDirectoryPolicy(resolvedWorkingDirectory: string): void {
 export function getBaseStateDir(workingDirectory?: string): string {
   if (
     (workingDirectory == null || workingDirectory === '')
-    && typeof (process.env.OMB_TEAM_STATE_ROOT || process.env.OMX_TEAM_STATE_ROOT) === 'string'
-    && String(process.env.OMB_TEAM_STATE_ROOT || process.env.OMX_TEAM_STATE_ROOT).trim() !== ''
+    && typeof (process.env.OMB_TEAM_STATE_ROOT) === 'string'
+    && String(process.env.OMB_TEAM_STATE_ROOT).trim() !== ''
   ) {
     try {
-      return resolveWorkingDirectoryForState(String(process.env.OMB_TEAM_STATE_ROOT || process.env.OMX_TEAM_STATE_ROOT).trim());
+      return resolveWorkingDirectoryForState(String(process.env.OMB_TEAM_STATE_ROOT).trim());
     } catch {}
   }
   const root = resolveWorkingDirectoryForState(workingDirectory);
   const canonical = ombStateDir(root);
-  const migrated = omxStateDir(root);
+  const migrated = ombStateDir(root);
   if (existsSync(canonical) || !existsSync(migrated)) {
     return canonical;
   }

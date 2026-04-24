@@ -1,5 +1,5 @@
 /**
- * OMX Code Intelligence MCP Server
+ * OMB Code Intelligence MCP Server
  * Provides LSP-like diagnostics, symbol search, and AST pattern matching.
  * Uses pragmatic CLI wrappers (tsc, ast-grep/sg) rather than full LSP protocol.
  */

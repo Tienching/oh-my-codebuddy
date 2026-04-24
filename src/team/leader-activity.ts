@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix, resolve, sep, win32 } from 'node:path';
-import { ombStateDir, omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 import { findGitLayout, readGitLayoutFile } from '../utils/git-layout.js';
 
 interface LeaderRuntimeActivityDoc {
@@ -51,7 +51,7 @@ function resolveGitOutputPath(cwd: string, gitPath: string | null): string | nul
  * On Windows, read git info from .git/ files directly to avoid spawning
  * console windows (conhost.exe flicker on every poll cycle).
  *
- * See: https://github.com/Yeachan-Heo/oh-my-codex/issues/1100
+ * See: https://github.com/Yeachan-Heo/oh-my-codebuddy/issues/1100
  */
 function tryReadGitValue(cwd: string, args: string[]): string | null {
   if (process.platform === 'win32') {
@@ -143,7 +143,7 @@ async function readLeaderBranchGitActivityMs(stateDir: string): Promise<number> 
 }
 
 export function leaderRuntimeActivityPath(cwd: string): string {
-  return join(omxStateDir(cwd), 'leader-runtime-activity.json');
+  return join(ombStateDir(cwd), 'leader-runtime-activity.json');
 }
 
 export async function recordLeaderRuntimeActivity(
@@ -152,7 +152,7 @@ export async function recordLeaderRuntimeActivity(
   teamName?: string,
   nowIso = new Date().toISOString(),
 ): Promise<void> {
-  const stateDir = omxStateDir(cwd);
+  const stateDir = ombStateDir(cwd);
   await mkdir(stateDir, { recursive: true });
   const path = leaderRuntimeActivityPath(cwd);
   const legacyPath = join(ombStateDir(cwd), 'leader-runtime-activity.json');
@@ -180,9 +180,9 @@ export async function readLeaderRuntimeSignalStatuses(
 ): Promise<LeaderRuntimeSignalStatus[]> {
   const hudPath = join(stateDir, 'hud-state.json');
   const leaderActivityPath = join(stateDir, 'leader-runtime-activity.json');
-  const fallbackLeaderActivityPath = stateDir.includes(`${sep}.omx${sep}state`)
-    ? leaderActivityPath.replace(`${sep}.omx${sep}state`, `${sep}.omb${sep}state`)
-    : leaderActivityPath.replace(`${sep}.omb${sep}state`, `${sep}.omx${sep}state`);
+  const fallbackLeaderActivityPath = stateDir.includes(`${sep}.omb${sep}state`)
+    ? leaderActivityPath.replace(`${sep}.omb${sep}state`, `${sep}.omb${sep}state`)
+    : leaderActivityPath.replace(`${sep}.omb${sep}state`, `${sep}.omb${sep}state`);
 
   const [hudState, leaderActivity, leaderGitActivityMs] = await Promise.all([
     existsSync(hudPath) ? readJsonIfExists(hudPath) : Promise.resolve(null),

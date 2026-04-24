@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
-import { ombStateDir, omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 import { sendWorkerMessage, shutdownTeam } from './runtime.js';
 import {
   TEAM_NAME_SAFE_PATTERN,
@@ -146,7 +146,7 @@ const TEAM_STATE_EVENT_WINDOW = 50;
 const VERSIONED_INTEROP_TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 
 function isVersionedTeamInteropPayloadEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = env.OMB_INTEROP_VERSIONED_PAYLOAD ?? env.OMX_INTEROP_VERSIONED_PAYLOAD;
+  const raw = env.OMB_INTEROP_VERSIONED_PAYLOAD ?? env.OMB_INTEROP_VERSIONED_PAYLOAD;
   if (typeof raw !== 'string') return false;
   return VERSIONED_INTEROP_TRUE_VALUES.has(raw.trim().toLowerCase());
 }
@@ -356,7 +356,6 @@ function buildIdleState(
 function readLatestLeaderRuntimeActivityMs(cwd: string): number {
   const candidates = [
     join(resolveActiveTeamStateRoot(cwd), 'leader-runtime-activity.json'),
-    join(omxStateDir(cwd), 'leader-runtime-activity.json'),
     join(ombStateDir(cwd), 'leader-runtime-activity.json'),
   ];
   let latestMs = Number.NaN;
@@ -1229,6 +1228,12 @@ export async function executeTeamApiOperation(
         }, cwd);
         return { ok: true, operation, data: { task_id: taskId, status } };
       }
+      default:
+        return {
+          ok: false,
+          operation,
+          error: { code: 'unknown_operation', message: `Unknown team API operation: ${operation}` },
+        };
       }
     })();
     return finalizeTeamApiEnvelope(legacyEnvelope);

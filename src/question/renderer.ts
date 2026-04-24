@@ -5,7 +5,7 @@ import { buildSendPaneArgvs } from '../notifications/tmux-detector.js';
 import { sleepSync } from '../utils/sleep.js';
 import { sanitizeReplyInput } from '../notifications/reply-listener.js';
 import { getCurrentTmuxPaneId } from '../notifications/tmux.js';
-import { resolveOmxCliEntryPath } from '../utils/paths.js';
+import { resolveOmbCliEntryPath } from '../utils/paths.js';
 import type { QuestionAnswer, QuestionRendererState } from './types.js';
 
 export type QuestionRendererStrategy = 'inside-tmux' | 'detached-tmux' | 'test-noop' | 'unsupported';
@@ -40,7 +40,7 @@ export function resolveQuestionRendererStrategy(
   // strategy selection now depends only on renderer visibility signals.
   _tmuxBinary?: string | null,
 ): QuestionRendererStrategy {
-  if (safeString(env.OMX_QUESTION_TEST_RENDERER ?? env.OMB_QUESTION_TEST_RENDERER).trim() === 'noop') return 'test-noop';
+  if (safeString(env.OMB_QUESTION_TEST_RENDERER ?? env.OMB_QUESTION_TEST_RENDERER).trim() === 'noop') return 'test-noop';
   if (safeString(env.TMUX).trim() !== '') return 'inside-tmux';
   return 'unsupported';
 }
@@ -53,16 +53,16 @@ function buildQuestionUiTmuxArgs(
     sessionId?: string;
   },
 ): string[] {
-  const omxBin = resolveOmxCliEntryPath({
+  const ombBin = resolveOmbCliEntryPath({
     argv1: process.argv[1],
     cwd: options.cwd,
     env: options.env,
   }) || process.argv[1];
-  if (!omxBin) throw new Error('Unable to resolve OMX CLI entry path for question UI launch.');
+  if (!ombBin) throw new Error('Unable to resolve OMB CLI entry path for question UI launch.');
   return [
-    ...(options.sessionId ? ['-e', `OMX_SESSION_ID=${options.sessionId}`] : []),
+    ...(options.sessionId ? ['-e', `OMB_SESSION_ID=${options.sessionId}`] : []),
     process.execPath,
-    omxBin,
+    ombBin,
     'question',
     '--ui',
     '--state-path',
@@ -118,7 +118,7 @@ function isLaunchedQuestionSessionAlive(
 }
 
 export function formatQuestionAnswerForInjection(answer: QuestionAnswer): string {
-  const prefix = '[omx question answered]';
+  const prefix = '[omb question answered]';
   if (answer.kind === 'other') {
     return sanitizeReplyInput(`${prefix} ${answer.other_text ?? String(answer.value)}`);
   }
@@ -164,7 +164,7 @@ export function launchQuestionRenderer(
 
   if (strategy === 'unsupported') {
     throw new Error(
-      'omx question cannot open a visible renderer because this process is not running inside an attached tmux pane. Run omx question from inside tmux.',
+      'omb question cannot open a visible renderer because this process is not running inside an attached tmux pane. Run omb question from inside tmux.',
     );
   }
 
@@ -188,7 +188,7 @@ export function launchQuestionRenderer(
       ...commandArgs,
     ]);
     const paneId = parsePaneIdFromTmuxOutput(rawPane);
-    if (!paneId) throw new Error('Failed to create tmux split pane for omx question UI.');
+    if (!paneId) throw new Error('Failed to create tmux split pane for omb question UI.');
     sleepImpl(QUESTION_RENDERER_PANE_SETTLE_MS);
     if (!isLaunchedQuestionPaneAlive(paneId, execTmux)) {
       throw new Error(`Question UI pane ${paneId} disappeared immediately after launch.`);
@@ -204,7 +204,7 @@ export function launchQuestionRenderer(
 
   if (strategy === 'detached-tmux') {
     const baseName = basename(options.recordPath, '.json').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 32) || 'question';
-    const sessionName = `omx-question-${baseName}`;
+    const sessionName = `omb-question-${baseName}`;
     const output = execTmux([
       'new-session',
       '-d',
@@ -238,5 +238,5 @@ export function launchQuestionRenderer(
   }
 
   const exhaustiveStrategy: never = strategy;
-  throw new Error(`Unsupported omx question renderer strategy: ${exhaustiveStrategy}`);
+  throw new Error(`Unsupported omb question renderer strategy: ${exhaustiveStrategy}`);
 }

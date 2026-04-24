@@ -58,13 +58,13 @@
     {
       "surface": "CLI",
       "pass": true,
-      "guardrail": "Preserve omb/omx argument forwarding and legacy entrypoints until adapter coverage stays green.",
+      "guardrail": "Preserve omb/omb argument forwarding and legacy entrypoints until adapter coverage stays green.",
       "owner": "cli-runtime"
     },
     {
       "surface": "Paths",
       "pass": true,
-      "guardrail": "Keep .omb canonical and .omx compatibility-only; do not flip authority without contract coverage.",
+      "guardrail": "Keep .omb canonical and .omb compatibility-only; do not flip authority without contract coverage.",
       "owner": "compat-boundary"
     },
     {
@@ -187,7 +187,7 @@
         "owner": "setup-runtime",
         "steps": [
           "Turn off setup adapter routing and fall back to the existing setup implementation.",
-          "Keep legacy .omx/.codex compatibility writers authoritative."
+          "Keep legacy .omb/.codex compatibility writers authoritative."
         ]
       },
       "subtasks": [

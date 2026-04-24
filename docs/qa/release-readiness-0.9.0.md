@@ -25,21 +25,21 @@ Verdict: **GO** ✅
 | Check | Command | Result |
 |---|---|---|
 | Full source build | `npm run build:full` | PASS |
-| CLI help smoke | `node bin/omx.js --help` | PASS |
-| Version smoke | `node bin/omx.js version` | PASS (`oh-my-codebuddy v0.9.0`) |
+| CLI help smoke | `node bin/omb.js --help` | PASS |
+| Version smoke | `node bin/omb.js version` | PASS (`oh-my-codebuddy v0.9.0`) |
 | Version sync | `node scripts/check-version-sync.mjs --tag v0.9.0` | PASS |
-| Ask help smoke | `node bin/omx.js ask --help` | PASS |
-| HUD help smoke | `node bin/omx.js hud --help` | PASS |
-| Doctor smoke | `node bin/omx.js doctor` | PASS (`10 passed, 0 warnings, 0 failed`) |
-| Status smoke | `node bin/omx.js status` | PASS |
-| Setup dry-run smoke | `node bin/omx.js setup --dry-run` | PASS |
-| Explore help smoke | `node bin/omx.js explore --help` | PASS |
-| Explore prompt-file smoke | `node bin/omx.js explore --prompt-file /tmp/omb-explore-smoke.txt` | PASS |
-| Explore→sparkshell routing smoke | `OMB_SPARKSHELL_LINES=1 node bin/omx.js explore --prompt 'git log --oneline -10'` | PASS (summary output emitted) |
-| Sparkshell help smoke | `node bin/omx.js sparkshell --help` | PASS |
-| Sparkshell direct smoke | `node bin/omx.js sparkshell git --version` | PASS (`git version 2.34.1`) |
-| Sparkshell summary smoke | `OMB_SPARKSHELL_LINES=1 node bin/omx.js sparkshell git log --oneline -10` | PASS (summary output emitted) |
-| Sparkshell tmux-pane smoke | `node bin/omx.js sparkshell --tmux-pane %2141 --tail-lines 120` | PASS |
+| Ask help smoke | `node bin/omb.js ask --help` | PASS |
+| HUD help smoke | `node bin/omb.js hud --help` | PASS |
+| Doctor smoke | `node bin/omb.js doctor` | PASS (`10 passed, 0 warnings, 0 failed`) |
+| Status smoke | `node bin/omb.js status` | PASS |
+| Setup dry-run smoke | `node bin/omb.js setup --dry-run` | PASS |
+| Explore help smoke | `node bin/omb.js explore --help` | PASS |
+| Explore prompt-file smoke | `node bin/omb.js explore --prompt-file /tmp/omb-explore-smoke.txt` | PASS |
+| Explore→sparkshell routing smoke | `OMB_SPARKSHELL_LINES=1 node bin/omb.js explore --prompt 'git log --oneline -10'` | PASS (summary output emitted) |
+| Sparkshell help smoke | `node bin/omb.js sparkshell --help` | PASS |
+| Sparkshell direct smoke | `node bin/omb.js sparkshell git --version` | PASS (`git version 2.34.1`) |
+| Sparkshell summary smoke | `OMB_SPARKSHELL_LINES=1 node bin/omb.js sparkshell git log --oneline -10` | PASS (summary output emitted) |
+| Sparkshell tmux-pane smoke | `node bin/omb.js sparkshell --tmux-pane %2141 --tail-lines 120` | PASS |
 | Full test suite | `npm test` | PASS (`2375` pass / `0` fail) |
 | Packed tarball dry run | `npm pack --dry-run` | PASS (`oh-my-codebuddy-0.9.0.tgz`) |
 | Explore verification lane | `npm run test:explore` | PASS (`39` pass / `0` fail) |

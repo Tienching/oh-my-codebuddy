@@ -22,7 +22,7 @@ function makeTmpDir(): string {
 
 function initGitRepo(dir: string): void {
   execSync('git init', { cwd: dir, stdio: 'ignore' });
-  execSync('git config user.email "omx-test@example.com"', { cwd: dir, stdio: 'ignore' });
+  execSync('git config user.email "omb-test@example.com"', { cwd: dir, stdio: 'ignore' });
   execSync('git config user.name "OMB Test"', { cwd: dir, stdio: 'ignore' });
 
   writeFileSync(join(dir, 'tracked.ts'), 'export const tracked = 1;\n', 'utf-8');

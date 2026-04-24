@@ -77,10 +77,10 @@ async function writePanesFile(
   paneIds: string[],
   leaderPaneId: string,
 ): Promise<void> {
-  const omxJobsDir = process.env.OMX_JOBS_DIR;
-  if (!jobId || !omxJobsDir) return;
+  const ombJobsDir = process.env.OMB_JOBS_DIR;
+  if (!jobId || !ombJobsDir) return;
 
-  const panesPath = join(omxJobsDir, `${jobId}-panes.json`);
+  const panesPath = join(ombJobsDir, `${jobId}-panes.json`);
   await writeFile(
     panesPath + '.tmp',
     JSON.stringify({ paneIds: [...paneIds], leaderPaneId }),
@@ -306,10 +306,8 @@ async function main(): Promise<void> {
     const providers = normalizeAgentTypes(agentTypes, workerCount);
     const cliMap = providers.join(',');
     const previousOmbCliMap = process.env.OMB_TEAM_WORKER_CLI_MAP;
-    const previousOmxCliMap = process.env.OMX_TEAM_WORKER_CLI_MAP;
     try {
       process.env.OMB_TEAM_WORKER_CLI_MAP = cliMap;
-      process.env.OMX_TEAM_WORKER_CLI_MAP = cliMap;
       runtime = await startTeam(
         teamName,
         tasks.map(t => t.subject).join('; '),
@@ -322,8 +320,8 @@ async function main(): Promise<void> {
     } finally {
       if (typeof previousOmbCliMap === 'string') process.env.OMB_TEAM_WORKER_CLI_MAP = previousOmbCliMap;
       else delete process.env.OMB_TEAM_WORKER_CLI_MAP;
-      if (typeof previousOmxCliMap === 'string') process.env.OMX_TEAM_WORKER_CLI_MAP = previousOmxCliMap;
-      else delete process.env.OMX_TEAM_WORKER_CLI_MAP;
+      if (typeof previousOmbCliMap === 'string') process.env.OMB_TEAM_WORKER_CLI_MAP = previousOmbCliMap;
+      else delete process.env.OMB_TEAM_WORKER_CLI_MAP;
     }
   } catch (err) {
     process.stderr.write(`[runtime-cli] startTeam failed: ${err}\n`);
@@ -331,7 +329,7 @@ async function main(): Promise<void> {
   }
 
   // Persist pane IDs when a background launcher provides an OMB job ID.
-  const jobId = process.env.OMX_JOB_ID;
+  const jobId = process.env.OMB_JOB_ID;
   try {
     const livePanes = await loadLivePaneState(teamName, cwd);
     if (livePanes) {
@@ -411,7 +409,7 @@ async function main(): Promise<void> {
   }
 }
 
-const shouldAutoStart = process.env.OMX_RUNTIME_CLI_DISABLE_AUTO_START !== '1'
+const shouldAutoStart = process.env.OMB_RUNTIME_CLI_DISABLE_AUTO_START !== '1'
   && process.env.OMB_RUNTIME_CLI_DISABLE_AUTO_START !== '1';
 
 if (shouldAutoStart) {

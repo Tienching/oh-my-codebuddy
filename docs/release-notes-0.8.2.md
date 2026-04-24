@@ -20,7 +20,7 @@ This is a **targeted patch release** focused on team-provider expansion, safer d
 
 ### 1) Team mode: Gemini CLI worker support
 
-OMX team mode now supports **Gemini** as a worker CLI provider in addition to Codex and Claude.
+OMB team mode now supports **Gemini** as a worker CLI provider in addition to Codex and Claude.
 
 Included in this update:
 - Gemini worker launch support in runtime/session resolution
@@ -87,7 +87,7 @@ Two additional correctness fixes landed in this release:
 
 ### Related issues tagged in this release
 - #564 — setup/config breakage caused by deprecated `[tui]` generation on newer CodeBuddy CLI versions
-- #573 — feat(team): add Gemini CLI worker support to OMX team mode
+- #573 — feat(team): add Gemini CLI worker support to OMB team mode
 - #574 — setup should skip non-installable catalog skills and clean stale shipped dirs
 - #578 — unresolved placeholder leakage in OpenClaw hook instruction templates
 

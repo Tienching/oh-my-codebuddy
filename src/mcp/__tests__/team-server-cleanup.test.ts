@@ -76,7 +76,7 @@ exit 0
       const { handleTeamToolCall } = await loadTeamServer();
       const response = await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_cleanup',
+          name: 'omb_run_team_cleanup',
           arguments: { job_id: jobId, grace_ms: 10 },
         },
       });
@@ -149,7 +149,7 @@ exit 0
       const { handleTeamToolCall } = await loadTeamServer();
       await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_cleanup',
+          name: 'omb_run_team_cleanup',
           arguments: { job_id: jobId, grace_ms: 10 },
         },
       });
@@ -190,7 +190,7 @@ exit 0
       const { handleTeamToolCall } = await loadTeamServer();
       const response = await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_cleanup',
+          name: 'omb_run_team_cleanup',
           arguments: { job_id: jobId, grace_ms: 10 },
         },
       });
@@ -235,7 +235,7 @@ exit 0
       const { handleTeamToolCall } = await loadTeamServer();
       const response = await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_cleanup',
+          name: 'omb_run_team_cleanup',
           arguments: { job_id: jobId, grace_ms: 10 },
         },
       });

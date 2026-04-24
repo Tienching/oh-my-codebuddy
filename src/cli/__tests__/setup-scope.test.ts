@@ -14,16 +14,16 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
 ): { status: number | null; stdout: string; stderr: string; error: string } {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = join(testDir, "..", "..", "..");
-  const omxBin = join(repoRoot, "dist", "cli", "omx.js");
+  const ombBin = join(repoRoot, "dist", "cli", "omb.js");
   const resolvedHome = envOverrides.HOME ?? process.env.HOME;
-  const result = spawnSync(process.execPath, [omxBin, ...argv], {
+  const result = spawnSync(process.execPath, [ombBin, ...argv], {
     cwd,
     encoding: "utf-8",
     env: {
@@ -46,13 +46,13 @@ function shouldSkipForSpawnPermissions(err: string): boolean {
   return typeof err === "string" && /(EPERM|EACCES)/i.test(err);
 }
 
-describe("omx setup scope behavior", () => {
+describe("omb setup scope behavior", () => {
   it("accepts --scope project form", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       await mkdir(home, { recursive: true });
-      const bySeparateArg = runOmx(
+      const bySeparateArg = runOmb(
         wd,
         ["setup", "--dry-run", "--scope", "project"],
         { HOME: home },
@@ -65,7 +65,7 @@ describe("omx setup scope behavior", () => {
       );
       assert.match(bySeparateArg.stdout, /Using setup scope: project/);
 
-      const byEqualsArg = runOmx(wd, ["setup", "--dry-run", "--scope=user"], {
+      const byEqualsArg = runOmb(wd, ["setup", "--dry-run", "--scope=user"], {
         HOME: home,
       });
       if (shouldSkipForSpawnPermissions(byEqualsArg.error)) return;
@@ -81,7 +81,7 @@ describe("omx setup scope behavior", () => {
   });
 
   it("uses persisted setup scope when --scope is omitted", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const ombDir = join(wd, ".omb");
       const home = join(wd, "home");
@@ -92,7 +92,7 @@ describe("omx setup scope behavior", () => {
         JSON.stringify({ scope: "project" }),
       );
 
-      const res = runOmx(wd, ["setup", "--dry-run"], { HOME: home });
+      const res = runOmb(wd, ["setup", "--dry-run"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(
@@ -105,7 +105,7 @@ describe("omx setup scope behavior", () => {
   });
 
   it("doctor respects persisted project setup scope paths", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-doctor-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-doctor-scope-"));
     try {
       const home = join(wd, "home");
       await mkdir(home, { recursive: true });
@@ -130,10 +130,10 @@ describe("omx setup scope behavior", () => {
       );
       await writeFile(
         join(wd, ".codebuddy", "config.toml"),
-        'omx_enabled = true\n[mcp_servers.omx_state]\ncommand = "node"\n',
+        'omb_enabled = true\n[mcp_servers.omb_state]\ncommand = "node"\n',
       );
 
-      const res = runOmx(wd, ["doctor"], { HOME: home });
+      const res = runOmb(wd, ["doctor"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(
@@ -153,11 +153,11 @@ describe("omx setup scope behavior", () => {
   });
 
   it("does not persist setup scope on --dry-run", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       await mkdir(home, { recursive: true });
-      const res = runOmx(wd, ["setup", "--scope", "project", "--dry-run"], {
+      const res = runOmb(wd, ["setup", "--scope", "project", "--dry-run"], {
         HOME: home,
       });
       if (shouldSkipForSpawnPermissions(res.error)) return;
@@ -169,11 +169,11 @@ describe("omx setup scope behavior", () => {
   });
 
   it("project scope writes prompts/skills/config/native-agents under cwd", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       await mkdir(home, { recursive: true });
-      const res = runOmx(wd, ["setup", "--scope", "project"], { HOME: home });
+      const res = runOmb(wd, ["setup", "--scope", "project"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
 
@@ -232,8 +232,8 @@ describe("omx setup scope behavior", () => {
     }
   });
 
-  it("setup preserves user hooks while replacing stale OMX wrappers", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+  it("setup preserves user hooks while replacing stale OMB wrappers", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       const codexDir = join(wd, ".codebuddy");
@@ -272,7 +272,7 @@ describe("omx setup scope behavior", () => {
         ) + "\n",
       );
 
-      const res = runOmx(wd, ["setup", "--scope", "project"], { HOME: home });
+      const res = runOmb(wd, ["setup", "--scope", "project"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
 
@@ -309,13 +309,13 @@ describe("omx setup scope behavior", () => {
   });
 
   it("defaults to user scope in non-interactive runs when no scope is persisted", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       const existingAgents = "# keep my project agents instructions\n";
       await mkdir(home, { recursive: true });
       await writeFile(join(wd, "AGENTS.md"), existingAgents);
-      const res = runOmx(wd, ["setup"], { HOME: home });
+      const res = runOmb(wd, ["setup"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(res.stdout, /Using setup scope: user/);
@@ -352,7 +352,7 @@ describe("omx setup scope behavior", () => {
   });
 
   it("doctor does not warn about missing project AGENTS.md for user scope", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-doctor-user-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-doctor-user-scope-"));
     try {
       const home = join(wd, "home");
       await mkdir(join(home, ".codebuddy", "prompts"), { recursive: true });
@@ -376,10 +376,10 @@ describe("omx setup scope behavior", () => {
       );
       await writeFile(
         join(home, ".codebuddy", "config.toml"),
-        'omx_enabled = true\n[mcp_servers.omx_state]\ncommand = "node"\n',
+        'omb_enabled = true\n[mcp_servers.omb_state]\ncommand = "node"\n',
       );
 
-      const res = runOmx(wd, ["doctor"], {
+      const res = runOmb(wd, ["doctor"], {
         HOME: home,
         CODEBUDDY_HOME: join(home, ".codebuddy"),
       });
@@ -399,19 +399,19 @@ describe("omx setup scope behavior", () => {
   });
 
   it('migrates legacy "project-local" persisted scope to "project"', async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
-      const omxDir = join(wd, ".omx");
+      const ombDir = join(wd, ".omb");
       const home = join(wd, "home");
-      await mkdir(omxDir, { recursive: true });
+      await mkdir(ombDir, { recursive: true });
       await mkdir(home, { recursive: true });
       // Write the legacy scope value
       await writeFile(
-        join(omxDir, "setup-scope.json"),
+        join(ombDir, "setup-scope.json"),
         JSON.stringify({ scope: "project-local" }),
       );
 
-      const res = runOmx(wd, ["setup", "--dry-run"], { HOME: home });
+      const res = runOmb(wd, ["setup", "--dry-run"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       // Should migrate and use "project"
@@ -427,14 +427,14 @@ describe("omx setup scope behavior", () => {
   });
 
   it("skips overwriting existing AGENTS.md in non-interactive runs without --force", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       const existingAgents = "# custom agents instructions\n\nkeep this file\n";
       await mkdir(home, { recursive: true });
       await writeFile(join(wd, "AGENTS.md"), existingAgents);
 
-      const res = runOmx(wd, ["setup", "--scope=project"], { HOME: home });
+      const res = runOmb(wd, ["setup", "--scope=project"], { HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       const refreshed = await readFile(join(wd, "AGENTS.md"), "utf-8");
@@ -446,13 +446,13 @@ describe("omx setup scope behavior", () => {
   });
 
   it("still refreshes existing AGENTS.md with --force", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
       const home = join(wd, "home");
       await mkdir(home, { recursive: true });
       await writeFile(join(wd, "AGENTS.md"), "# old custom file\n");
 
-      const res = runOmx(wd, ["setup", "--scope=project", "--force"], {
+      const res = runOmb(wd, ["setup", "--scope=project", "--force"], {
         HOME: home,
       });
       if (shouldSkipForSpawnPermissions(res.error)) return;

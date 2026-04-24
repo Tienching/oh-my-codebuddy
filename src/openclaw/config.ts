@@ -6,7 +6,7 @@
  * and notifications.custom_webhook_command, normalized to OpenClaw runtime config.
  *
  * Config is cached after first read (env vars don't change during process lifetime).
- * Config file path can be overridden via OMB_OPENCLAW_CONFIG / OMX_OPENCLAW_CONFIG env var (points to a separate file).
+ * Config file path can be overridden via OMB_OPENCLAW_CONFIG / OMB_OPENCLAW_CONFIG env var (points to a separate file).
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -35,7 +35,7 @@ const DEFAULT_ALIAS_EVENTS: OpenClawHookEvent[] = ["session-end", "ask-user-ques
 
 function resolveNotificationConfigPath(): string {
   const home = codebuddyHome();
-  const canonical = join(home, ".omx-config.json");
+  const canonical = join(home, ".omb-config.json");
   if (existsSync(canonical)) return canonical;
   return join(home, ".omb-config.json");
 }
@@ -259,9 +259,9 @@ function inspectCustomAliases(notifications: Record<string, unknown>): {
 export function inspectOpenClawConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): OpenClawConfigInspection {
-  const activationGateEnabled = (env.OMX_OPENCLAW ?? env.OMB_OPENCLAW) === "1";
-  const commandGateEnabled = (env.OMX_OPENCLAW_COMMAND ?? env.OMB_OPENCLAW_COMMAND) === "1";
-  const envOverride = (env.OMX_OPENCLAW_CONFIG ?? env.OMB_OPENCLAW_CONFIG)?.trim();
+  const activationGateEnabled = (env.OMB_OPENCLAW ?? env.OMB_OPENCLAW) === "1";
+  const commandGateEnabled = (env.OMB_OPENCLAW_COMMAND ?? env.OMB_OPENCLAW_COMMAND) === "1";
+  const envOverride = (env.OMB_OPENCLAW_CONFIG ?? env.OMB_OPENCLAW_CONFIG)?.trim();
   const configPath = envOverride || resolveNotificationConfigPath();
   const configExists = existsSync(configPath);
 
@@ -448,19 +448,19 @@ export function inspectOpenClawConfig(
  * Read and cache the OpenClaw configuration.
  *
  * Returns null when:
- * - OMB_OPENCLAW / OMX_OPENCLAW env var is not "1"
+ * - OMB_OPENCLAW / OMB_OPENCLAW env var is not "1"
  * - Config file does not exist
  * - Config file is invalid JSON
  * - Config has enabled: false
  *
  * Config is read from:
- * 1. OMB_OPENCLAW_CONFIG / OMX_OPENCLAW_CONFIG env var path (separate file), if set
+ * 1. OMB_OPENCLAW_CONFIG / OMB_OPENCLAW_CONFIG env var path (separate file), if set
  * 2. notifications.openclaw key in ~/.codex/.omb-config.json
  * 3. notifications.custom_cli_command / notifications.custom_webhook_command aliases
  */
 export function getOpenClawConfig(): OpenClawConfig | null {
   // Activation gate: only active when OMB_OPENCLAW=1
-  if ((process.env.OMX_OPENCLAW ?? process.env.OMB_OPENCLAW) !== "1") {
+  if ((process.env.OMB_OPENCLAW) !== "1") {
     return null;
   }
 
@@ -470,7 +470,7 @@ export function getOpenClawConfig(): OpenClawConfig | null {
   }
 
   try {
-    const envOverride = process.env.OMX_OPENCLAW_CONFIG ?? process.env.OMB_OPENCLAW_CONFIG;
+    const envOverride = process.env.OMB_OPENCLAW_CONFIG;
 
     if (envOverride) {
       // OMB_OPENCLAW_CONFIG points to a separate config file
@@ -488,13 +488,13 @@ export function getOpenClawConfig(): OpenClawConfig | null {
     }
 
     // Primary: read from notifications block in .omb-config.json
-    const omxConfigPath = resolveNotificationConfigPath();
-    if (!existsSync(omxConfigPath)) {
+    const ombConfigPath = resolveNotificationConfigPath();
+    if (!existsSync(ombConfigPath)) {
       _cachedConfig = undefined;
       return null;
     }
 
-    const fullConfig = JSON.parse(readFileSync(omxConfigPath, "utf-8")) as Record<string, unknown>;
+    const fullConfig = JSON.parse(readFileSync(ombConfigPath, "utf-8")) as Record<string, unknown>;
     const notifications = asRecord(fullConfig.notifications);
     if (!notifications) {
       _cachedConfig = undefined;

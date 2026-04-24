@@ -30,7 +30,7 @@ This release:
 
 ## Upgrade note
 
-If you use project-scoped OMX installs, rerun:
+If you use project-scoped OMB installs, rerun:
 
 ```bash
 omb setup --force --scope project

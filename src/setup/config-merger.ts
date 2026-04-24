@@ -105,7 +105,7 @@ export function mergeConfig(input: ConfigMergeInput): ConfigMergeResult {
  * Determine if OMB should manage the TUI section based on the installed
  * CodeBuddy/Codex CLI version.
  */
-export function shouldOmxManageTui(
+export function shouldOmbManageTui(
   codexVersionOutput: string | null,
 ): boolean {
   if (!codexVersionOutput) return true;

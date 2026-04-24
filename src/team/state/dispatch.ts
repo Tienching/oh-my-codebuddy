@@ -329,7 +329,7 @@ export async function transitionDispatchRequest(
 
     const existing = requests[index]!;
     if (existing.status !== from && existing.status !== to) return null;
-    if (!canTransitionDispatchStatus(existing.status, to)) return null;
+    if (existing.status !== to && !canTransitionDispatchStatus(existing.status, to)) return null;
 
     const nowIso = new Date().toISOString();
     const nextAttemptCount = Math.max(

@@ -1,6 +1,6 @@
 /**
  * OMB Team Runner MCP Server
- * Provides omx_run_team_* tools for spawning and managing tmux CLI worker teams.
+ * Provides omb_run_team_* tools for spawning and managing tmux CLI worker teams.
  * Storage: ~/.omb/team-jobs/
  */
 
@@ -71,13 +71,13 @@ interface OmbTeamJob {
 
 const ombTeamJobs = new Map<string, OmbTeamJob>();
 
-function getOmxJobsDir(): string {
+function getOmbJobsDir(): string {
   return join(homedir(), '.omb', 'team-jobs');
 }
 
 function persistJob(jobId: string, job: OmbTeamJob): void {
   try {
-    const jobsDir = getOmxJobsDir();
+    const jobsDir = getOmbJobsDir();
     if (!existsSync(jobsDir)) mkdirSync(jobsDir, { recursive: true });
     writeFileSync(join(jobsDir, `${jobId}.json`), JSON.stringify(job), 'utf-8');
   } catch (err) {
@@ -87,7 +87,7 @@ function persistJob(jobId: string, job: OmbTeamJob): void {
 
 function loadJobFromDisk(jobId: string): OmbTeamJob | undefined {
   try {
-    return JSON.parse(readFileSync(join(getOmxJobsDir(), `${jobId}.json`), 'utf-8')) as OmbTeamJob;
+    return JSON.parse(readFileSync(join(getOmbJobsDir(), `${jobId}.json`), 'utf-8')) as OmbTeamJob;
   } catch (err) {
     process.stderr.write(`[team-server] load job failed: ${err}\n`);
     return undefined;
@@ -114,7 +114,7 @@ function parseJsonFromStdout(rawStdout: string): { parsed?: Record<string, unkno
 
 async function loadPaneIds(jobId: string): Promise<{ paneIds: string[]; leaderPaneId: string } | null> {
   try {
-    const parsed = JSON.parse(await readFile(join(getOmxJobsDir(), `${jobId}-panes.json`), 'utf-8')) as {
+    const parsed = JSON.parse(await readFile(join(getOmbJobsDir(), `${jobId}-panes.json`), 'utf-8')) as {
       paneIds?: unknown;
       leaderPaneId?: unknown;
     };
@@ -242,8 +242,8 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
-      name: 'omx_run_team_start',
-      description: 'Spawn tmux CLI workers (codex/claude/gemini) in the background. Returns jobId immediately. Poll with omx_run_team_status.',
+      name: 'omb_run_team_start',
+      description: 'Spawn tmux CLI workers (codex/claude/gemini) in the background. Returns jobId immediately. Poll with omb_run_team_status.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -267,23 +267,23 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'omx_run_team_status',
-      description: 'Non-blocking status check for a background omx_run_team job. Returns status and result when done.',
+      name: 'omb_run_team_status',
+      description: 'Non-blocking status check for a background omb_run_team job. Returns status and result when done.',
       inputSchema: {
         type: 'object',
         properties: {
-          job_id: { type: 'string', description: 'Job ID returned by omx_run_team_start' },
+          job_id: { type: 'string', description: 'Job ID returned by omb_run_team_start' },
         },
         required: ['job_id'],
       },
     },
     {
-      name: 'omx_run_team_wait',
-      description: 'Block (poll internally) until a background omx_run_team job reaches a terminal state (completed or failed) or, in wake_on=event mode, until the next team event arrives. Uses exponential backoff (500ms to 2000ms). Auto-nudges idle teammate panes via tmux send-keys. If this wait call times out, workers are left running -- call omx_run_team_wait again to keep waiting, or omx_run_team_cleanup to stop them explicitly.',
+      name: 'omb_run_team_wait',
+      description: 'Block (poll internally) until a background omb_run_team job reaches a terminal state (completed or failed) or, in wake_on=event mode, until the next team event arrives. Uses exponential backoff (500ms to 2000ms). Auto-nudges idle teammate panes via tmux send-keys. If this wait call times out, workers are left running -- call omb_run_team_wait again to keep waiting, or omb_run_team_cleanup to stop them explicitly.',
       inputSchema: {
         type: 'object',
         properties: {
-          job_id: { type: 'string', description: 'Job ID returned by omx_run_team_start' },
+          job_id: { type: 'string', description: 'Job ID returned by omb_run_team_start' },
           timeout_ms: { type: 'number', description: 'Maximum wait time in ms (default: 300000, max: 3600000)' },
           nudge_delay_ms: { type: 'number', description: 'Milliseconds a pane must be idle before nudging (default: 30000)' },
           nudge_max_count: { type: 'number', description: 'Maximum nudges per pane (default: 3)' },
@@ -295,12 +295,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
-      name: 'omx_run_team_cleanup',
+      name: 'omb_run_team_cleanup',
       description: 'Explicitly clean up worker panes when you want to stop workers. Kills all worker panes recorded for the job without touching the leader pane or the user session.',
       inputSchema: {
         type: 'object',
         properties: {
-          job_id: { type: 'string', description: 'Job ID returned by omx_run_team_start' },
+          job_id: { type: 'string', description: 'Job ID returned by omb_run_team_start' },
           grace_ms: { type: 'number', description: 'Grace period in ms before force-killing panes (default: 10000)' },
         },
         required: ['job_id'],
@@ -320,7 +320,7 @@ export async function handleTeamToolCall(request: {
 
   try {
     switch (name) {
-      case 'omx_run_team_start': {
+      case 'omb_run_team_start': {
         const { teamName, agentTypes, tasks, cwd: inputCwd } = startSchema.parse(a);
 
         const jobId = `omb-${Date.now().toString(36)}`;
@@ -330,7 +330,7 @@ export async function handleTeamToolCall(request: {
         ombTeamJobs.set(jobId, job);
 
         const child = spawn('node', [runtimeCliPath], {
-          env: { ...process.env, OMB_JOB_ID: jobId, OMB_JOBS_DIR: getOmxJobsDir() },
+          env: { ...process.env, OMB_JOB_ID: jobId, OMB_JOBS_DIR: getOmbJobsDir() },
           stdio: ['pipe', 'pipe', 'pipe'],
         });
         job.pid = child.pid;
@@ -375,11 +375,11 @@ export async function handleTeamToolCall(request: {
         });
 
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ jobId, pid: job.pid, message: 'Team started. Poll with omx_run_team_status.' }) }],
+          content: [{ type: 'text' as const, text: JSON.stringify({ jobId, pid: job.pid, message: 'Team started. Poll with omb_run_team_status.' }) }],
         };
       }
 
-      case 'omx_run_team_status': {
+      case 'omb_run_team_status': {
         const { job_id: jobId } = statusSchema.parse(a);
         const job = ombTeamJobs.get(jobId) ?? loadJobFromDisk(jobId);
         if (!job) {
@@ -392,7 +392,7 @@ export async function handleTeamToolCall(request: {
         return { content: [{ type: 'text' as const, text: JSON.stringify(out) }] };
       }
 
-      case 'omx_run_team_wait': {
+      case 'omb_run_team_wait': {
         const {
           job_id: jobId,
           timeout_ms: timeoutMs,
@@ -491,7 +491,7 @@ export async function handleTeamToolCall(request: {
         // Timeout: leave workers running
         const elapsed = ((Date.now() - (ombTeamJobs.get(jobId)?.startedAt ?? Date.now())) / 1000).toFixed(1);
         const timeoutOut: Record<string, unknown> = {
-          error: `Timed out waiting for job ${jobId} after ${(timeoutMs / 1000).toFixed(0)}s -- workers are still running; call omx_run_team_wait again to keep waiting or omx_run_team_cleanup to stop them`,
+          error: `Timed out waiting for job ${jobId} after ${(timeoutMs / 1000).toFixed(0)}s -- workers are still running; call omb_run_team_wait again to keep waiting or omb_run_team_cleanup to stop them`,
           jobId,
           status: 'running',
           wake_on: wakeOn,
@@ -501,7 +501,7 @@ export async function handleTeamToolCall(request: {
         return { content: [{ type: 'text' as const, text: JSON.stringify(timeoutOut) }] };
       }
 
-      case 'omx_run_team_cleanup': {
+      case 'omb_run_team_cleanup': {
         const { job_id: jobId, grace_ms: graceMs } = cleanupSchema.parse(a);
         const job = ombTeamJobs.get(jobId) ?? loadJobFromDisk(jobId);
         if (!job) return { content: [{ type: 'text' as const, text: `Job ${jobId} not found` }] };

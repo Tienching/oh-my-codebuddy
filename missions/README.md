@@ -9,7 +9,7 @@ Each mission directory contains:
 Current pilots / examples:
 - `cli-discoverability-pilot/`
 - `security-path-traversal-pilot/`
-- `in-action-cat-shellout-demo/` — a small self-hosted OMX optimization demo that removes the autoresearch loop's manifest `cat` shell-out and proves the fix with a focused evaluator
+- `in-action-cat-shellout-demo/` — a small self-hosted OMB optimization demo that removes the autoresearch loop's manifest `cat` shell-out and proves the fix with a focused evaluator
 
 You can run the evaluators directly today:
 

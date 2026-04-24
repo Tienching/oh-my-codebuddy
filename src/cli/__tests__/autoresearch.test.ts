@@ -20,7 +20,7 @@ function withMockedTty<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
@@ -78,7 +78,7 @@ describe('omb autoresearch', () => {
   it('documents autoresearch in top-level help', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-autoresearch-help-'));
     try {
-      const result = runOmx(cwd, ['--help']);
+      const result = runOmb(cwd, ['--help']);
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(result.stdout, /omb autoresearch\s+Launch thin-supervisor autoresearch with keep\/discard\/reset parity/i);
     } finally {
@@ -89,7 +89,7 @@ describe('omb autoresearch', () => {
   it('routes autoresearch --help to command-local help', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-autoresearch-local-help-'));
     try {
-      const result = runOmx(cwd, ['autoresearch', '--help']);
+      const result = runOmb(cwd, ['autoresearch', '--help']);
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(result.stdout, /Usage:[\s\S]*omb autoresearch run <mission-dir>/i);
       assert.match(result.stdout, /omb autoresearch init/i);
@@ -105,7 +105,7 @@ describe('omb autoresearch', () => {
   it('documents --resume in command-local help', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-autoresearch-resume-help-'));
     try {
-      const result = runOmx(cwd, ['autoresearch', '--help']);
+      const result = runOmb(cwd, ['autoresearch', '--help']);
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(result.stdout, /--resume <run-id>/i);
       assert.match(result.stdout, /run-tagged/i);
@@ -117,7 +117,7 @@ describe('omb autoresearch', () => {
   it('fails fast when mission dir is missing', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-autoresearch-missing-arg-'));
     try {
-      const result = runOmx(cwd, ['autoresearch']);
+      const result = runOmb(cwd, ['autoresearch']);
       assert.notEqual(result.status, 0, result.stderr || result.stdout);
       assert.match(`${result.stderr}\n${result.stdout}`, /mission-dir|Usage:\s*omb autoresearch/i);
     } finally {
@@ -225,7 +225,7 @@ evaluator:
 EOF
 cat >"$OMB_TEST_REPO_ROOT/.omb/specs/autoresearch-test-launch/result.json" <<'EOF'
 {
-  "kind": "omx.autoresearch.deep-interview/v1",
+  "kind": "omb.autoresearch.deep-interview/v1",
   "compileTarget": {
     "topic": "Investigate flaky onboarding behavior",
     "evaluatorCommand": "node scripts/eval.js",
@@ -250,7 +250,7 @@ touch -t 202603180000 "$OMB_TEST_REPO_ROOT/.omb/specs/autoresearch-test-launch/r
       execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
       await installFakePs(fakeBin);
 
-      const result = runOmx(repo, ['autoresearch', '--topic', 'Investigate flaky onboarding behavior', '--evaluator', 'node scripts/eval.js', '--slug', 'test-launch'], {
+      const result = runOmb(repo, ['autoresearch', '--topic', 'Investigate flaky onboarding behavior', '--evaluator', 'node scripts/eval.js', '--slug', 'test-launch'], {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
         OMB_TEST_REPO_ROOT: repo,
       });
@@ -339,7 +339,7 @@ evaluator:
 EOF
 cat >"$OMB_TEST_REPO_ROOT/.omb/specs/autoresearch-test-launch/result.json" <<'EOF'
 {
-  "kind": "omx.autoresearch.deep-interview/v1",
+  "kind": "omb.autoresearch.deep-interview/v1",
   "compileTarget": {
     "topic": "Investigate flaky onboarding behavior",
     "evaluatorCommand": "node scripts/eval.js",
@@ -405,7 +405,7 @@ esac
       );
       execFileSync('chmod', ['+x', fakeTmuxPath], { stdio: 'ignore' });
 
-      const result = runOmx(repo, ['autoresearch', '--topic', 'Investigate flaky onboarding behavior', '--evaluator', 'node scripts/eval.js', '--slug', 'test-launch'], {
+      const result = runOmb(repo, ['autoresearch', '--topic', 'Investigate flaky onboarding behavior', '--evaluator', 'node scripts/eval.js', '--slug', 'test-launch'], {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
         OMB_TEST_REPO_ROOT: repo,
         TMUX: '/tmp/fake-tmux,12345,0',
@@ -517,7 +517,7 @@ esac
       );
       execFileSync('chmod', ['+x', fakeTmuxPath], { stdio: 'ignore' });
 
-      const result = runOmx(repo, ['autoresearch', 'run', missionDir, '--model', 'gpt-5'], {
+      const result = runOmb(repo, ['autoresearch', 'run', missionDir, '--model', 'gpt-5'], {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
         OMB_TEST_REPO_ROOT: repo,
         TMUX: '/tmp/fake-tmux,12345,0',
@@ -612,7 +612,7 @@ esac
       );
       execFileSync('chmod', ['+x', fakeTmuxPath], { stdio: 'ignore' });
 
-      const result = runOmx(repo, ['autoresearch', 'run', missionDir], {
+      const result = runOmb(repo, ['autoresearch', 'run', missionDir], {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
         OMB_TEST_REPO_ROOT: repo,
         TMUX: '/tmp/fake-tmux,12345,0',
@@ -637,7 +637,7 @@ esac
       await writeFile(join(cwd, 'mission.md'), '# Mission\n', 'utf-8');
       await writeFile(join(cwd, 'sandbox.md'), '---\nevaluator:\n  command: node eval.js\n---\n', 'utf-8');
 
-      const result = runOmx(cwd, ['autoresearch', cwd]);
+      const result = runOmb(cwd, ['autoresearch', cwd]);
       assert.notEqual(result.status, 0, result.stderr || result.stdout);
       assert.match(`${result.stderr}\n${result.stdout}`, /git repo|git repository|inside a git repo/i);
     } finally {
@@ -652,7 +652,7 @@ esac
       await mkdir(missionDir, { recursive: true });
       await writeFile(join(missionDir, 'sandbox.md'), '---\nevaluator:\n  command: node eval.js\n---\n', 'utf-8');
 
-      const result = runOmx(repo, ['autoresearch', missionDir]);
+      const result = runOmb(repo, ['autoresearch', missionDir]);
       assert.notEqual(result.status, 0, result.stderr || result.stdout);
       assert.match(`${result.stderr}\n${result.stdout}`, /mission\.md/i);
     } finally {
@@ -667,7 +667,7 @@ esac
       await mkdir(missionDir, { recursive: true });
       await writeFile(join(missionDir, 'mission.md'), '# Mission\n', 'utf-8');
 
-      const result = runOmx(repo, ['autoresearch', missionDir]);
+      const result = runOmb(repo, ['autoresearch', missionDir]);
       assert.notEqual(result.status, 0, result.stderr || result.stdout);
       assert.match(`${result.stderr}\n${result.stdout}`, /sandbox\.md/i);
     } finally {
@@ -683,7 +683,7 @@ esac
       await writeFile(join(missionDir, 'mission.md'), '# Mission\n', 'utf-8');
       await writeFile(join(missionDir, 'sandbox.md'), 'No frontmatter here.\n', 'utf-8');
 
-      const result = runOmx(repo, ['autoresearch', missionDir]);
+      const result = runOmb(repo, ['autoresearch', missionDir]);
       assert.notEqual(result.status, 0, result.stderr || result.stdout);
       assert.match(`${result.stderr}\n${result.stdout}`, /frontmatter|evaluator/i);
     } finally {
@@ -717,7 +717,7 @@ esac
         'utf-8',
       );
 
-      const result = runOmx(repo, ['autoresearch', missionDir]);
+      const result = runOmb(repo, ['autoresearch', missionDir]);
       assert.notEqual(result.status, 0, result.stderr || result.stdout);
       assert.match(`${result.stderr}\n${result.stdout}`, /Cannot start autoresearch: ralph is already active/i);
 
@@ -770,7 +770,7 @@ printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit"
       execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
       await installFakePs(fakeBin);
 
-      const result = runOmx(
+      const result = runOmb(
         repo,
         ['autoresearch', missionDir, '--dangerously-skip-permissions'],
         { PATH: `${fakeBin}:${process.env.PATH || ''}`, OMB_TEST_REPO_ROOT: repo },
@@ -823,7 +823,7 @@ EOF
       execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
       await installFakePs(fakeBin);
 
-      const result = runOmx(
+      const result = runOmb(
         repo,
         ['autoresearch', missionDir, '--dangerously-skip-permissions'],
         { PATH: `${fakeBin}:${process.env.PATH || ''}`, OMB_TEST_REPO_ROOT: repo },
@@ -856,7 +856,7 @@ EOF
       };
       assert.deepEqual(ledger.entries.map((entry) => entry.decision), ['baseline', 'noop', 'noop', 'noop']);
 
-      const resumeResult = runOmx(repo, ['autoresearch', '--resume', runId]);
+      const resumeResult = runOmb(repo, ['autoresearch', '--resume', runId]);
       assert.notEqual(resumeResult.status, 0, resumeResult.stderr || resumeResult.stdout);
       assert.match(`${resumeResult.stderr}\n${resumeResult.stdout}`, /autoresearch_resume_terminal_run/i);
     } finally {

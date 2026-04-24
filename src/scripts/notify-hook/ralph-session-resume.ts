@@ -25,7 +25,7 @@ interface RalphSessionResumeParams {
 }
 
 export interface RalphSessionResumeResult {
-  currentOmxSessionId: string;
+  currentOmbSessionId: string;
   resumed: boolean;
   updatedCurrentOwner: boolean;
   reason: string;
@@ -127,7 +127,7 @@ function isActiveRalphCandidate(state: Record<string, unknown> | null): state is
   return state.active === true && !isTerminalRalphPhase(state.current_phase);
 }
 
-async function readCurrentOmxSessionId(stateDir: string): Promise<string> {
+async function readCurrentOmbSessionId(stateDir: string): Promise<string> {
   const session = await readJson(join(stateDir, 'session.json'));
   const sessionId = safeString(session?.session_id).trim();
   return SESSION_ID_PATTERN.test(sessionId) ? sessionId : '';
@@ -152,7 +152,7 @@ function bindCurrentPane(state: Record<string, unknown>, nowIso: string, env: No
 
 async function scanMatchingRalphCandidates(
   stateDir: string,
-  currentOmxSessionId: string,
+  currentOmbSessionId: string,
   payloadSessionId: string,
   payloadThreadId: string,
 ): Promise<RalphStateCandidate[]> {
@@ -162,7 +162,7 @@ async function scanMatchingRalphCandidates(
   const entries = await readdir(sessionsRoot, { withFileTypes: true }).catch(() => []);
   const matches: RalphStateCandidate[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory() || !SESSION_ID_PATTERN.test(entry.name) || entry.name === currentOmxSessionId) continue;
+    if (!entry.isDirectory() || !SESSION_ID_PATTERN.test(entry.name) || entry.name === currentOmbSessionId) continue;
     const path = join(sessionsRoot, entry.name, 'ralph-state.json');
     if (!existsSync(path)) continue;
     const state = await readJson(path);
@@ -193,17 +193,17 @@ export async function reconcileRalphSessionResume({
   const lockedResult = await withRalphResumeLock(stateDir, async () => {
     await hooks?.afterLockAcquired?.();
 
-    const currentOmxSessionId = await readCurrentOmxSessionId(stateDir);
-    if (!currentOmxSessionId) {
+    const currentOmbSessionId = await readCurrentOmbSessionId(stateDir);
+    if (!currentOmbSessionId) {
       return {
-        currentOmxSessionId: '',
+        currentOmbSessionId: '',
         resumed: false,
         updatedCurrentOwner: false,
-        reason: 'current_omx_session_missing',
+        reason: 'current_omb_session_missing',
       };
     }
 
-    const currentSessionDir = join(stateDir, 'sessions', currentOmxSessionId);
+    const currentSessionDir = join(stateDir, 'sessions', currentOmbSessionId);
     const currentRalphPath = join(currentSessionDir, 'ralph-state.json');
     const currentRalphExists = existsSync(currentRalphPath);
     const currentRalphState = currentRalphExists
@@ -215,8 +215,8 @@ export async function reconcileRalphSessionResume({
       let changed = false;
       const updated: Record<string, unknown> = { ...currentRalphState };
       const normalizedPayloadThreadId = safeString(payloadThreadId).trim();
-      if (safeString(updated.owner_omx_session_id).trim() !== currentOmxSessionId) {
-        updated.owner_omx_session_id = currentOmxSessionId;
+      if (safeString(updated.owner_omb_session_id).trim() !== currentOmbSessionId) {
+        updated.owner_omb_session_id = currentOmbSessionId;
         changed = true;
       }
       if (payloadSessionId && !safeString(updated.owner_codex_session_id).trim()) {
@@ -248,7 +248,7 @@ export async function reconcileRalphSessionResume({
         await writeJsonAtomic(currentRalphPath, updated);
       }
       return {
-        currentOmxSessionId,
+        currentOmbSessionId,
         resumed: false,
         updatedCurrentOwner: changed,
         reason: 'current_ralph_active',
@@ -258,7 +258,7 @@ export async function reconcileRalphSessionResume({
 
     if (currentRalphExists) {
       return {
-        currentOmxSessionId,
+        currentOmbSessionId,
         resumed: false,
         updatedCurrentOwner: false,
         reason: currentRalphState ? 'current_ralph_present' : 'current_ralph_unreadable',
@@ -270,7 +270,7 @@ export async function reconcileRalphSessionResume({
     const normalizedPayloadThreadId = safeString(payloadThreadId).trim();
     if (!normalizedPayloadSessionId && !normalizedPayloadThreadId) {
       return {
-        currentOmxSessionId,
+        currentOmbSessionId,
         resumed: false,
         updatedCurrentOwner: false,
         reason: 'payload_codex_identity_missing',
@@ -279,13 +279,13 @@ export async function reconcileRalphSessionResume({
 
     const candidates = await scanMatchingRalphCandidates(
       stateDir,
-      currentOmxSessionId,
+      currentOmbSessionId,
       normalizedPayloadSessionId,
       normalizedPayloadThreadId,
     );
     if (candidates.length !== 1) {
       return {
-        currentOmxSessionId,
+        currentOmbSessionId,
         resumed: false,
         updatedCurrentOwner: false,
         reason: candidates.length === 0 ? 'no_matching_prior_ralph' : 'multiple_matching_prior_ralphs',
@@ -297,7 +297,7 @@ export async function reconcileRalphSessionResume({
 
     const nextState = bindCurrentPane({
       ...source.state,
-      owner_omx_session_id: currentOmxSessionId,
+      owner_omb_session_id: currentOmbSessionId,
       ...(normalizedPayloadSessionId ? { owner_codex_session_id: normalizedPayloadSessionId } : {}),
     }, nowIso, env);
     if (safeString(nextState.owner_codex_session_id).trim()) {
@@ -324,7 +324,7 @@ export async function reconcileRalphSessionResume({
     }
 
     return {
-      currentOmxSessionId,
+      currentOmbSessionId,
       resumed: true,
       updatedCurrentOwner: false,
       reason: 'resumed_same_codex_session',
@@ -338,7 +338,7 @@ export async function reconcileRalphSessionResume({
   }
 
   return {
-    currentOmxSessionId: '',
+    currentOmbSessionId: '',
     resumed: false,
     updatedCurrentOwner: false,
     reason: 'resume_lock_timeout',

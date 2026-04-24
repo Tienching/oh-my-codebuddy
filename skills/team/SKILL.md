@@ -5,7 +5,7 @@ description: N coordinated agents on shared task list using tmux-based orchestra
 
 # Team Skill
 
-`$team` is the tmux-based parallel execution mode for OMB. It starts real worker Codex and/or Claude CLI sessions in split panes and coordinates them through `.omb/state/team/...` files (with legacy `.omx/state/team/...` fallback) plus CLI team interop (`omb team api ...`) and state files.
+`$team` is the tmux-based parallel execution mode for OMB. It starts real worker Codex and/or Claude CLI sessions in split panes and coordinates them through `.omb/state/team/...` files (with legacy `.omb/state/team/...` fallback) plus CLI team interop (`omb team api ...`) and state files.
 
 This skill is operationally sensitive. Treat it as an operator workflow, not a generic prompt pattern.
 
@@ -33,7 +33,7 @@ When user triggers `$team`, the agent must:
 5. Keep team state alive until workers are terminal (unless explicit abort)
 6. Handle cleanup and stale-pane recovery when needed
 
-If `omb team` is unavailable, stop with a hard error (`omx team` remains the compatibility alias).
+If `omb team` is unavailable, stop with a hard error (`omb team` remains the compatibility alias).
 
 ## Invocation Contract
 
@@ -83,8 +83,8 @@ Before running `$team`, confirm:
 
 1. `tmux` installed (`tmux -V`)
 2. Current leader session is inside tmux (`$TMUX` is set)
-3. `omb` command resolves to the intended install/build (`omx` remains the compatibility alias)
-4. If running repo-local `node bin/omb.js ...` (or the legacy `node bin/omx.js ...` alias), run `npm run build` after `src` changes
+3. `omb` command resolves to the intended install/build (`omb` remains the compatibility alias)
+4. If running repo-local `node bin/omb.js ...` (or the legacy `node bin/omb.js ...` alias), run `npm run build` after `src` changes
 5. Check HUD pane count in the leader window and avoid duplicate `hud --watch` panes before split
 
 Suggested preflight:
@@ -112,7 +112,7 @@ Before launching `omb team`, require a grounded context snapshot:
 
 Do not start worker panes until this gate is satisfied; if forced to proceed quickly, state explicit scope/risk limitations in the launch report.
 
-For simple read-only brownfield lookups during intake, follow active session guidance: when `USE_OMB_EXPLORE_CMD` (legacy alias: `USE_OMX_EXPLORE_CMD`) is enabled, prefer `omb explore` (`omx explore` compatibility alias) with narrow, concrete prompts; otherwise use the richer normal explore path and fall back normally if `omb explore` / `omx explore` is unavailable.
+For simple read-only brownfield lookups during intake, follow active session guidance: when `USE_OMB_EXPLORE_CMD` (legacy alias: `USE_OMB_EXPLORE_CMD`) is enabled, prefer `omb explore` (`omb explore` compatibility alias) with narrow, concrete prompts; otherwise use the richer normal explore path and fall back normally if `omb explore` / `omb explore` is unavailable.
 
 ## Follow-up Staffing Contract
 
@@ -141,10 +141,10 @@ When `$team` is used as a follow-up mode from ralplan, carry forward the approve
 5. Resolve canonical shared state root from leader cwd (`<leader-cwd>/.omb/state`)
 6. Split current tmux window into worker panes
 7. Launch workers with:
-   - `OMB_TEAM_WORKER=<team>/worker-<n>` (legacy alias: `OMX_TEAM_WORKER`)
-   - `OMB_TEAM_STATE_ROOT=<leader-cwd>/.omb/state` (legacy alias: `OMX_TEAM_STATE_ROOT`)
-   - `OMB_TEAM_LEADER_CWD=<leader-cwd>` (legacy alias: `OMX_TEAM_LEADER_CWD`)
-   - worker CLI selected by `OMB_TEAM_WORKER_CLI` / `OMB_TEAM_WORKER_CLI_MAP` (`codebuddy`, `codex`, or `claude`; legacy OMX aliases remain supported)
+   - `OMB_TEAM_WORKER=<team>/worker-<n>` (legacy alias: `OMB_TEAM_WORKER`)
+   - `OMB_TEAM_STATE_ROOT=<leader-cwd>/.omb/state` (legacy alias: `OMB_TEAM_STATE_ROOT`)
+   - `OMB_TEAM_LEADER_CWD=<leader-cwd>` (legacy alias: `OMB_TEAM_LEADER_CWD`)
+   - worker CLI selected by `OMB_TEAM_WORKER_CLI` / `OMB_TEAM_WORKER_CLI_MAP` (`codebuddy`, `codex`, or `claude`; legacy OMB aliases remain supported)
    - optional worktree metadata envs when `--worktree` is used
 7. Wait for worker readiness (`capture-pane` polling)
 8. Write per-worker `inbox.md` and trigger via `tmux send-keys`
@@ -175,7 +175,7 @@ Team mode resolves worker **model flags** from one shared launch-arg set (not pe
 Model precedence (highest to lowest):
 1. Explicit worker model in `OMB_TEAM_WORKER_LAUNCH_ARGS`
 2. Inherited leader `--model` flag
-3. Low-complexity default from `OMB_DEFAULT_SPARK_MODEL` (legacy aliases: `OMX_DEFAULT_SPARK_MODEL`, `OMX_SPARK_MODEL`) when 1+2 are absent and team `agentType` is low-complexity
+3. Low-complexity default from `OMB_DEFAULT_SPARK_MODEL` (legacy aliases: `OMB_DEFAULT_SPARK_MODEL`, `OMB_SPARK_MODEL`) when 1+2 are absent and team `agentType` is low-complexity
 
 Default-model rule:
 - Do **not** assume a frontier or spark model from recency or model-family heuristics.
@@ -200,7 +200,7 @@ Normalization requirements:
 Follow this exact lifecycle when running `$team`:
 
 1. Start team and verify startup evidence (team line, tmux target, panes, ACK mailbox)
-2. Monitor task and worker progress with runtime/state tools first (`omb team status <team>`, `omb team resume <team>`, mailbox/state files; `omx ...` remains the compatibility alias)
+2. Monitor task and worker progress with runtime/state tools first (`omb team status <team>`, `omb team resume <team>`, mailbox/state files; `omb ...` remains the compatibility alias)
 3. Wait for terminal task state before shutdown:
    - `pending=0`
    - `in_progress=0`
@@ -254,13 +254,13 @@ Semantics:
 
 - `status`: reads team snapshot (task counts, dead/non-reporting workers)
 - `resume`: reconnects to live team session if present
-- `shutdown`: graceful shutdown request, then cleanup (deletes `.omb/state/team/<team>`; legacy `.omx/...` compatibility paths may also be present)
+- `shutdown`: graceful shutdown request, then cleanup (deletes `.omb/state/team/<team>`; legacy `.omb/...` compatibility paths may also be present)
 
 ## Data Plane and Control Plane
 
 ### Control Plane
 
-- tmux panes/processes (`OMB_TEAM_WORKER` per worker; legacy alias: `OMX_TEAM_WORKER`)
+- tmux panes/processes (`OMB_TEAM_WORKER` per worker; legacy alias: `OMB_TEAM_WORKER`)
 - leader notifications via `tmux display-message`
 
 ### Data Plane
@@ -336,13 +336,13 @@ Task ID rule (critical):
 
 Useful runtime env vars:
 
-- `OMB_TEAM_READY_TIMEOUT_MS` (legacy alias: `OMX_TEAM_READY_TIMEOUT_MS`)
+- `OMB_TEAM_READY_TIMEOUT_MS` (legacy alias: `OMB_TEAM_READY_TIMEOUT_MS`)
   - Worker readiness timeout (default 45000)
-- `OMB_TEAM_SKIP_READY_WAIT=1` (legacy alias: `OMX_TEAM_SKIP_READY_WAIT=1`)
+- `OMB_TEAM_SKIP_READY_WAIT=1` (legacy alias: `OMB_TEAM_SKIP_READY_WAIT=1`)
   - Skip readiness wait (debug only)
-- `OMB_TEAM_AUTO_TRUST=0` (legacy alias: `OMX_TEAM_AUTO_TRUST=0`)
+- `OMB_TEAM_AUTO_TRUST=0` (legacy alias: `OMB_TEAM_AUTO_TRUST=0`)
   - Disable auto-advance for trust prompt (default behavior auto-advances)
-- `OMB_TEAM_AUTO_ACCEPT_BYPASS=0` (legacy alias: `OMX_TEAM_AUTO_ACCEPT_BYPASS=0`)
+- `OMB_TEAM_AUTO_ACCEPT_BYPASS=0` (legacy alias: `OMB_TEAM_AUTO_ACCEPT_BYPASS=0`)
   - Disable Claude bypass-permissions prompt auto-accept (default behavior auto-accepts `2` + Enter)
 - `OMB_TEAM_WORKER_LAUNCH_ARGS`
   - Extra args passed to worker launch command
@@ -356,12 +356,12 @@ Useful runtime env vars:
   - Length must be `1` (broadcast) or exactly the team worker count
   - Example: `OMB_TEAM_WORKER_CLI_MAP=codebuddy,codebuddy,claude,claude`
   - When present, overrides `OMB_TEAM_WORKER_CLI`
-- `OMB_TEAM_AUTO_INTERRUPT_RETRY` (legacy alias: `OMX_TEAM_AUTO_INTERRUPT_RETRY`)
+- `OMB_TEAM_AUTO_INTERRUPT_RETRY` (legacy alias: `OMB_TEAM_AUTO_INTERRUPT_RETRY`)
   - Trigger submit fallback (default: enabled)
   - `0` disables adaptive queue->resend escalation
-- `OMB_TEAM_LEADER_NUDGE_MS` (legacy alias: `OMX_TEAM_LEADER_NUDGE_MS`)
+- `OMB_TEAM_LEADER_NUDGE_MS` (legacy alias: `OMB_TEAM_LEADER_NUDGE_MS`)
   - Leader nudge interval in ms (default 120000)
-- `OMB_TEAM_STRICT_SUBMIT=1` (legacy alias: `OMX_TEAM_STRICT_SUBMIT=1`)
+- `OMB_TEAM_STRICT_SUBMIT=1` (legacy alias: `OMB_TEAM_STRICT_SUBMIT=1`)
   - Force strict send-keys submit failure behavior
 
 ## Failure Modes and Diagnosis
@@ -377,7 +377,7 @@ Use only after checking `omb team status <team>` and mailbox/state evidence:
 
 1. Capture pane tail to confirm current worker state:
    - `tmux capture-pane -t %<worker-pane> -p -S -120`
-   - If a larger-tail read or bounded summary would help, prefer explicit opt-in inspection via `omb sparkshell --tmux-pane %<worker-pane> --tail-lines 400` (or `omx sparkshell --tmux-pane ...`) before improvising extra tmux commands.
+   - If a larger-tail read or bounded summary would help, prefer explicit opt-in inspection via `omb sparkshell --tmux-pane %<worker-pane> --tail-lines 400` (or `omb sparkshell --tmux-pane ...`) before improvising extra tmux commands.
 2. If the pane is stuck in an interactive state, safely return to idle prompt first:
    - optional interrupt `C-c` or escape flow (CLI-specific) once, then re-check pane capture
 3. Send one concise trigger (single line) and wait for evidence:
@@ -412,7 +412,7 @@ Checks:
 
 Meaning:
 - Team state path no longer exists while worker is still running.
-- Typical cause: leader/manual flow ran `omb team shutdown <team>` (or removed `.omb/state/team/<team>`; legacy `.omx/...` compatibility paths may also apply) before worker finished.
+- Typical cause: leader/manual flow ran `omb team shutdown <team>` (or removed `.omb/state/team/<team>`; legacy `.omb/...` compatibility paths may also apply) before worker finished.
 
 Checks:
 
@@ -457,7 +457,7 @@ omb team 1:executor "fresh retry"
 Guidelines:
 
 - Do not kill leader pane
-- Do not kill HUD pane (`omb hud --watch`; `omx hud --watch` remains the compatibility alias) unless intentionally restarting HUD
+- Do not kill HUD pane (`omb hud --watch`; `omb hud --watch` remains the compatibility alias) unless intentionally restarting HUD
 
 ## Required Reporting During Execution
 
@@ -470,11 +470,11 @@ When operating this skill, provide concrete progress evidence:
 
 Do not claim success without file/pane evidence.
 Do not claim clean completion if shutdown occurred with `in_progress>0`.
-Use `omb sparkshell --tmux-pane ...` / `omx sparkshell --tmux-pane ...` as an explicit opt-in operator aid for pane inspection and summaries; keep raw `tmux capture-pane` evidence available for manual intervention and proof.
+Use `omb sparkshell --tmux-pane ...` / `omb sparkshell --tmux-pane ...` as an explicit opt-in operator aid for pane inspection and summaries; keep raw `tmux capture-pane` evidence available for manual intervention and proof.
 
 ## Programmatic Team Orchestration
 
-Use the `omb team ...` CLI as the supported team-launch surface (`omx team ...` remains the compatibility alias). For automation, drive the same CLI flow from scripts or supervising agents rather than relying on a separate MCP runner.
+Use the `omb team ...` CLI as the supported team-launch surface (`omb team ...` remains the compatibility alias). For automation, drive the same CLI flow from scripts or supervising agents rather than relying on a separate MCP runner.
 
 ### Supported current surfaces
 

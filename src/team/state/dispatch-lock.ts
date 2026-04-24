@@ -3,7 +3,6 @@ import { mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
 
 const OMB_DISPATCH_LOCK_TIMEOUT_ENV = 'OMB_DISPATCH_LOCK_TIMEOUT_MS';
-const OMX_DISPATCH_LOCK_TIMEOUT_ENV = 'OMX_DISPATCH_LOCK_TIMEOUT_MS';
 const DEFAULT_DISPATCH_LOCK_TIMEOUT_MS = 15_000;
 const MIN_DISPATCH_LOCK_TIMEOUT_MS = 1_000;
 const MAX_DISPATCH_LOCK_TIMEOUT_MS = 120_000;
@@ -12,7 +11,7 @@ const DISPATCH_LOCK_MAX_POLL_MS = 500;
 const LOCK_STALE_MS = 5 * 60 * 1000;
 
 export function resolveDispatchLockTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env[OMX_DISPATCH_LOCK_TIMEOUT_ENV] ?? env[OMB_DISPATCH_LOCK_TIMEOUT_ENV];
+  const raw = env[OMB_DISPATCH_LOCK_TIMEOUT_ENV] ?? env[OMB_DISPATCH_LOCK_TIMEOUT_ENV];
   if (raw === undefined || raw === '') return DEFAULT_DISPATCH_LOCK_TIMEOUT_MS;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return DEFAULT_DISPATCH_LOCK_TIMEOUT_MS;
@@ -65,7 +64,7 @@ export async function withDispatchLock<T>(
       if (Date.now() > deadline) {
         throw new Error(
           `Timed out acquiring dispatch lock for ${teamName} after ${timeoutMs}ms. ` +
-          `Set ${OMX_DISPATCH_LOCK_TIMEOUT_ENV} to increase (current: ${timeoutMs}ms, max: ${MAX_DISPATCH_LOCK_TIMEOUT_MS}ms).`
+          `Set ${OMB_DISPATCH_LOCK_TIMEOUT_ENV} to increase (current: ${timeoutMs}ms, max: ${MAX_DISPATCH_LOCK_TIMEOUT_MS}ms).`
         );
       }
 

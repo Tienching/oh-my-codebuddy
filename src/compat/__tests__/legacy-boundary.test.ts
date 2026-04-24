@@ -117,9 +117,9 @@ describe("resolveCanonicalStateDir", () => {
 // ── resolveLegacyStateDir ────────────────────────────────────────────────
 
 describe("resolveLegacyStateDir", () => {
-  it("returns .omx/state under the given cwd", () => {
+  it("returns .omb/state under the given cwd", () => {
     const result = resolveLegacyStateDir("/project/root");
-    assert.equal(result, "/project/root/.omx/state");
+    assert.equal(result, "/project/root/.omb/state");
   });
 });
 
@@ -131,23 +131,6 @@ describe("resolveCanonicalEntryPath", () => {
       env: envWith({ OMB_ENTRY_PATH: "/path/to/omb.js" }),
     });
     assert.equal(result, "/path/to/omb.js");
-  });
-
-  it("falls back to OMX_ENTRY_PATH when OMB_ENTRY_PATH is not set", () => {
-    const result = resolveCanonicalEntryPath({
-      env: envWith({ OMX_ENTRY_PATH: "/path/to/omx.js" }),
-    });
-    assert.equal(result, "/path/to/omx.js");
-  });
-
-  it("prefers OMB_ENTRY_PATH over OMX_ENTRY_PATH", () => {
-    const result = resolveCanonicalEntryPath({
-      env: envWith({
-        OMB_ENTRY_PATH: "/omb.js",
-        OMX_ENTRY_PATH: "/omx.js",
-      }),
-    });
-    assert.equal(result, "/omb.js");
   });
 
   it("returns null when neither env var is set", () => {
@@ -164,20 +147,6 @@ describe("resolveCanonicalRuntimeBinary", () => {
       envWith({ OMB_RUNTIME_BINARY: "/bin/omb-runtime" }),
     );
     assert.equal(result, "/bin/omb-runtime");
-  });
-
-  it("falls back to OMX_RUNTIME_BINARY", () => {
-    const e = envWithout("OMB_RUNTIME_BINARY");
-    e.OMX_RUNTIME_BINARY = "/bin/omx-runtime";
-    const result = resolveCanonicalRuntimeBinary(e);
-    assert.equal(result, "/bin/omx-runtime");
-  });
-
-  it("prefers OMB over OMX when both set", () => {
-    const result = resolveCanonicalRuntimeBinary(
-      envWith({ OMB_RUNTIME_BINARY: "/omb", OMX_RUNTIME_BINARY: "/omx" }),
-    );
-    assert.equal(result, "/omb");
   });
 
   it("returns undefined when neither is set", () => {
@@ -203,9 +172,9 @@ describe("isRuntimeBridgeEnabled", () => {
     );
   });
 
-  it("falls back to OMX_RUNTIME_BRIDGE=0", () => {
+  it("falls back to OMB_RUNTIME_BRIDGE=0", () => {
     const e = envWithout("OMB_RUNTIME_BRIDGE");
-    e.OMX_RUNTIME_BRIDGE = "0";
+    e.OMB_RUNTIME_BRIDGE = "0";
     assert.equal(isRuntimeBridgeEnabled(e), false);
   });
 
@@ -227,22 +196,12 @@ describe("getAliasRegistry", () => {
     const registry = getAliasRegistry();
     const canonicalNames = registry.map((a) => a.canonical);
     assert.ok(canonicalNames.includes("CODEBUDDY_HOME"));
-    assert.ok(canonicalNames.includes("OMB_ENTRY_PATH"));
-    assert.ok(canonicalNames.includes("OMB_RUNTIME_BRIDGE"));
-    assert.ok(canonicalNames.includes("OMB_RUNTIME_BINARY"));
   });
 
   it("contains expected directory aliases", () => {
     const registry = getAliasRegistry();
     const canonicalNames = registry.map((a) => a.canonical);
     assert.ok(canonicalNames.includes(".codebuddy"));
-    assert.ok(canonicalNames.includes(".omb"));
-  });
-
-  it("contains expected binary alias", () => {
-    const registry = getAliasRegistry();
-    const canonicalNames = registry.map((a) => a.canonical);
-    assert.ok(canonicalNames.includes("omb"));
   });
 
   it("every entry has the required fields", () => {
@@ -285,8 +244,7 @@ describe("findAlias", () => {
 
 describe("shouldDualWrite", () => {
   it("returns true for active_compat alias", () => {
-    // .omb has status 'active_compat'
-    assert.equal(shouldDualWrite(".omb"), true);
+    assert.equal(shouldDualWrite("CODEBUDDY_HOME"), true);
   });
 
   it("returns false for read_only alias", () => {
@@ -305,10 +263,10 @@ describe("readLegacyAliasIfPresent", () => {
   beforeEach(() => { makeTmpDir(); });
   afterEach(cleanupTmpDir);
 
-  it("detects .omx directory", async () => {
-    await mkdir(join(tmpDir, ".omx"), { recursive: true });
+  it("detects .omb directory", async () => {
+    await mkdir(join(tmpDir, ".omb"), { recursive: true });
     const report = readLegacyAliasIfPresent(tmpDir);
-    assert.equal(report.hasLegacyOmxDir, true);
+    assert.equal(report.hasLegacyOmbDir, true);
     assert.equal(report.hasLegacyCodexDir, false);
   });
 
@@ -316,7 +274,7 @@ describe("readLegacyAliasIfPresent", () => {
     await mkdir(join(tmpDir, ".codex"), { recursive: true });
     const report = readLegacyAliasIfPresent(tmpDir);
     assert.equal(report.hasLegacyCodexDir, true);
-    assert.equal(report.hasLegacyOmxDir, false);
+    assert.equal(report.hasLegacyOmbDir, false);
   });
 
   it("detects .omb directory", async () => {
@@ -333,7 +291,7 @@ describe("readLegacyAliasIfPresent", () => {
 
   it("returns all false for empty directory", () => {
     const report = readLegacyAliasIfPresent(tmpDir);
-    assert.equal(report.hasLegacyOmxDir, false);
+    assert.equal(report.hasLegacyOmbDir, false);
     assert.equal(report.hasLegacyCodexDir, false);
     assert.equal(report.hasCanonicalOmbDir, false);
     assert.equal(report.hasCanonicalCodebuddyDir, false);
@@ -346,12 +304,12 @@ describe("isLegacyPathActive", () => {
   beforeEach(() => { makeTmpDir(); });
   afterEach(cleanupTmpDir);
 
-  it("returns true when .omx/state exists", async () => {
-    await mkdir(join(tmpDir, ".omx", "state"), { recursive: true });
+  it("returns true when .omb/state exists", async () => {
+    await mkdir(join(tmpDir, ".omb", "state"), { recursive: true });
     assert.equal(isLegacyPathActive(tmpDir), true);
   });
 
-  it("returns false when .omx/state does not exist", () => {
+  it("returns false when .omb/state does not exist", () => {
     assert.equal(isLegacyPathActive(tmpDir), false);
   });
 });
@@ -372,18 +330,13 @@ describe("priority: canonical env var > legacy env var > default", () => {
     assert.equal(resolveCanonicalCodebuddyHome(env), "/legacy");
   });
 
-  it("OMB_ENTRY_PATH wins over OMX_ENTRY_PATH", () => {
-    const env = { OMB_ENTRY_PATH: "/omb", OMX_ENTRY_PATH: "/omx" };
+  it("OMB_ENTRY_PATH is used when set", () => {
+    const env = { OMB_ENTRY_PATH: "/omb" };
     assert.equal(resolveCanonicalEntryPath({ env }), "/omb");
   });
 
-  it("OMX_ENTRY_PATH used when OMB_ENTRY_PATH absent", () => {
-    const env = { OMX_ENTRY_PATH: "/omx" };
-    assert.equal(resolveCanonicalEntryPath({ env }), "/omx");
-  });
-
-  it("OMB_RUNTIME_BINARY wins over OMX_RUNTIME_BINARY", () => {
-    const env = { OMB_RUNTIME_BINARY: "/omb-bin", OMX_RUNTIME_BINARY: "/omx-bin" };
+  it("OMB_RUNTIME_BINARY is used when set", () => {
+    const env = { OMB_RUNTIME_BINARY: "/omb-bin" };
     assert.equal(resolveCanonicalRuntimeBinary(env), "/omb-bin");
   });
 });

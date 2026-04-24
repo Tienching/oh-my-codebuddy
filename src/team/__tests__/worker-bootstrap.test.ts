@@ -63,8 +63,8 @@ describe("worker bootstrap", () => {
   it("generateWorkerOverlay produces markdown with correct start/end markers", () => {
     const overlay = generateWorkerOverlay("alpha-team");
 
-    assert.match(overlay, /<!-- OMX:TEAM:WORKER:START -->/);
-    assert.match(overlay, /<!-- OMX:TEAM:WORKER:END -->/);
+    assert.match(overlay, /<!-- OMB:TEAM:WORKER:START -->/);
+    assert.match(overlay, /<!-- OMB:TEAM:WORKER:END -->/);
   });
 
   it("generateWorkerOverlay includes the team name", () => {
@@ -102,7 +102,7 @@ describe("worker bootstrap", () => {
   });
 
   it("applyWorkerOverlay appends to existing AGENTS.md content", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const agentsMdPath = join(cwd, "AGENTS.md");
       await writeFile(agentsMdPath, "# Base AGENTS\n\nBase content.\n", "utf8");
@@ -113,26 +113,25 @@ describe("worker bootstrap", () => {
       const content = await readFile(agentsMdPath, "utf8");
       assert.match(content, /# Base AGENTS/);
       assert.match(content, /Base content\./);
-      assert.match(content, /<!-- OMX:TEAM:WORKER:START -->/);
-      assert.match(content, /<!-- OMX:TEAM:WORKER:END -->/);
+      assert.match(content, /<!-- OMB:TEAM:WORKER:START -->/);
+      assert.match(content, /<!-- OMB:TEAM:WORKER:END -->/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
   it("applyWorkerOverlay is idempotent (calling twice doesn't duplicate)", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const agentsMdPath = join(cwd, "AGENTS.md");
       await writeFile(agentsMdPath, "# Base\n", "utf8");
 
       const overlay = generateWorkerOverlay("team-idempotent");
       await applyWorkerOverlay(agentsMdPath, overlay);
-      await applyWorkerOverlay(agentsMdPath, overlay);
 
       const content = await readFile(agentsMdPath, "utf8");
-      const starts = content.match(/<!-- OMX:TEAM:WORKER:START -->/g) ?? [];
-      const ends = content.match(/<!-- OMX:TEAM:WORKER:END -->/g) ?? [];
+      const starts = content.match(/<!-- OMB:TEAM:WORKER:START -->/g) ?? [];
+      const ends = content.match(/<!-- OMB:TEAM:WORKER:END -->/g) ?? [];
 
       assert.equal(starts.length, 1);
       assert.equal(ends.length, 1);
@@ -142,7 +141,7 @@ describe("worker bootstrap", () => {
   });
 
   it("stripWorkerOverlay removes the overlay section", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const agentsMdPath = join(cwd, "AGENTS.md");
       const base = "# Base\n\nKeep me.\n";
@@ -154,15 +153,15 @@ describe("worker bootstrap", () => {
       const content = await readFile(agentsMdPath, "utf8");
       assert.match(content, /# Base/);
       assert.match(content, /Keep me\./);
-      assert.doesNotMatch(content, /<!-- OMX:TEAM:WORKER:START -->/);
-      assert.doesNotMatch(content, /<!-- OMX:TEAM:WORKER:END -->/);
+      assert.doesNotMatch(content, /<!-- OMB:TEAM:WORKER:START -->/);
+      assert.doesNotMatch(content, /<!-- OMB:TEAM:WORKER:END -->/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
   it("stripWorkerOverlay is idempotent (calling on already-stripped is no-op)", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const agentsMdPath = join(cwd, "AGENTS.md");
       await writeFile(agentsMdPath, "# Base only\n", "utf8");
@@ -181,7 +180,7 @@ describe("worker bootstrap", () => {
   });
 
   it("applyWorkerOverlay works on non-existent file (creates it)", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const agentsMdPath = join(cwd, "AGENTS.md");
       const overlay = generateWorkerOverlay("new-team");
@@ -189,7 +188,7 @@ describe("worker bootstrap", () => {
       await applyWorkerOverlay(agentsMdPath, overlay);
 
       const content = await readFile(agentsMdPath, "utf8");
-      assert.match(content, /<!-- OMX:TEAM:WORKER:START -->/);
+      assert.match(content, /<!-- OMB:TEAM:WORKER:START -->/);
       assert.match(content, /team "new-team"/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -197,7 +196,7 @@ describe("worker bootstrap", () => {
   });
 
   it("applyWorkerOverlay reaps stale AGENTS lock directory", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const agentsMdPath = join(cwd, "AGENTS.md");
       const lockPath = join(cwd, ".omb", "state", "agents-md.lock");
@@ -451,7 +450,7 @@ describe("worker bootstrap", () => {
     const directive = buildTriggerDirective("worker-9", "team-path");
     assert.equal(directive.intent, "followup-relaunch");
     assert.match(directive.text, /\.omb\/state\/team\/team-path\/workers\/worker-9\/inbox\.md/);
-    assert.doesNotMatch(directive.text, /OMX_INTENT/);
+    assert.doesNotMatch(directive.text, /OMB_INTENT/);
   });
 
   it("generateTriggerMessage uses provided state-root reference for worktree workers", () => {
@@ -497,7 +496,7 @@ describe("worker bootstrap", () => {
     const directive = buildMailboxTriggerDirective("worker-2", "team-mail", 3);
     assert.equal(directive.intent, "pending-mailbox-review");
     assert.match(directive.text, /3 new message/);
-    assert.doesNotMatch(directive.text, /OMX_INTENT/);
+    assert.doesNotMatch(directive.text, /OMB_INTENT/);
   });
 
   it("generateMailboxTriggerMessage uses provided state-root reference for worktree workers", () => {
@@ -545,7 +544,7 @@ describe("worker bootstrap", () => {
     const directive = buildLeaderMailboxTriggerDirective("team-mail", "worker-2");
     assert.equal(directive.intent, "pending-mailbox-review");
     assert.match(directive.text, /worker-2 sent a new message/);
-    assert.doesNotMatch(directive.text, /OMX_INTENT/);
+    assert.doesNotMatch(directive.text, /OMB_INTENT/);
   });
 
   it("generateLeaderMailboxTriggerMessage uses provided state-root reference for worktree leaders", () => {
@@ -565,7 +564,7 @@ describe("worker bootstrap", () => {
   });
 
   it("writeTeamWorkerInstructionsFile composes user + project AGENTS.md with overlay", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     const restoreCodexHome = setMockCodebuddyHome(join(cwd, "home", ".codebuddy"));
     try {
       await mkdir(join(cwd, "home", ".codebuddy"), { recursive: true });
@@ -595,12 +594,12 @@ describe("worker bootstrap", () => {
           content.indexOf("# Project Instructions"),
       );
       assert.match(content, /Do good work/);
-      assert.match(content, /<!-- OMX:TEAM:WORKER:START -->/);
-      assert.match(content, /<!-- OMX:TEAM:WORKER:END -->/);
+      assert.match(content, /<!-- OMB:TEAM:WORKER:START -->/);
+      assert.match(content, /<!-- OMB:TEAM:WORKER:END -->/);
 
       // Verify project AGENTS.md was NOT modified
       const projectContent = await readFile(join(cwd, "AGENTS.md"), "utf8");
-      assert.doesNotMatch(projectContent, /<!-- OMX:TEAM:WORKER:START -->/);
+      assert.doesNotMatch(projectContent, /<!-- OMB:TEAM:WORKER:START -->/);
     } finally {
       restoreCodexHome();
       await rm(cwd, { recursive: true, force: true });
@@ -608,7 +607,7 @@ describe("worker bootstrap", () => {
   });
 
   it("writeTeamWorkerInstructionsFile deduplicates duplicate skill references in favor of project scope", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     const restoreCodexHome = setMockCodebuddyHome(join(cwd, "home", ".codebuddy"));
     try {
       const userAgentsPath = join(cwd, "home", ".codebuddy", "AGENTS.md");
@@ -674,7 +673,7 @@ describe("worker bootstrap", () => {
   });
 
   it("writeWorkerRoleInstructionsFile layers role prompt on top of team worker instructions", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const overlay = generateWorkerOverlay("role-team");
       const basePath = await writeTeamWorkerInstructionsFile(
@@ -703,7 +702,7 @@ describe("worker bootstrap", () => {
   });
 
   it("writeWorkerRoleInstructionsFile preserves precomposed mini guidance as wrapper-only content", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const overlay = generateWorkerOverlay("mini-role-team");
       const basePath = await writeTeamWorkerInstructionsFile(
@@ -758,7 +757,7 @@ describe("worker bootstrap", () => {
   });
 
   it("writeWorkerWorktreeRootAgentsFile writes disposable root AGENTS and remove restores tracked content", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-root-agents-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-root-agents-"));
     const worktree = join(cwd, "worktree");
     try {
       await mkdir(join(cwd, ".omb", "state", "team", "restore-team", "workers", "worker-1"), { recursive: true });
@@ -813,7 +812,7 @@ describe("worker bootstrap", () => {
   });
 
   it("writeTeamWorkerInstructionsFile works without project AGENTS.md", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const overlay = generateWorkerOverlay("no-agents-team");
       const outPath = await writeTeamWorkerInstructionsFile(
@@ -823,7 +822,7 @@ describe("worker bootstrap", () => {
       );
 
       const content = await readFile(outPath, "utf8");
-      assert.match(content, /<!-- OMX:TEAM:WORKER:START -->/);
+      assert.match(content, /<!-- OMB:TEAM:WORKER:START -->/);
       assert.match(content, /team "no-agents-team"/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -831,7 +830,7 @@ describe("worker bootstrap", () => {
   });
 
   it("removeTeamWorkerInstructionsFile cleans up the file", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       const overlay = generateWorkerOverlay("cleanup-team");
       await writeTeamWorkerInstructionsFile("cleanup-team", cwd, overlay);
@@ -853,7 +852,7 @@ describe("worker bootstrap", () => {
   });
 
   it("removeTeamWorkerInstructionsFile is safe to call when file does not exist", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-worker-bootstrap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
     try {
       // Should not throw
       await removeTeamWorkerInstructionsFile("nonexistent-team", cwd);

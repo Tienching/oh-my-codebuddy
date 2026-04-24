@@ -63,17 +63,17 @@ export const COMPAT_RULES: CompatRule[] = [
     },
   },
 
-  // ── Legacy .omx state directory ─────────────────────────────────────
+  // ── Legacy .omb state directory ─────────────────────────────────────
   {
-    id: "legacy-omx-state",
-    from: ".omx",
+    id: "legacy-omb-state",
+    from: ".omb",
     to: ".omb",
     message:
-      "Legacy .omx state directory detected. OMB reads both .omb and .omx for backward compatibility.",
+      "Legacy .omb state directory detected. OMB reads both .omb and .omb for backward compatibility.",
     autoFix: false,
     status: "deprecated",
     condition: (cwd: string): boolean => {
-      return existsSync(join(cwd, ".omx"));
+      return existsSync(join(cwd, ".omb"));
     },
   },
 

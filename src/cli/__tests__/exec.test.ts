@@ -7,23 +7,23 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
 ): { status: number | null; stdout: string; stderr: string; error: string } {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = join(testDir, '..', '..', '..');
-  const omxBin = join(repoRoot, 'dist', 'cli', 'omx.js');
-  const result = spawnSync(process.execPath, [omxBin, ...argv], {
+  const ombBin = join(repoRoot, 'dist', 'cli', 'omb.js');
+  const result = spawnSync(process.execPath, [ombBin, ...argv], {
     cwd,
     encoding: 'utf-8',
     env: {
       ...process.env,
-      OMX_MODEL_INSTRUCTIONS_FILE: '',
-      OMX_TEAM_WORKER: '',
-      OMX_TEAM_STATE_ROOT: '',
-      OMX_TEAM_LEADER_CWD: '',
+      OMB_MODEL_INSTRUCTIONS_FILE: '',
+      OMB_TEAM_WORKER: '',
+      OMB_TEAM_STATE_ROOT: '',
+      OMB_TEAM_LEADER_CWD: '',
       ...envOverrides,
     },
   });
@@ -35,9 +35,9 @@ function runOmx(
   };
 }
 
-describe('omx exec', () => {
+describe('omb exec', () => {
   it('runs codebuddy exec with session-scoped instructions that preserve AGENTS and overlay content', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-exec-cli-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-exec-cli-'));
     try {
       const home = join(wd, 'home');
       const fakeBin = join(wd, 'bin');
@@ -82,19 +82,19 @@ describe('omx exec', () => {
       await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
       await chmod(fakePsPath, 0o755);
 
-      const result = runOmx(wd, ['exec', '--model', 'gpt-5', 'say hi'], {
+      const result = runOmb(wd, ['exec', '--model', 'gpt-5', 'say hi'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
         NODE_OPTIONS: '',
         PATH: `${fakeBin}:/usr/bin:/bin`,
-        OMX_AUTO_UPDATE: '0',
-        OMX_NOTIFY_FALLBACK: '0',
-        OMX_HOOK_DERIVED_SIGNALS: '0',
+        OMB_AUTO_UPDATE: '0',
+        OMB_NOTIFY_FALLBACK: '0',
+        OMB_HOOK_DERIVED_SIGNALS: '0',
       });
 
       assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
       assert.match(result.stdout, /fake-codebuddy:exec --model gpt-5 say hi/);
-      assert.match(result.stdout, /instructions-path:.*\/\.omb\/state\/sessions\/omx-.*\/AGENTS\.md/);
+      assert.match(result.stdout, /instructions-path:.*\/\.omb\/state\/sessions\/omb-.*\/AGENTS\.md/);
       assert.match(result.stdout, /# User Instructions/);
       assert.match(result.stdout, /# Project Instructions/);
       assert.match(result.stdout, /<!-- OMB:RUNTIME:START -->/);
@@ -111,7 +111,7 @@ describe('omx exec', () => {
   });
 
   it('passes exec --help through to codex exec', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-exec-help-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-exec-help-'));
     try {
       const home = join(wd, 'home');
       const fakeBin = join(wd, 'bin');
@@ -125,14 +125,14 @@ describe('omx exec', () => {
       await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
       await chmod(fakePsPath, 0o755);
 
-      const result = runOmx(wd, ['exec', '--help'], {
+      const result = runOmb(wd, ['exec', '--help'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
         NODE_OPTIONS: '',
         PATH: `${fakeBin}:/usr/bin:/bin`,
-        OMX_AUTO_UPDATE: '0',
-        OMX_NOTIFY_FALLBACK: '0',
-        OMX_HOOK_DERIVED_SIGNALS: '0',
+        OMB_AUTO_UPDATE: '0',
+        OMB_NOTIFY_FALLBACK: '0',
+        OMB_HOOK_DERIVED_SIGNALS: '0',
       });
 
       assert.equal(result.status, 0, result.error || result.stderr || result.stdout);

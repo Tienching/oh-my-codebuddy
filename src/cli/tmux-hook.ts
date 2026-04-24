@@ -5,7 +5,7 @@ import { join } from 'path';
 import { getPackageRoot } from '../utils/package.js';
 import { resolveCodexPane } from '../scripts/tmux-hook-engine.js';
 import { formatCliText } from './brand.js';
-import { omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 
 type TmuxTargetType = 'session' | 'pane';
 
@@ -108,13 +108,13 @@ function tmuxHookLogPath(cwd = process.cwd()): string {
   return join(ombDir(cwd), 'logs', `tmux-hook-${new Date().toISOString().split('T')[0]}.jsonl`);
 }
 
-async function mirrorOmxTmuxHookConfig(cwd = process.cwd()): Promise<void> {
+async function mirrorOmbTmuxHookConfig(cwd = process.cwd()): Promise<void> {
   const source = tmuxHookConfigPath(cwd);
   if (!existsSync(source)) return;
-  const target = join(cwd, '.omx', 'tmux-hook.json');
-  await mkdir(join(cwd, '.omx'), { recursive: true });
+  const target = join(cwd, '.omb', 'tmux-hook.json');
+  await mkdir(join(cwd, '.omb'), { recursive: true });
   await writeFile(target, await readFile(source, 'utf-8'));
-  await mkdir(omxStateDir(cwd), { recursive: true });
+  await mkdir(ombStateDir(cwd), { recursive: true });
 }
 
 function parseConfig(raw: unknown): TmuxHookConfig {
@@ -341,7 +341,7 @@ async function initTmuxHookConfig(opts?: { silent?: boolean; cwd?: string }): Pr
     target: detected?.target ?? { type: 'pane' as const, value: 'replace-with-tmux-pane-id' },
   };
   await writeFile(configPath, JSON.stringify(initial, null, 2) + '\n');
-  await mirrorOmxTmuxHookConfig(cwd);
+  await mirrorOmbTmuxHookConfig(cwd);
 
   const result: InitConfigResult = {
     configPath,
@@ -370,7 +370,7 @@ async function initTmuxHookConfig(opts?: { silent?: boolean; cwd?: string }): Pr
 export async function ensureTmuxHookInitialized(cwd = process.cwd()): Promise<void> {
   try {
     await initTmuxHookConfig({ silent: true, cwd });
-    await mirrorOmxTmuxHookConfig(cwd);
+    await mirrorOmbTmuxHookConfig(cwd);
   } catch {
     // Best-effort only: state tools must remain available even without tmux.
   }

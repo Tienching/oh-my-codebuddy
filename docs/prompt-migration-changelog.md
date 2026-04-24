@@ -4,7 +4,7 @@
 
 - Migration window: `e21cb5e` -> `ff7ee14`
 - Surface: `prompts/*.md` (30 files)
-- Goal: document the prior XML-to-Markdown migration while reaffirming that prompt files remain the canonical XML-tagged subagent role surfaces for OMX.
+- Goal: document the prior XML-to-Markdown migration while reaffirming that prompt files remain the canonical XML-tagged subagent role surfaces for OMB.
 
 ## Global Changes (Applied to All Prompt Files)
 
@@ -12,7 +12,7 @@
 - Replaced wrapper tags such as `<Agent_Prompt>`, `<Role>`, `<Constraints>`, `<Output_Format>`, `<Final_Checklist>` with Markdown section headings.
 - Flattened nested XML-like sections into readable Markdown bullets/numbered steps.
 - Kept role semantics, tool usage intent, guardrails, and checklist expectations functionally equivalent.
-- Important current-state clarification: although the prompt text is now Markdown-first, each file in `prompts/*.md` is still the canonical XML-tagged subagent role surface consumed by OMX install/generation flows.
+- Important current-state clarification: although the prompt text is now Markdown-first, each file in `prompts/*.md` is still the canonical XML-tagged subagent role surface consumed by OMB install/generation flows.
 
 ## Behavior Notes
 
@@ -66,7 +66,7 @@
 
 ### Summary
 
-These files are the instruction root that OMX expects Codex to follow across a workspace.
+These files are the instruction root that OMB expects Codex to follow across a workspace.
 Changes here are primarily about aligning instructions with CodeBuddy CLI tool contracts.
 
 ### Key Deltas
@@ -94,8 +94,8 @@ Changes here are primarily about aligning instructions with CodeBuddy CLI tool c
   - file path now uses `tasks/task-<id>.json`
   - API id rule now explicitly requires bare id `task_id: "<id>"` (never `"task-<id>"`).
 - Marker contracts remain unchanged:
-  - `<!-- OMX:RUNTIME:START --> ... <!-- OMX:RUNTIME:END -->`
-  - `<!-- OMX:TEAM:WORKER:START --> ... <!-- OMX:TEAM:WORKER:END -->`
+  - `<!-- OMB:RUNTIME:START --> ... <!-- OMB:RUNTIME:END -->`
+  - `<!-- OMB:TEAM:WORKER:START --> ... <!-- OMB:TEAM:WORKER:END -->`
 
 Behavior note: this follow-up is additive and wording-focused; no task-state model or MCP API contract changes were introduced.
 

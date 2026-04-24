@@ -8,7 +8,7 @@ fi
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 echo "[omb] wrapper deprecation: prefer 'omb ask gemini \"...\"'." >&2
-if [ -x "$SCRIPT_DIR/../bin/omx.js" ]; then
-  exec node "$SCRIPT_DIR/../bin/omx.js" ask gemini "$@"
+if [ -x "$SCRIPT_DIR/../bin/omb.js" ]; then
+  exec node "$SCRIPT_DIR/../bin/omb.js" ask gemini "$@"
 fi
 exec node "$SCRIPT_DIR/run-provider-advisor.js" gemini "$@"

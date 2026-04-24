@@ -19,12 +19,12 @@ let originalEnv: NodeJS.ProcessEnv;
 
 beforeEach(async () => {
 	originalEnv = { ...process.env };
-	tempDir = await mkdtemp(join(tmpdir(), "omx-adapt-foundation-"));
+	tempDir = await mkdtemp(join(tmpdir(), "omb-adapt-foundation-"));
 	process.env.HOME = tempDir;
 	process.env.CODEX_HOME = join(tempDir, ".codex");
-	delete process.env.OMX_OPENCLAW;
-	delete process.env.OMX_OPENCLAW_CONFIG;
-	delete process.env.OMX_OPENCLAW_COMMAND;
+	delete process.env.OMB_OPENCLAW;
+	delete process.env.OMB_OPENCLAW_CONFIG;
+	delete process.env.OMB_OPENCLAW_COMMAND;
 });
 
 afterEach(async () => {
@@ -39,11 +39,11 @@ afterEach(async () => {
 	}
 });
 
-async function writeOpenClawOmxConfig(config: unknown): Promise<void> {
+async function writeOpenClawOmbConfig(config: unknown): Promise<void> {
 	const configDir = join(tempDir, ".codex");
 	await mkdir(configDir, { recursive: true });
 	await writeFile(
-		join(configDir, ".omx-config.json"),
+		join(configDir, ".omb-config.json"),
 		`${JSON.stringify(config, null, 2)}\n`,
 	);
 }
@@ -74,7 +74,7 @@ describe("adapt foundation", () => {
 	});
 
 	it("links the latest canonical PRD/test-spec artifacts into the envelope", async () => {
-		const plansDir = join(tempDir, ".omx", "plans");
+		const plansDir = join(tempDir, ".omb", "plans");
 		await mkdir(plansDir, { recursive: true });
 		await writeFile(join(plansDir, "prd-alpha.md"), "# Alpha\n");
 		await writeFile(
@@ -106,7 +106,7 @@ describe("adapt foundation", () => {
 			envelope.capabilities.map((capability) => capability.ownership),
 		);
 		assert.deepEqual([...ownerships].sort(), [
-			"omx-owned",
+			"omb-owned",
 			"shared-contract",
 			"target-observed",
 		]);
@@ -123,12 +123,12 @@ describe("adapt foundation", () => {
 		assert.equal(result.write, false);
 		assert.deepEqual(result.wrotePaths, []);
 		assert.equal(existsSync(paths.configPath), false);
-		assert.equal(existsSync(join(tempDir, ".omx", "state")), false);
+		assert.equal(existsSync(join(tempDir, ".omb", "state")), false);
 	});
 
 	it("writes OpenClaw adapter artifacts only under adapter-owned paths", async () => {
-		process.env.OMX_OPENCLAW = "1";
-		await writeOpenClawOmxConfig({
+		process.env.OMB_OPENCLAW = "1";
+		await writeOpenClawOmbConfig({
 			notifications: {
 				openclaw: {
 					enabled: true,
@@ -161,7 +161,7 @@ describe("adapt foundation", () => {
 		assert.deepEqual(result.wrotePaths, [paths.configPath, paths.envelopePath]);
 		assert.equal(existsSync(paths.configPath), true);
 		assert.equal(existsSync(paths.envelopePath), true);
-		assert.equal(existsSync(join(tempDir, ".omx", "state")), false);
+		assert.equal(existsSync(join(tempDir, ".omb", "state")), false);
 
 		const envelope = JSON.parse(readFileSync(paths.envelopePath, "utf-8")) as {
 			target: string;
@@ -186,7 +186,7 @@ describe("adapt foundation", () => {
 	});
 
 	it("OpenClaw status degrades gracefully when config is absent", () => {
-		process.env.OMX_OPENCLAW = "1";
+		process.env.OMB_OPENCLAW = "1";
 		const status = buildAdaptStatusReport(
 			tempDir,
 			"openclaw",
@@ -201,8 +201,8 @@ describe("adapt foundation", () => {
 	});
 
 	it("OpenClaw status reports local command-gateway blocking without over-claiming health", async () => {
-		process.env.OMX_OPENCLAW = "1";
-		await writeOpenClawOmxConfig({
+		process.env.OMB_OPENCLAW = "1";
+		await writeOpenClawOmbConfig({
 			notifications: {
 				openclaw: {
 					enabled: true,
@@ -243,7 +243,7 @@ describe("adapt foundation", () => {
 			new Date("2026-04-14T00:00:00.000Z"),
 		);
 		assert.equal(doctor.issues[0]?.code, "adapter_not_initialized");
-		assert.match(doctor.nextSteps.join("\n"), /OMX_OPENCLAW=1/i);
+		assert.match(doctor.nextSteps.join("\n"), /OMB_OPENCLAW=1/i);
 		assert.match(doctor.nextSteps.join("\n"), /init --write/i);
 	});
 

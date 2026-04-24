@@ -2,13 +2,13 @@
 
 ## Summary
 
-`0.14.1` is a patch release after `0.14.0` focused on reliability follow-through for the new interactive orchestration surfaces: deep-interview question enforcement, `omx question` tmux rendering, update/setup refresh behavior, stop/lifecycle normalization, and a smaller round of guidance/CI hardening.
+`0.14.1` is a patch release after `0.14.0` focused on reliability follow-through for the new interactive orchestration surfaces: deep-interview question enforcement, `omb question` tmux rendering, update/setup refresh behavior, stop/lifecycle normalization, and a smaller round of guidance/CI hardening.
 
 ## Highlights
 
-- **Pending deep-interview question obligations now block Stop correctly** — even when the mode already marked itself inactive, OMX still treats the pending structured question as a blocking obligation.
+- **Pending deep-interview question obligations now block Stop correctly** — even when the mode already marked itself inactive, OMB still treats the pending structured question as a blocking obligation.
 - **Question panes are more resilient across tmux environments** — non-POSIX shells, missing panes, and detached-session startup failures now fail closed instead of silently leaving a dead question UI behind.
-- **Setup refresh is easier to recover** — explicit `omx update` can refresh setup state even when the installed version is already current, and advisory update-state write failures no longer block the refresh path.
+- **Setup refresh is easier to recover** — explicit `omb update` can refresh setup state even when the installed version is already current, and advisory update-state write failures no longer block the refresh path.
 - **Lifecycle compatibility code is centralized** — terminal lifecycle helpers now reuse the shared runtime run-outcome contract instead of carrying a parallel normalization implementation.
 - **Review/explore guidance stays aligned with current defaults** — the code-review skill is stronger, and lightweight fallback lanes remain intentionally lean.
 
@@ -25,10 +25,10 @@
 Release verification evidence is recorded in `docs/qa/release-readiness-0.14.1.md`.
 
 - `npm test` ✅
-- `cargo test -p omx-explore-harness -p omx-sparkshell` ✅
+- `cargo test -p omb-explore-harness -p omb-sparkshell` ✅
 - `npm pack --dry-run` ✅
 
 ## Remaining risk
 
 - This is a local release-readiness pass rather than a full CI matrix rerun.
-- The most valuable post-release observation surface remains real multi-session tmux/operator behavior around `omx question`, Stop gating, and upgraded-install setup refresh flows.
+- The most valuable post-release observation surface remains real multi-session tmux/operator behavior around `omb question`, Stop gating, and upgraded-install setup refresh flows.

@@ -4,7 +4,7 @@ import { type AdaptPathSet, type AdaptTarget } from './contracts.js';
 
 function getAdaptersBaseDir(cwd: string): string {
   const canonical = join(cwd, '.omb', 'adapters');
-  const legacy = join(cwd, '.omx', 'adapters');
+  const legacy = join(cwd, '.omb', 'adapters');
   if (existsSync(canonical) || !existsSync(legacy)) {
     return canonical;
   }

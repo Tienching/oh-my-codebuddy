@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { agentsInit } from '../agents-init.js';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
 ): { status: number | null; stdout: string; stderr: string; error?: string } {
@@ -187,12 +187,12 @@ describe('omb agents-init', () => {
   it('exposes help for agents-init and the deepinit alias', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-agents-init-'));
     try {
-      const helpRes = runOmx(wd, ['agents-init', '--help']);
+      const helpRes = runOmb(wd, ['agents-init', '--help']);
       if (shouldSkipForSpawnPermissions(helpRes.error)) return;
       assert.equal(helpRes.status, 0, helpRes.stderr || helpRes.stdout);
       assert.match(helpRes.stdout, /Usage: omb agents-init/);
 
-      const aliasRes = runOmx(wd, ['deepinit', '--help']);
+      const aliasRes = runOmb(wd, ['deepinit', '--help']);
       if (shouldSkipForSpawnPermissions(aliasRes.error)) return;
       assert.equal(aliasRes.status, 0, aliasRes.stderr || aliasRes.stdout);
       assert.match(aliasRes.stdout, /Usage: omb agents-init/);

@@ -66,7 +66,7 @@ function runTmux(args: string[]): { ok: true; stdout: string } | { ok: false; st
 }
 
 function isHudStartCommand(startCommand: string): boolean {
-  return /\bomx\b.*\bhud\b.*--watch/i.test(startCommand);
+  return /\bomb\b.*\bhud\b.*--watch/i.test(startCommand);
 }
 
 function resolveSessionPaneTarget(sessionName: string): HookPluginSendKeysResult {

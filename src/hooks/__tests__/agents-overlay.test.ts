@@ -28,7 +28,7 @@ const WORKER_START = "<!-- OMB:TEAM:WORKER:START -->";
 const WORKER_END = "<!-- OMB:TEAM:WORKER:END -->";
 
 async function makeTempDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "omx-overlay-test-"));
+  const dir = await mkdtemp(join(tmpdir(), "omb-overlay-test-"));
   await mkdir(join(dir, ".omb", "state"), { recursive: true });
   return dir;
 }
@@ -369,7 +369,7 @@ describe("resolveSessionOrchestrationMode", () => {
 
   it("active mode summary follows canonical session skill state instead of stale root mode files", async () => {
     const sessionId = "sess-active-summary";
-    const rootStateDir = join(tempDir, ".omx", "state");
+    const rootStateDir = join(tempDir, ".omb", "state");
     const sessionDir = join(rootStateDir, "sessions", sessionId);
     await mkdir(sessionDir, { recursive: true });
     await writeFile(

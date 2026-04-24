@@ -44,9 +44,9 @@ It adds the native Rust-backed `omb sparkshell <command> [args...]` flow, plus a
 - `cargo test --manifest-path native/omb-sparkshell/Cargo.toml`
 - `node scripts/build-sparkshell.mjs`
 - `node scripts/test-sparkshell.mjs`
-- `node bin/omx.js sparkshell cargo --version`
-- `node bin/omx.js sparkshell npm --version`
-- `node bin/omx.js sparkshell git log --oneline -3`
+- `node bin/omb.js sparkshell cargo --version`
+- `node bin/omb.js sparkshell npm --version`
+- `node bin/omb.js sparkshell git log --oneline -3`
 - `npm test`
 
 ## Notes

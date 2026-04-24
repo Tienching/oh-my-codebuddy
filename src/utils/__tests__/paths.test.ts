@@ -19,11 +19,11 @@ import {
   ombPlansDir,
   ombLogsDir,
   packageRoot,
-  OMX_ENTRY_PATH_ENV,
-  OMX_STARTUP_CWD_ENV,
-  rememberOmxLaunchContext,
-  resolveOmxCliEntryPath,
-  resolveOmxEntryPath,
+  OMB_ENTRY_PATH_ENV,
+  OMB_STARTUP_CWD_ENV,
+  rememberOmbLaunchContext,
+  resolveOmbCliEntryPath,
+  resolveOmbEntryPath,
 } from "../paths.js";
 
 describe("codebuddyHome", () => {
@@ -219,8 +219,8 @@ describe("listInstalledSkillDirectories", () => {
   });
 
   it("deduplicates by skill name and prefers project skills over user skills", async () => {
-    const projectRoot = await mkdtemp(join(tmpdir(), "omx-paths-project-"));
-    const codebuddyHomeRoot = await mkdtemp(join(tmpdir(), "omx-paths-codex-"));
+    const projectRoot = await mkdtemp(join(tmpdir(), "omb-paths-project-"));
+    const codebuddyHomeRoot = await mkdtemp(join(tmpdir(), "omb-paths-codex-"));
     process.env.CODEBUDDY_HOME = codebuddyHomeRoot;
 
     try {
@@ -264,7 +264,7 @@ describe("listInstalledSkillDirectories", () => {
     }
   });
   it("detects overlapping legacy and canonical user skill roots including content mismatches", async () => {
-    const homeRoot = await mkdtemp(join(tmpdir(), "omx-paths-home-"));
+    const homeRoot = await mkdtemp(join(tmpdir(), "omb-paths-home-"));
     const codebuddyHomeRoot = join(homeRoot, ".codebuddy");
     const legacyRoot = join(homeRoot, ".agents", "skills");
     process.env.HOME = homeRoot;
@@ -302,7 +302,7 @@ describe("listInstalledSkillDirectories", () => {
   });
 
   it("treats a legacy link to canonical skills as the same resolved target", async () => {
-    const homeRoot = await mkdtemp(join(tmpdir(), "omx-paths-linked-home-"));
+    const homeRoot = await mkdtemp(join(tmpdir(), "omb-paths-linked-home-"));
     const codebuddyHomeRoot = join(homeRoot, ".codebuddy");
     const canonicalSkillsRoot = join(codebuddyHomeRoot, "skills");
     const legacyParent = join(homeRoot, ".agents");
@@ -400,38 +400,44 @@ describe("packageRoot", () => {
   });
 });
 
-describe("OMX launcher path resolution", () => {
-  const originalEntryPath = process.env[OMX_ENTRY_PATH_ENV];
-  const originalStartupCwd = process.env[OMX_STARTUP_CWD_ENV];
+describe("OMB launcher path resolution", () => {
+  const originalEntryPath = process.env[OMB_ENTRY_PATH_ENV];
+  const originalOmbEntryPath = process.env[OMB_ENTRY_PATH_ENV];
+  const originalStartupCwd = process.env[OMB_STARTUP_CWD_ENV];
 
   afterEach(() => {
     if (typeof originalEntryPath === "string") {
-      process.env[OMX_ENTRY_PATH_ENV] = originalEntryPath;
+      process.env[OMB_ENTRY_PATH_ENV] = originalEntryPath;
     } else {
-      delete process.env[OMX_ENTRY_PATH_ENV];
+      delete process.env[OMB_ENTRY_PATH_ENV];
+    }
+    if (typeof originalOmbEntryPath === "string") {
+      process.env[OMB_ENTRY_PATH_ENV] = originalOmbEntryPath;
+    } else {
+      delete process.env[OMB_ENTRY_PATH_ENV];
     }
     if (typeof originalStartupCwd === "string") {
-      process.env[OMX_STARTUP_CWD_ENV] = originalStartupCwd;
+      process.env[OMB_STARTUP_CWD_ENV] = originalStartupCwd;
     } else {
-      delete process.env[OMX_STARTUP_CWD_ENV];
+      delete process.env[OMB_STARTUP_CWD_ENV];
     }
   });
 
   it("resolves relative launcher paths against the recorded startup cwd", async () => {
-    const startupCwd = await mkdtemp(join(tmpdir(), "omx-launcher-start-"));
-    const laterCwd = await mkdtemp(join(tmpdir(), "omx-launcher-later-"));
+    const startupCwd = await mkdtemp(join(tmpdir(), "omb-launcher-start-"));
+    const laterCwd = await mkdtemp(join(tmpdir(), "omb-launcher-later-"));
     try {
       const launcherDir = join(startupCwd, "dist", "cli");
-      const launcherPath = join(launcherDir, "omx.js");
+      const launcherPath = join(launcherDir, "omb.js");
       await mkdir(launcherDir, { recursive: true });
       await writeFile(launcherPath, "#!/usr/bin/env node\n", "utf-8");
 
-      const resolved = resolveOmxEntryPath({
-        argv1: "dist/cli/omx.js",
+      const resolved = resolveOmbEntryPath({
+        argv1: "dist/cli/omb.js",
         cwd: laterCwd,
         env: {
           ...process.env,
-          [OMX_STARTUP_CWD_ENV]: startupCwd,
+          [OMB_STARTUP_CWD_ENV]: startupCwd,
         },
       });
 
@@ -443,47 +449,47 @@ describe("OMX launcher path resolution", () => {
   });
 
   it("records launcher context once so later cwd changes keep the absolute entry path", async () => {
-    const startupCwd = await mkdtemp(join(tmpdir(), "omx-launcher-record-"));
+    const startupCwd = await mkdtemp(join(tmpdir(), "omb-launcher-record-"));
     try {
       const launcherDir = join(startupCwd, "dist", "cli");
-      const launcherPath = join(launcherDir, "omx.js");
+      const launcherPath = join(launcherDir, "omb.js");
       await mkdir(launcherDir, { recursive: true });
       await writeFile(launcherPath, "#!/usr/bin/env node\n", "utf-8");
 
-      delete process.env[OMX_ENTRY_PATH_ENV];
-      delete process.env[OMX_STARTUP_CWD_ENV];
-      rememberOmxLaunchContext({
-        argv1: "dist/cli/omx.js",
+      delete process.env[OMB_ENTRY_PATH_ENV];
+      delete process.env[OMB_STARTUP_CWD_ENV];
+      rememberOmbLaunchContext({
+        argv1: "dist/cli/omb.js",
         cwd: startupCwd,
         env: process.env,
       });
 
-      assert.equal(process.env[OMX_STARTUP_CWD_ENV], startupCwd);
-      assert.equal(process.env[OMX_ENTRY_PATH_ENV], launcherPath);
+      assert.equal(process.env[OMB_STARTUP_CWD_ENV], startupCwd);
+      assert.equal(process.env[OMB_ENTRY_PATH_ENV], launcherPath);
     } finally {
       await rm(startupCwd, { recursive: true, force: true });
     }
   });
 
   it("falls back to the packaged CLI entry when argv1 points at a non-CLI script", async () => {
-    const startupCwd = await mkdtemp(join(tmpdir(), "omx-launcher-cli-fallback-start-"));
-    const packageRootDir = await mkdtemp(join(tmpdir(), "omx-launcher-cli-fallback-root-"));
+    const startupCwd = await mkdtemp(join(tmpdir(), "omb-launcher-cli-fallback-start-"));
+    const packageRootDir = await mkdtemp(join(tmpdir(), "omb-launcher-cli-fallback-root-"));
     try {
       const hookDir = join(startupCwd, "dist", "scripts");
       const hookPath = join(hookDir, "codebuddy-native-hook.js");
       const cliDir = join(packageRootDir, "dist", "cli");
-      const cliPath = join(cliDir, "omx.js");
+      const cliPath = join(cliDir, "omb.js");
       await mkdir(hookDir, { recursive: true });
       await mkdir(cliDir, { recursive: true });
       await writeFile(hookPath, "#!/usr/bin/env node\n", "utf-8");
       await writeFile(cliPath, "#!/usr/bin/env node\n", "utf-8");
 
-      const resolved = resolveOmxCliEntryPath({
+      const resolved = resolveOmbCliEntryPath({
         argv1: "dist/scripts/codebuddy-native-hook.js",
         cwd: startupCwd,
         env: {
           ...process.env,
-          [OMX_STARTUP_CWD_ENV]: startupCwd,
+          [OMB_STARTUP_CWD_ENV]: startupCwd,
         },
         packageRootDir,
       });
@@ -496,19 +502,19 @@ describe("OMX launcher path resolution", () => {
   });
 
   it("keeps the resolved path when argv1 already points at the CLI entry", async () => {
-    const startupCwd = await mkdtemp(join(tmpdir(), "omx-launcher-cli-direct-start-"));
+    const startupCwd = await mkdtemp(join(tmpdir(), "omb-launcher-cli-direct-start-"));
     try {
       const cliDir = join(startupCwd, "dist", "cli");
-      const cliPath = join(cliDir, "omx.js");
+      const cliPath = join(cliDir, "omb.js");
       await mkdir(cliDir, { recursive: true });
       await writeFile(cliPath, "#!/usr/bin/env node\n", "utf-8");
 
-      const resolved = resolveOmxCliEntryPath({
-        argv1: "dist/cli/omx.js",
+      const resolved = resolveOmbCliEntryPath({
+        argv1: "dist/cli/omb.js",
         cwd: startupCwd,
         env: {
           ...process.env,
-          [OMX_STARTUP_CWD_ENV]: startupCwd,
+          [OMB_STARTUP_CWD_ENV]: startupCwd,
         },
       });
 
@@ -518,23 +524,23 @@ describe("OMX launcher path resolution", () => {
     }
   });
 
-  it("falls back from a non-OMX host binary to the packaged CLI entry", async () => {
-    const startupCwd = await mkdtemp(join(tmpdir(), "omx-launcher-cli-host-start-"));
-    const packageRootDir = await mkdtemp(join(tmpdir(), "omx-launcher-cli-host-root-"));
+  it("falls back from a non-OMB host binary to the packaged CLI entry", async () => {
+    const startupCwd = await mkdtemp(join(tmpdir(), "omb-launcher-cli-host-start-"));
+    const packageRootDir = await mkdtemp(join(tmpdir(), "omb-launcher-cli-host-root-"));
     try {
       const hostPath = join(startupCwd, "codex-host");
       const cliDir = join(packageRootDir, "dist", "cli");
-      const cliPath = join(cliDir, "omx.js");
+      const cliPath = join(cliDir, "omb.js");
       await writeFile(hostPath, "#!/usr/bin/env node\n", "utf-8");
       await mkdir(cliDir, { recursive: true });
       await writeFile(cliPath, "#!/usr/bin/env node\n", "utf-8");
 
-      const resolved = resolveOmxCliEntryPath({
+      const resolved = resolveOmbCliEntryPath({
         argv1: hostPath,
         cwd: startupCwd,
         env: {
           ...process.env,
-          [OMX_STARTUP_CWD_ENV]: startupCwd,
+          [OMB_STARTUP_CWD_ENV]: startupCwd,
         },
         packageRootDir,
       });

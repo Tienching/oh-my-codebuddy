@@ -25,7 +25,7 @@ describe("adaptCommand", () => {
 	});
 
 	it("emits compact JSON envelopes when --json is set", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "omx-adapt-cli-"));
+		const cwd = await mkdtemp(join(tmpdir(), "omb-adapt-cli-"));
 		const out: string[] = [];
 		try {
 			await adaptCommand(["openclaw", "probe", "--json"], {
@@ -50,11 +50,11 @@ describe("adaptCommand", () => {
 	});
 
 	it("reports OpenClaw local observation details in JSON status output", async () => {
-		const cwd = await mkdtemp(join(tmpdir(), "omx-adapt-cli-openclaw-"));
+		const cwd = await mkdtemp(join(tmpdir(), "omb-adapt-cli-openclaw-"));
 		const out: string[] = [];
 		try {
 			process.env.CODEX_HOME = join(cwd, ".codex-home");
-			process.env.OMX_OPENCLAW = "1";
+			process.env.OMB_OPENCLAW = "1";
 			await adaptCommand(["openclaw", "status", "--json"], {
 				cwd,
 				stdout: (line) => out.push(line),
@@ -67,7 +67,7 @@ describe("adaptCommand", () => {
 			assert.equal(parsed.openclaw?.observedState, "missing-config");
 		} finally {
 			delete process.env.CODEX_HOME;
-			delete process.env.OMX_OPENCLAW;
+			delete process.env.OMB_OPENCLAW;
 			await rm(cwd, { recursive: true, force: true });
 		}
 	});

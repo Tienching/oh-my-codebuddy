@@ -139,8 +139,8 @@ describe('notify-hook per-worker idle notification', () => {
 
   it('fires notification on working->done transition', async () => {
     await withTempWorkingDir(async (cwd) => {
-      const stateDir = join(cwd, '.omx', 'state');
-      const logsDir = join(cwd, '.omx', 'logs');
+      const stateDir = join(cwd, '.omb', 'state');
+      const logsDir = join(cwd, '.omb', 'logs');
       const teamName = 'done-team';
       const teamDir = join(stateDir, 'team', teamName);
       const workersDir = join(teamDir, 'workers');
@@ -280,8 +280,8 @@ exit 0
 
   it('injects worker-idle notification even while the leader pane has an active task', async () => {
     await withTempWorkingDir(async (cwd) => {
-      const stateDir = join(cwd, '.omx', 'state');
-      const logsDir = join(cwd, '.omx', 'logs');
+      const stateDir = join(cwd, '.omb', 'state');
+      const logsDir = join(cwd, '.omb', 'logs');
       const teamName = 'busy-leader-worker-idle';
       const teamDir = join(stateDir, 'team', teamName);
       const workersDir = join(teamDir, 'workers');
@@ -708,7 +708,7 @@ exit 0
       assert.ok(workerIdleEvent.created_at, 'event should have a created_at');
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-      assert.doesNotMatch(tmuxLog, /\[OMX_INTENT:/);
+      assert.doesNotMatch(tmuxLog, /\[OMB_INTENT:/);
     });
   });
 

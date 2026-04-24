@@ -19,7 +19,7 @@ async function writeRollout(
   await writeFile(join(dir, fileName), `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf-8');
 }
 
-function runOmx(cwd: string, argv: string[], envOverrides: Record<string, string> = {}) {
+function runOmb(cwd: string, argv: string[], envOverrides: Record<string, string> = {}) {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = join(testDir, '..', '..', '..');
   const ombBin = join(repoRoot, 'dist', 'cli', 'omb.js');
@@ -68,7 +68,7 @@ describe('omb session search', () => {
         },
       ]);
 
-      const result = runOmx(cwd, ['session', 'search', 'team api', '--project', 'current', '--json'], {
+      const result = runOmb(cwd, ['session', 'search', 'team api', '--project', 'current', '--json'], {
         CODEBUDDY_HOME: codebuddyHomeDir,
       });
 

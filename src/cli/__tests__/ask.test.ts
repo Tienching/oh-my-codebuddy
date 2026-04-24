@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseAskArgs } from '../ask.js';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
@@ -119,7 +119,7 @@ describe('omb ask', () => {
   it('preserves child stdout/stderr and exact non-zero exit code', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-ask-contract-'));
     try {
-      const res = runOmx(wd, ['ask', 'claude', 'pass-through'], {
+      const res = runOmb(wd, ['ask', 'claude', 'pass-through'], {
         OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
         OMB_ASK_STUB_STDOUT: 'artifact-path-from-stub.md\n',
         OMB_ASK_STUB_STDERR: 'stub-warning-line\n',
@@ -138,7 +138,7 @@ describe('omb ask', () => {
   it('resolves relative advisor override path from package root even on non-root cwd', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-ask-relative-'));
     try {
-      const res = runOmx(wd, ['ask', 'gemini', 'relative-check'], {
+      const res = runOmb(wd, ['ask', 'gemini', 'relative-check'], {
         OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
         OMB_ASK_STUB_STDOUT: 'relative-override-ok\n',
         OMB_ASK_STUB_EXIT_CODE: '0',
@@ -163,7 +163,7 @@ describe('omb ask', () => {
       );
       await chmod(join(fakeBin, 'claude'), 0o755);
 
-      const res = runOmx(wd, ['ask', 'claude', 'non-root-default'], {
+      const res = runOmb(wd, ['ask', 'claude', 'non-root-default'], {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
       });
       if (shouldSkipForSpawnPermissions(res.error)) return;
@@ -201,14 +201,14 @@ describe('omb ask', () => {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
       };
 
-      const claudeRes = runOmx(wd, ['ask', 'claude', '--print', 'claude-long-flag'], env);
+      const claudeRes = runOmb(wd, ['ask', 'claude', '--print', 'claude-long-flag'], env);
       if (shouldSkipForSpawnPermissions(claudeRes.error)) return;
       assert.equal(claudeRes.status, 0, claudeRes.stderr || claudeRes.stdout);
       const claudeArtifactPath = claudeRes.stdout.trim();
       const claudeArtifact = await readFile(claudeArtifactPath, 'utf-8');
       assert.match(claudeArtifact, /CLAUDE_PRINT_OK:claude-long-flag/);
 
-      const geminiRes = runOmx(wd, ['ask', 'gemini', '--prompt', 'gemini-long-flag'], env);
+      const geminiRes = runOmb(wd, ['ask', 'gemini', '--prompt', 'gemini-long-flag'], env);
       assert.equal(geminiRes.status, 0, geminiRes.stderr || geminiRes.stdout);
       const geminiArtifactPath = geminiRes.stdout.trim();
       const geminiArtifact = await readFile(geminiArtifactPath, 'utf-8');
@@ -238,7 +238,7 @@ describe('omb ask', () => {
       );
       await chmod(join(fakeBin, 'claude'), 0o755);
 
-      const res = runOmx(
+      const res = runOmb(
         wd,
         ['ask', 'claude', '--agent-prompt', 'executor', 'ship', 'feature'],
         { PATH: `${fakeBin}:${process.env.PATH || ''}`, CODEBUDDY_HOME: codebuddyHome },
@@ -273,7 +273,7 @@ describe('omb ask', () => {
       );
       await chmod(join(fakeBin, 'gemini'), 0o755);
 
-      const res = runOmx(
+      const res = runOmb(
         wd,
         ['ask', 'gemini', '--agent-prompt=planner', '--prompt', 'do', 'planning'],
         { PATH: `${fakeBin}:${process.env.PATH || ''}`, CODEBUDDY_HOME: codebuddyHome },

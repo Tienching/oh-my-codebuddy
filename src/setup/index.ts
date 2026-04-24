@@ -28,7 +28,7 @@ export {
   type ConfigMergeInput,
   type ConfigMergeResult,
   mergeConfig,
-  shouldOmxManageTui,
+  shouldOmbManageTui,
   buildDesiredSettingsState,
   buildBootstrapSettingsJson,
 } from "./config-merger.js";

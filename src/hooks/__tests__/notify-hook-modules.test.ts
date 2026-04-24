@@ -242,7 +242,7 @@ describe('notify-hook/auto-nudge – detectStallPattern', () => {
   it('ignores orchestration intent tags when normalizing stall text', async () => {
     const { normalizeAutoNudgeSignatureText } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(
-      normalizeAutoNudgeSignatureText('Team alpha: 1 msg(s) for leader. [OMX_INTENT:pending-mailbox-review]'),
+      normalizeAutoNudgeSignatureText('Team alpha: 1 msg(s) for leader. [OMB_INTENT:pending-mailbox-review]'),
       'team alpha 1 msg s for leader',
     );
   });
@@ -431,7 +431,7 @@ describe('notify-hook/orchestration-intent – taxonomy helpers', () => {
   it('appends and strips orchestration intent tags', async () => {
     const { appendOrchestrationIntentTag, stripOrchestrationIntentTags } = await loadModule('notify-hook/orchestration-intent.js');
     const tagged = appendOrchestrationIntentTag('Team alpha: 1 msg(s) for leader.', 'pending-mailbox-review');
-    assert.equal(tagged, 'Team alpha: 1 msg(s) for leader. [OMX_INTENT:pending-mailbox-review]');
+    assert.equal(tagged, 'Team alpha: 1 msg(s) for leader. [OMB_INTENT:pending-mailbox-review]');
     assert.equal(stripOrchestrationIntentTags(tagged).trim(), 'Team alpha: 1 msg(s) for leader.');
   });
 

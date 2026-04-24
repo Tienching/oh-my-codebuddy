@@ -2,7 +2,6 @@ import {
   evaluateDelegationEnforcement,
   isExperimentalMagicKeywordRouterEnabled,
   OMB_MAGIC_KEYWORD_ROUTER_ENV,
-  OMX_MAGIC_KEYWORD_ROUTER_ENV,
   type DelegationEnforcementDecision,
   type DelegationEnforcementOptions,
 } from '../delegation-enforcer.js';
@@ -15,7 +14,7 @@ import {
 export interface DelegationRoutingPlan {
   enabled: boolean;
   featureFlag: typeof OMB_MAGIC_KEYWORD_ROUTER_ENV;
-  fallbackFeatureFlag: typeof OMX_MAGIC_KEYWORD_ROUTER_ENV;
+  fallbackFeatureFlag: typeof OMB_MAGIC_KEYWORD_ROUTER_ENV;
   decomposition: TaskDecompositionPlan;
   enforcement: DelegationEnforcementDecision;
 }
@@ -25,7 +24,6 @@ export {
   evaluateDelegationEnforcement,
   isExperimentalMagicKeywordRouterEnabled,
   OMB_MAGIC_KEYWORD_ROUTER_ENV,
-  OMX_MAGIC_KEYWORD_ROUTER_ENV,
 };
 
 export function buildDelegationRoutingPlan(
@@ -36,7 +34,7 @@ export function buildDelegationRoutingPlan(
   return {
     enabled: isExperimentalMagicKeywordRouterEnabled(options.env),
     featureFlag: OMB_MAGIC_KEYWORD_ROUTER_ENV,
-    fallbackFeatureFlag: OMX_MAGIC_KEYWORD_ROUTER_ENV,
+    fallbackFeatureFlag: OMB_MAGIC_KEYWORD_ROUTER_ENV,
     decomposition,
     enforcement: evaluateDelegationEnforcement(task, decomposition, options),
   };

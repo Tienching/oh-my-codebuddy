@@ -110,6 +110,6 @@ Implementation should be considered complete only when tests prove:
 2. `team + ralph` is allowed in both activation orders
 3. `team + ultrawork` is allowed in both activation orders
 4. unsupported overlaps deny without mutation
-5. denial messages mention both `omb state` and `omx_state.*`
+5. denial messages mention both `omb state` and `omb_state.*`
 6. HUD / overlay / stop-hook consumers honor the combined set consistently
 7. `autopilot` and `autoresearch` still reject overlap attempts

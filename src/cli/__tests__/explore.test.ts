@@ -23,7 +23,7 @@ import {
 } from '../explore.js';
 import { withPackagedExploreHarnessHidden, withPackagedExploreHarnessLock } from './packaged-explore-harness-lock.js';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
@@ -551,7 +551,7 @@ describe('exploreCommand', () => {
       await chmod(sparkshellStub, 0o755);
       await chmod(harnessStub, 0o755);
 
-      const result = runOmx(wd, ['explore', '--prompt', 'git log --oneline'], {
+      const result = runOmb(wd, ['explore', '--prompt', 'git log --oneline'], {
         OMB_SPARKSHELL_BIN: sparkshellStub,
         OMB_EXPLORE_BIN: harnessStub,
       });
@@ -577,7 +577,7 @@ describe('exploreCommand', () => {
       );
       await chmod(harnessStub, 0o755);
 
-      const result = runOmx(wd, ['explore', '--prompt', 'git log --oneline'], {
+      const result = runOmb(wd, ['explore', '--prompt', 'git log --oneline'], {
         OMB_SPARKSHELL_BIN: join(wd, 'missing-sparkshell'),
         OMB_EXPLORE_BIN: harnessStub,
       });
@@ -608,7 +608,7 @@ describe('exploreCommand', () => {
       await chmod(sparkshellStub, 0o755);
       await chmod(harnessStub, 0o755);
 
-      const result = runOmx(wd, ['explore', '--prompt', 'git log --oneline'], {
+      const result = runOmb(wd, ['explore', '--prompt', 'git log --oneline'], {
         OMB_SPARKSHELL_BIN: sparkshellStub,
         OMB_EXPLORE_BIN: harnessStub,
       });
@@ -684,7 +684,7 @@ describe('exploreCommand', () => {
       );
       await chmod(stub, 0o755);
 
-      const result = runOmx(wd, ['explore', '--prompt', 'find auth'], { OMB_EXPLORE_BIN: stub });
+      const result = runOmb(wd, ['explore', '--prompt', 'find auth'], { OMB_EXPLORE_BIN: stub });
       if (shouldSkipForSpawnPermissions(result.error)) return;
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.equal(result.stdout, '# Answer\nReady to proceed\n');
@@ -701,7 +701,7 @@ describe('exploreCommand', () => {
         const codexStub = await writeEnvNodeCodexStub(wd, capturePath);
         const testPath = await createExploreTestPath(wd);
 
-        const result = runOmx(wd, ['explore', '--prompt', 'find buildTmuxPaneCommand'], {
+        const result = runOmb(wd, ['explore', '--prompt', 'find buildTmuxPaneCommand'], {
           OMB_EXPLORE_CODEX_BIN: codexStub,
           PATH: testPath,
         });
@@ -716,7 +716,7 @@ describe('exploreCommand', () => {
         assert.match(captured, /BLOCKED_STATUS=(?!0)\d+/);
         assert.match(captured, /--ARGV--[\s\S]*\nexec\n/);
         assert.match(captured, /--ALLOWED_STDOUT--[\s\S]*ripgrep/i);
-        assert.match(captured, /--BLOCKED_STDERR--[\s\S]*not on the (?:omx|omb) explore allowlist/);
+        assert.match(captured, /--BLOCKED_STDERR--[\s\S]*not on the (?:omb|omb) explore allowlist/);
       });
     } finally {
       await rm(wd, { recursive: true, force: true });
@@ -733,7 +733,7 @@ describe('exploreCommand', () => {
         const promptPath = join(wd, 'prompt.md');
         await writeFile(promptPath, 'find prompt-file support\n');
 
-        const result = runOmx(wd, ['explore', '--prompt-file', promptPath], {
+        const result = runOmb(wd, ['explore', '--prompt-file', promptPath], {
           OMB_EXPLORE_CODEX_BIN: codexStub,
           PATH: testPath,
         });

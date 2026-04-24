@@ -2,38 +2,38 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readPlanningArtifacts } from "../planning/artifacts.js";
 import {
-	ADAPT_SCHEMA_VERSION,
-	type AdaptDoctorIssue,
-	type AdaptDoctorReport,
-	type AdaptEnvelope,
-	type AdaptInitResult,
-	type AdaptPlanningLink,
-	type AdaptProbeReport,
-	type AdaptStatusReport,
-	type AdaptTarget,
+  ADAPT_SCHEMA_VERSION,
+  type AdaptDoctorIssue,
+  type AdaptDoctorReport,
+  type AdaptEnvelope,
+  type AdaptInitResult,
+  type AdaptPlanningLink,
+  type AdaptProbeReport,
+  type AdaptStatusReport,
+  type AdaptTarget,
 } from "./contracts.js";
 import {
-	applyHermesEnvelope,
-	applyHermesProbe,
-	applyHermesStatus,
-	buildHermesBootstrapMetadata,
-	buildHermesRuntimeObservation,
-	collectHermesEvidence,
+  applyHermesEnvelope,
+  applyHermesProbe,
+  applyHermesStatus,
+  buildHermesBootstrapMetadata,
+  buildHermesRuntimeObservation,
+  collectHermesEvidence,
 } from "./hermes.js";
 import {
-	buildOpenClawDoctorReport,
-	buildOpenClawEnvelope,
-	buildOpenClawProbeReport,
-	buildOpenClawStatusReport,
-	initOpenClawFoundation,
+  buildOpenClawDoctorReport,
+  buildOpenClawEnvelope,
+  buildOpenClawProbeReport,
+  buildOpenClawStatusReport,
+  initOpenClawFoundation,
 } from "./openclaw.js";
 import { resolveAdaptPaths } from "./paths.js";
 import { getAdaptTargetDescriptor, listAdaptTargets } from "./registry.js";
 
 const FOUNDATION_CONSTRAINTS = [
 	"Thin adapter surface only; no bidirectional control plane is claimed in this foundation PR.",
-	"No direct writes to .omx/state/... or target runtime internals.",
-	"Capability reporting is asymmetric: OMX-owned, shared-contract, and target-observed surfaces are reported separately.",
+	"No direct writes to .omb/state/... or target runtime internals.",
+	"Capability reporting is asymmetric: OMB-owned, shared-contract, and target-observed surfaces are reported separately.",
 ];
 
 
@@ -75,7 +75,7 @@ export function buildAdaptPlanningLink(cwd: string): AdaptPlanningLink {
 			testSpecPaths: [],
 			deepInterviewSpecPaths: [],
 			summary:
-				"No canonical OMX PRD/test-spec artifacts are present in this worktree.",
+				"No canonical OMB PRD/test-spec artifacts are present in this worktree.",
 		};
 	}
 
@@ -171,7 +171,7 @@ export function buildAdaptProbeReport(
 			detail: descriptor.followupHint,
 		},
 		nextSteps: [
-			`Run omx adapt ${target} init --write to materialize OMX-owned adapter artifacts.`,
+			`Run omb adapt ${target} init --write to materialize OMB-owned adapter artifacts.`,
 			descriptor.followupHint,
 		],
 	};
@@ -220,13 +220,13 @@ export function buildAdaptStatusReport(
 		target,
 		phase: "foundation",
 		summary: initialized
-			? `${descriptor.displayName} adapter foundation is initialized under OMX-owned paths.`
+			? `${descriptor.displayName} adapter foundation is initialized under OMB-owned paths.`
 			: `${descriptor.displayName} adapter foundation has not been initialized yet.`,
 		adapter: {
 			state: initialized ? "initialized" : "not-initialized",
 			detail: initialized
-				? "Adapter foundation artifacts exist under .omx/adapters/<target>/..."
-				: "Run init --write to create OMX-owned adapter artifacts.",
+				? "Adapter foundation artifacts exist under .omb/adapters/<target>/..."
+				: "Run init --write to create OMB-owned adapter artifacts.",
 			configPath: paths.configPath,
 			envelopePath: paths.envelopePath,
 		},
@@ -277,7 +277,7 @@ export function buildAdaptDoctorReport(
 	if (status.adapter.state === "not-initialized") {
 		issues.push({
 			code: "adapter_not_initialized",
-			message: `No adapter foundation artifacts exist for ${target} under ${join(".omx", "adapters", target)}.`,
+			message: `No adapter foundation artifacts exist for ${target} under ${join(".omb", "adapters", target)}.`,
 		});
 	}
 
@@ -285,7 +285,7 @@ export function buildAdaptDoctorReport(
 		issues.push({
 			code: "planning_artifacts_missing",
 			message:
-				"No canonical OMX PRD artifact is available to link into the adapter envelope.",
+				"No canonical OMB PRD artifact is available to link into the adapter envelope.",
 		});
 	}
 
@@ -299,11 +299,11 @@ export function buildAdaptDoctorReport(
 		timestamp: toIsoTimestamp(now),
 		target,
 		phase: "foundation",
-		summary: `Foundation doctor for ${descriptor.displayName} reports only OMX-owned adapter readiness and shared planning linkage.`,
+		summary: `Foundation doctor for ${descriptor.displayName} reports only OMB-owned adapter readiness and shared planning linkage.`,
 		issues,
 		nextSteps: [
-			`Run omx adapt ${target} init --write.`,
-			"Keep follow-on integration work out of .omx/state/... and target runtime internals unless a reviewed contract exists.",
+			`Run omb adapt ${target} init --write.`,
+			"Keep follow-on integration work out of .omb/state/... and target runtime internals unless a reviewed contract exists.",
 			descriptor.followupHint,
 		],
 	};
@@ -348,7 +348,7 @@ export async function buildAdaptDoctorReportForTarget(
 	return {
 		...report,
 		summary:
-			"Hermes doctor inspects external ACP, gateway, and session-store evidence plus OMX-owned adapter readiness.",
+			"Hermes doctor inspects external ACP, gateway, and session-store evidence plus OMB-owned adapter readiness.",
 		issues,
 		nextSteps: [
 			...bootstrap.nextSteps,
@@ -425,7 +425,7 @@ export function initAdaptFoundation(
 		target,
 		write,
 		summary: write
-			? `${descriptor.displayName} adapter foundation was written under OMX-owned paths.`
+			? `${descriptor.displayName} adapter foundation was written under OMB-owned paths.`
 			: `${descriptor.displayName} adapter foundation preview is ready; rerun with --write to materialize it.`,
 		previewPaths,
 		wrotePaths,
@@ -455,7 +455,7 @@ export async function initAdaptFoundationForTarget(
 		...result,
 		envelope,
 		summary: write
-			? "Hermes adapter metadata was written under OMX-owned paths with external runtime evidence."
+			? "Hermes adapter metadata was written under OMB-owned paths with external runtime evidence."
 			: "Hermes adapter metadata preview includes external ACP/gateway/session-store evidence; rerun with --write to materialize it.",
 	};
 }

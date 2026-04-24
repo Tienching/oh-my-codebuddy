@@ -330,7 +330,7 @@ fn discover_codex_support_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
         let home = PathBuf::from(home);
-        for relative in [".omb", ".omx", ".codex"] {
+        for relative in [".omb", ".omb", ".codex"] {
             let dir = home.join(relative);
             if dir.is_dir() {
                 dirs.push(dir);
@@ -351,7 +351,7 @@ fn temp_output_path() -> PathBuf {
 fn compose_exec_prompt(user_prompt: &str, prompt_contract: &str) -> String {
     format!(
         concat!(
-            "You are OMX Explore, a low-cost read-only repository exploration harness.\\n",
+            "You are OMB Explore, a low-cost read-only repository exploration harness.\\n",
             "Operate strictly in read-only mode. You may use repository-inspection shell commands only.\\n",
             "Preferred commands: rg, grep, and tightly bounded read-only bash wrappers over rg/grep/ls/find/wc/cat/head/tail.\\n",
             "Do not write, delete, rename, or modify files. Do not run git commands that alter working state.\\n",
@@ -700,7 +700,7 @@ fn validate_repo_paths(command_name: &str, args: &[String]) -> Result<(), String
         let normalized = normalize_candidate_path(&repo_root, operand);
         if !normalized.starts_with(&repo_root) {
             return Err(format!(
-                "path `{operand}` escapes the omx explore repository root {}",
+                "path `{operand}` escapes the omb explore repository root {}",
                 repo_root.display()
             ));
         }
@@ -708,7 +708,7 @@ fn validate_repo_paths(command_name: &str, args: &[String]) -> Result<(), String
             if let Some(canonical_repo_root) = &canonical_repo_root {
                 if !canonical_candidate.starts_with(canonical_repo_root) {
                     return Err(format!(
-                        "path `{operand}` resolves outside the omx explore repository root {}",
+                        "path `{operand}` resolves outside the omb explore repository root {}",
                         canonical_repo_root.display()
                     ));
                 }
@@ -984,12 +984,12 @@ mod tests {
     }
 
     #[test]
-    fn discover_codex_support_dirs_includes_home_omb_omx_and_codex_when_present() {
+    fn discover_codex_support_dirs_includes_home_omb_omb_and_codex_when_present() {
         let _guard = env_lock();
         let root = temp_allowlist_dir().expect("temp root");
         let home_dir = root.path.join("home");
         create_dir_all(home_dir.join(".omb")).expect("create .omb");
-        create_dir_all(home_dir.join(".omx")).expect("create .omx");
+        create_dir_all(home_dir.join(".omb")).expect("create .omb");
         create_dir_all(home_dir.join(".codex")).expect("create .codex");
         let original_home = env::var_os("HOME");
         unsafe {
@@ -1002,7 +1002,7 @@ mod tests {
             Some(value) => unsafe { env::set_var("HOME", value) },
             None => unsafe { env::remove_var("HOME") },
         }
-        assert_eq!(dirs, vec![home_dir.join(".omb"), home_dir.join(".omx"), home_dir.join(".codex")]);
+        assert_eq!(dirs, vec![home_dir.join(".omb"), home_dir.join(".omb"), home_dir.join(".codex")]);
     }
 
     #[test]

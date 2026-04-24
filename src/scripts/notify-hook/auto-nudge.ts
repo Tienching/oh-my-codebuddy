@@ -15,7 +15,7 @@ import { evaluatePaneInjectionReadiness, mapPaneInjectionReadinessReason, sendPa
 import { stripOrchestrationIntentTags } from './orchestration-intent.js';
 import { buildCapturePaneArgv, DEFAULT_MARKER, tmuxHookExplicitlyDisablesInjection } from '../tmux-hook-engine.js';
 import {
-  isManagedOmxSession,
+  isManagedOmbSession,
   resolveManagedCurrentPane,
   resolveManagedPaneFromAnchor,
   resolveManagedSessionPane,
@@ -27,7 +27,7 @@ export const SKILL_ACTIVE_STATE_FILE = 'skill-active-state.json';
 export const DEEP_INTERVIEW_BLOCKED_APPROVAL_INPUTS = ['yes', 'y', 'proceed', 'continue', 'ok', 'sure', 'go ahead', 'next i should'];
 export const DEEP_INTERVIEW_INPUT_LOCK_MESSAGE = 'Deep interview is active; auto-approval shortcuts are blocked until the interview finishes.';
 const LEGACY_INJECT_MARKER = '[OMB_TMUX_INJECT]';
-const AUTO_NUDGE_INJECT_MARKER = '[OMX_TMUX_INJECT]';
+const AUTO_NUDGE_INJECT_MARKER = '[OMB_TMUX_INJECT]';
 const DEEP_INTERVIEW_ERROR_PATTERNS = [' error', ' failed', ' failure', ' exception', 'unable to continue', 'cannot continue', 'could not continue'];
 const DEEP_INTERVIEW_ABORT_PATTERNS = ['aborted', 'cancelled', 'canceled'];
 const DEEP_INTERVIEW_ABORT_INPUTS = new Set(['abort', 'cancel', 'stop']);
@@ -58,7 +58,6 @@ function normalizeInputLock(raw) {
 export function normalizeBlockedAutoApprovalInput(text) {
   return safeString(text)
     .toLowerCase()
-    .replace(/\[omx_tmux_inject\]/gi, '')
     .replace(/\[omb_tmux_inject\]/gi, '')
     .replace(/[^a-z]+/g, ' ')
     .trim();
@@ -363,7 +362,7 @@ export function normalizeAutoNudgeConfig(raw) {
 
 export async function loadAutoNudgeConfig() {
   const codexHomePath = process.env.CODEX_HOME || join(homedir(), '.codex');
-  const configPath = join(codexHomePath, '.omx-config.json');
+  const configPath = join(codexHomePath, '.omb-config.json');
   const raw = await readJsonIfExists(configPath, null);
   if (!raw || typeof raw !== 'object') return normalizeAutoNudgeConfig(null);
   return normalizeAutoNudgeConfig(raw.autoNudge);
@@ -372,7 +371,7 @@ export async function loadAutoNudgeConfig() {
 async function localTmuxInjectionDisabled(cwd) {
   const normalizedCwd = safeString(cwd).trim();
   if (!normalizedCwd) return false;
-  const raw = await readJsonIfExists(join(normalizedCwd, '.omx', 'tmux-hook.json'), null);
+  const raw = await readJsonIfExists(join(normalizedCwd, '.omb', 'tmux-hook.json'), null);
   return tmuxHookExplicitlyDisablesInjection(raw);
 }
 
@@ -398,7 +397,7 @@ export async function capturePane(paneId, lines = 10) {
 }
 
 export async function resolveNudgePaneTarget(stateDir: any, cwd = '', payload: any = undefined) {
-  const allowTeamWorker = safeString(process.env.OMX_TEAM_WORKER || '').trim() !== '';
+  const allowTeamWorker = safeString(process.env.OMB_TEAM_WORKER || '').trim() !== '';
   const managedCurrentPane = await resolveManagedCurrentPane(cwd, payload, { allowTeamWorker });
   if (managedCurrentPane) return managedCurrentPane;
 
@@ -440,7 +439,7 @@ export async function maybeAutoNudge({ cwd, stateDir, logsDir, payload }) {
   }
 
   const sourceName = safeString(payload?.source || '');
-  const managedSession = await isManagedOmxSession(cwd, payload, { allowTeamWorker: true });
+  const managedSession = await isManagedOmbSession(cwd, payload, { allowTeamWorker: true });
   if (!managedSession) {
     if (sourceName === 'notify-fallback-watcher-stall') return;
     await logTmuxHookEvent(logsDir, {

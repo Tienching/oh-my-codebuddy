@@ -3,21 +3,21 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'node:test';
-import { OmxQuestionError, type OmxQuestionProcessRunner } from '../client.js';
+import { OmbQuestionError, type OmbQuestionProcessRunner } from '../client.js';
 import { runDeepInterviewQuestion } from '../deep-interview.js';
 
 const tempDirs: string[] = [];
 
 async function makeRepo(): Promise<string> {
-  const cwd = await mkdtemp(join(tmpdir(), 'omx-deep-interview-question-'));
+  const cwd = await mkdtemp(join(tmpdir(), 'omb-deep-interview-question-'));
   tempDirs.push(cwd);
-  await mkdir(join(cwd, '.omx', 'state', 'sessions', 'sess-di'), { recursive: true });
+  await mkdir(join(cwd, '.omb', 'state', 'sessions', 'sess-di'), { recursive: true });
   await writeFile(
-    join(cwd, '.omx', 'state', 'session.json'),
+    join(cwd, '.omb', 'state', 'session.json'),
     JSON.stringify({ session_id: 'sess-di' }, null, 2),
   );
   await writeFile(
-    join(cwd, '.omx', 'state', 'sessions', 'sess-di', 'deep-interview-state.json'),
+    join(cwd, '.omb', 'state', 'sessions', 'sess-di', 'deep-interview-state.json'),
     JSON.stringify({
       active: true,
       mode: 'deep-interview',
@@ -35,12 +35,12 @@ afterEach(async () => {
 });
 
 describe('runDeepInterviewQuestion', () => {
-  it('tracks a pending obligation before omx question returns and satisfies it afterward', async () => {
+  it('tracks a pending obligation before omb question returns and satisfies it afterward', async () => {
     const cwd = await makeRepo();
-    const statePath = join(cwd, '.omx', 'state', 'sessions', 'sess-di', 'deep-interview-state.json');
+    const statePath = join(cwd, '.omb', 'state', 'sessions', 'sess-di', 'deep-interview-state.json');
     let inFlightQuestionStatus = '';
 
-    const runner: OmxQuestionProcessRunner = async () => {
+    const runner: OmbQuestionProcessRunner = async () => {
       const inFlightState = JSON.parse(await readFile(statePath, 'utf-8')) as {
         question_enforcement?: { status?: string; lifecycle_outcome?: string };
         lifecycle_outcome?: string;
@@ -85,7 +85,7 @@ describe('runDeepInterviewQuestion', () => {
       },
       {
         cwd,
-        argv1: '/repo/dist/cli/omx.js',
+        argv1: '/repo/dist/cli/omb.js',
         runner,
       },
     );
@@ -113,9 +113,9 @@ describe('runDeepInterviewQuestion', () => {
     assert.equal(finalState.run_outcome, undefined);
   });
 
-  it('clears the pending obligation when omx question fails after being attempted', async () => {
+  it('clears the pending obligation when omb question fails after being attempted', async () => {
     const cwd = await makeRepo();
-    const statePath = join(cwd, '.omx', 'state', 'sessions', 'sess-di', 'deep-interview-state.json');
+    const statePath = join(cwd, '.omb', 'state', 'sessions', 'sess-di', 'deep-interview-state.json');
 
     await assert.rejects(
       runDeepInterviewQuestion(
@@ -126,14 +126,14 @@ describe('runDeepInterviewQuestion', () => {
         },
         {
           cwd,
-          argv1: '/repo/dist/cli/omx.js',
+          argv1: '/repo/dist/cli/omb.js',
           runner: async () => ({
             code: 1,
             stdout: JSON.stringify({
               ok: false,
               error: {
                 code: 'team_blocked',
-                message: 'omx question is unavailable while this session owns active team mode.',
+                message: 'omb question is unavailable while this session owns active team mode.',
               },
             }),
             stderr: '',
@@ -141,7 +141,7 @@ describe('runDeepInterviewQuestion', () => {
         },
       ),
       (error) => {
-        assert.ok(error instanceof OmxQuestionError);
+        assert.ok(error instanceof OmbQuestionError);
         assert.equal(error.code, 'team_blocked');
         return true;
       },
@@ -167,7 +167,7 @@ describe('runDeepInterviewQuestion', () => {
 
   it('clears the pending obligation when question renderer launch fails', async () => {
     const cwd = await makeRepo();
-    const statePath = join(cwd, '.omx', 'state', 'sessions', 'sess-di', 'deep-interview-state.json');
+    const statePath = join(cwd, '.omb', 'state', 'sessions', 'sess-di', 'deep-interview-state.json');
 
     await assert.rejects(
       runDeepInterviewQuestion(
@@ -178,14 +178,14 @@ describe('runDeepInterviewQuestion', () => {
         },
         {
           cwd,
-          argv1: '/repo/dist/cli/omx.js',
+          argv1: '/repo/dist/cli/omb.js',
           runner: async () => ({
             code: 1,
             stdout: JSON.stringify({
               ok: false,
               error: {
                 code: 'question_runtime_failed',
-                message: 'omx question cannot open a visible renderer because this process is not running inside an attached tmux pane.',
+                message: 'omb question cannot open a visible renderer because this process is not running inside an attached tmux pane.',
               },
             }),
             stderr: '',
@@ -193,7 +193,7 @@ describe('runDeepInterviewQuestion', () => {
         },
       ),
       (error) => {
-        assert.ok(error instanceof OmxQuestionError);
+        assert.ok(error instanceof OmbQuestionError);
         assert.equal(error.code, 'question_runtime_failed');
         return true;
       },

@@ -30,7 +30,7 @@ describe("isCommandTemplateEnabled", () => {
 
 describe("command template resolution", () => {
   it("loads from .codebuddy and falls back to legacy .codex", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-command-template-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-command-template-"));
     try {
       const primaryDir = join(cwd, ".codebuddy", "commands");
       const legacyDir = join(cwd, ".codex", "commands");
@@ -70,9 +70,9 @@ describe("command template resolution", () => {
   });
 
   it("falls back to legacy user home root when needed", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-command-template-home-"));
-    const legacyHome = await mkdtemp(join(tmpdir(), "omx-codex-legacy-"));
-    const codebuddyHome = await mkdtemp(join(tmpdir(), "omx-codebuddy-home-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-command-template-home-"));
+    const legacyHome = await mkdtemp(join(tmpdir(), "omb-codex-legacy-"));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codebuddy-home-"));
     try {
       const legacyDir = join(legacyHome, ".codex", "commands");
       const projectDir = join(cwd, ".codebuddy", "commands");
@@ -114,7 +114,7 @@ describe("command template resolution", () => {
   });
 
   it("rejects invalid command names as command-template lookups", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-command-template-invalid-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-command-template-invalid-"));
     try {
       const prompt = await expandCommandPrompt(
         "../bad",

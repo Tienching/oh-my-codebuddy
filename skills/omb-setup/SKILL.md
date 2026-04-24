@@ -63,7 +63,7 @@ omb setup --force --verbose
 omb doctor
 ```
 
-3. Start CodeBuddy with OMB in the target project directory (`omx` remains the compatibility alias where needed).
+3. Start CodeBuddy with OMB in the target project directory (`omb` remains the compatibility alias where needed).
 
 ## Expected verification indicators
 

@@ -21,9 +21,9 @@ export function buildExpectedManagedTmuxSessionName(cwd: string, sessionId: stri
   const grandparentDir = basename(grandparentPath);
   const repoDir = parentDir.endsWith('.omb-worktrees')
     ? parentDir.slice(0, -'.omb-worktrees'.length)
-    : parentDir.endsWith('.omx-worktrees')
-      ? parentDir.slice(0, -'.omx-worktrees'.length)
-      : parentDir === 'worktrees' && (grandparentDir === '.omb' || grandparentDir === '.omx')
+    : parentDir.endsWith('.omb-worktrees')
+      ? parentDir.slice(0, -'.omb-worktrees'.length)
+      : parentDir === 'worktrees' && (grandparentDir === '.omb' || grandparentDir === '.omb')
       ? basename(dirname(grandparentPath))
       : null;
   const dirToken = repoDir
@@ -42,7 +42,7 @@ export function buildExpectedManagedTmuxSessionName(cwd: string, sessionId: stri
   } catch {
     // best effort only
   }
-  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^(?:omb|omx)-/, ''));
+  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^(?:omb|omb)-/, ''));
   const name = `omb-${dirToken}-${branchToken}-${sessionToken}`;
   return name.length > 120 ? name.slice(0, 120) : name;
 }
@@ -52,7 +52,6 @@ export function resolveInvocationSessionId(payload: any): string {
     payload?.session_id
     || payload?.['session-id']
     || process.env.OMB_SESSION_ID
-    || process.env.OMX_SESSION_ID
     || process.env.CODEX_SESSION_ID
     || process.env.SESSION_ID
     || '',
@@ -110,7 +109,7 @@ function processHasAncestorPid(targetPid: number, currentPid = process.pid): boo
 }
 
 export async function resolveManagedSessionContext(cwd: string, payload: any, { allowTeamWorker = true } = {}): Promise<any> {
-  if (allowTeamWorker && safeString(process.env.OMX_TEAM_WORKER || '').trim() !== '') {
+  if (allowTeamWorker && safeString(process.env.OMB_TEAM_WORKER || '').trim() !== '') {
     return {
       managed: true,
       reason: 'team_worker',
@@ -192,7 +191,7 @@ export async function resolveManagedSessionContext(cwd: string, payload: any, { 
   }
 }
 
-export async function isManagedOmxSession(cwd: string, payload: any, options: { allowTeamWorker?: boolean } = {}): Promise<boolean> {
+export async function isManagedOmbSession(cwd: string, payload: any, options: { allowTeamWorker?: boolean } = {}): Promise<boolean> {
   const context = await resolveManagedSessionContext(cwd, payload, options);
   return context.managed === true;
 }
@@ -249,7 +248,7 @@ async function readManagedPaneCommandState(paneTarget: string): Promise<{ curren
 }
 
 function paneLooksLikeManagedAgent({ currentCommand, startCommand }: { currentCommand: string; startCommand: string }): boolean {
-  if (/\bomx\b.*\bhud\b.*--watch/i.test(startCommand)) return false;
+  if (/\bomb\b.*\bhud\b.*--watch/i.test(startCommand)) return false;
   if (startCommand.includes('codex')) return true;
   return currentCommand === 'codex' || currentCommand === 'node' || currentCommand === 'npx';
 }
@@ -283,7 +282,7 @@ export async function resolveManagedSessionPane(cwd: string, payload: any): Prom
       const startCommand = safeString(rawStartCommand).toLowerCase();
       const currentCommand = safeString(rawCurrentCommand).trim().toLowerCase();
       if (!candidatePaneId) continue;
-      if (/\bomx\b.*\bhud\b.*--watch/i.test(startCommand)) continue;
+      if (/\bomb\b.*\bhud\b.*--watch/i.test(startCommand)) continue;
       if (startCommand.includes('codex')) return candidatePaneId;
       if (currentCommand === 'codex') return candidatePaneId;
     }
@@ -316,7 +315,7 @@ export async function resolveManagedPaneFromAnchor(anchorPane: string, cwd: stri
       const startCommand = safeString(rawStartCommand).toLowerCase();
       const currentCommand = safeString(rawCurrentCommand).trim().toLowerCase();
       if (!candidatePaneId) continue;
-      if (/\bomx\b.*\bhud\b.*--watch/i.test(startCommand)) continue;
+      if (/\bomb\b.*\bhud\b.*--watch/i.test(startCommand)) continue;
       if (startCommand.includes('codex')) return candidatePaneId;
       if (currentCommand === 'codex') return candidatePaneId;
     }

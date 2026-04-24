@@ -5,7 +5,7 @@ import { runCodexNativeHookCli } from "./codebuddy-native-hook.js";
 if (import.meta.url === `file://${process.argv[1]}`) {
   runCodexNativeHookCli().catch((error) => {
     process.stderr.write(
-      `[omx] codex-native-hook failed: ${
+      `[omb] codex-native-hook failed: ${
         error instanceof Error ? error.message : String(error)
       }\n`,
     );

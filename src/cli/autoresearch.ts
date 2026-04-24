@@ -26,7 +26,7 @@ import {
 } from './autoresearch-intake.js';
 import { CODEBUDDY_LEGACY_BYPASS_FLAG, CODEBUDDY_BIN, CODEBUDDY_BYPASS_FLAG, CODEBUDDY_PRINT_FLAG, MADMAX_FLAG } from './constants.js';
 import { restoreStandaloneHudPane, enableMouseScrolling } from '../team/tmux-session.js';
-import { resolveOmxEntryPath } from '../utils/paths.js';
+import { resolveOmbCliEntryPath } from '../utils/paths.js';
 import { formatCliText } from './brand.js';
 
 export function getAutoresearchHelp(): string {
@@ -314,7 +314,7 @@ function listHudWatchPaneIdsInCurrentWindow(currentPaneId?: string): string[] {
     .map(([paneId = '', currentCommand = '', startCommand = '']) => ({ paneId, currentCommand, startCommand }))
     .filter((pane) => pane.paneId.startsWith('%'))
     .filter((pane) => pane.paneId !== currentPaneId)
-    .filter((pane) => /\bomx\b.*\bhud\b.*--watch/i.test(pane.startCommand || ''))
+    .filter((pane) => /\bomb\b.*\bhud\b.*--watch/i.test(pane.startCommand || ''))
     .map((pane) => pane.paneId);
 }
 
@@ -332,16 +332,16 @@ function launchAutoresearchInSplitPane(args: {
   const currentCwd = tmuxDisplay(paneId, '#{pane_current_path}') || args.repoRoot;
   const existingHudPaneIds = listHudWatchPaneIdsInCurrentWindow(paneId);
 
-  const omxPath = resolveOmxEntryPath();
-  if (!omxPath) return false;
-  // Re-enter through the bare compatibility alias so the new pane executes immediately
+  const ombPath = resolveOmbCliEntryPath();
+  if (!ombPath) return false;
+  // Re-enter through the CLI entry so the new pane executes immediately
   // instead of recursively taking the split-pane branch again.
   const launchArgs = ['autoresearch', args.missionDir, ...args.codebuddyArgs];
   const commandParts = [
     'env',
     `PATH=${process.env.PATH || ''}`,
     process.execPath,
-    omxPath,
+    ombPath,
     ...launchArgs,
   ];
   const command = commandParts

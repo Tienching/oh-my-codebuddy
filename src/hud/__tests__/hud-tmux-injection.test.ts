@@ -48,8 +48,8 @@ describe('VULNERABILITY – old string-interpolation approach', () => {
   });
 
   it("ombBin containing single quote breaks out of the '-quoted command", () => {
-    const maliciousOmx = "/tmp/it';touch /tmp/pwned;echo '/omb.js";
-    const shellCmd = buildOldCommand('/home/user', maliciousOmx);
+    const maliciousOmb = "/tmp/it';touch /tmp/pwned;echo '/omb.js";
+    const shellCmd = buildOldCommand('/home/user', maliciousOmb);
 
     // The injected single quote terminates the tmux shell-command argument
     // early, allowing arbitrary commands to follow.
@@ -121,8 +121,8 @@ describe('buildTmuxSplitArgs – shell injection hardening', () => {
   });
 
   it("ombBin with single quote is properly escaped in command string", () => {
-    const maliciousOmx = "/tmp/it's/omb.js";
-    const args = buildTmuxSplitArgs('/home/user', maliciousOmx);
+    const maliciousOmb = "/tmp/it's/omb.js";
+    const args = buildTmuxSplitArgs('/home/user', maliciousOmb);
     const cmd = args[6];
 
     // The single quote must be escaped, not a raw breakout.
@@ -134,8 +134,8 @@ describe('buildTmuxSplitArgs – shell injection hardening', () => {
   });
 
   it('ombBin with $() is neutralised by single-quote wrapping', () => {
-    const maliciousOmx = '/tmp/$(id)/omb.js';
-    const args = buildTmuxSplitArgs('/home/user', maliciousOmx);
+    const maliciousOmb = '/tmp/$(id)/omb.js';
+    const args = buildTmuxSplitArgs('/home/user', maliciousOmb);
     const cmd = args[6];
 
     // Inside single quotes, $() is literal.
@@ -143,16 +143,16 @@ describe('buildTmuxSplitArgs – shell injection hardening', () => {
   });
 
   it('ombBin with backticks is neutralised by single-quote wrapping', () => {
-    const maliciousOmx = '/tmp/`whoami`/omb.js';
-    const args = buildTmuxSplitArgs('/home/user', maliciousOmx);
+    const maliciousOmb = '/tmp/`whoami`/omb.js';
+    const args = buildTmuxSplitArgs('/home/user', maliciousOmb);
     const cmd = args[6];
 
     assert.equal(cmd, "node '/tmp/`whoami`/omb.js' hud --watch");
   });
 
   it("ombBin with ';command' breakout attempt is neutralised", () => {
-    const maliciousOmx = "/tmp/x';touch /tmp/pwned;echo '/omb.js";
-    const args = buildTmuxSplitArgs('/home/user', maliciousOmx);
+    const maliciousOmb = "/tmp/x';touch /tmp/pwned;echo '/omb.js";
+    const args = buildTmuxSplitArgs('/home/user', maliciousOmb);
     const cmd = args[6];
 
     // The shell-escape wraps the entire path in single quotes with internal

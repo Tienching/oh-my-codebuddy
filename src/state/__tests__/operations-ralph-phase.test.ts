@@ -8,7 +8,7 @@ import { executeStateOperation } from '../operations.js';
 
 describe('state operations Ralph phase contract', () => {
   it('normalizes legacy Ralph phase aliases on state_write', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-state-ralph-phase-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-state-ralph-phase-'));
     try {
       const response = await executeStateOperation('state_write', {
         workingDirectory: wd,
@@ -29,7 +29,7 @@ describe('state operations Ralph phase contract', () => {
   });
 
   it('rejects unknown Ralph phases on state_write', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-state-ralph-phase-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-state-ralph-phase-'));
     try {
       const response = await executeStateOperation('state_write', {
         workingDirectory: wd,
@@ -46,7 +46,7 @@ describe('state operations Ralph phase contract', () => {
   });
 
   it('rejects terminal Ralph phase when active=true', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-state-ralph-phase-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-state-ralph-phase-'));
     try {
       const response = await executeStateOperation('state_write', {
         workingDirectory: wd,
@@ -63,7 +63,7 @@ describe('state operations Ralph phase contract', () => {
   });
 
   it('rejects fractional iteration values for Ralph state', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-state-ralph-phase-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-state-ralph-phase-'));
     try {
       const response = await executeStateOperation('state_write', {
         workingDirectory: wd,

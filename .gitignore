@@ -7,7 +7,7 @@ dist/
 .omc/research/
 .omc/
 .omb/
-.omx/
+.omb/
 
 # Local agent/worktree artifacts (never commit)
 .codebuddy/*.local.md
@@ -17,9 +17,9 @@ dist/
 coverage/
 target/
 bin/native/
-bin/omx-explore-harness
-bin/omx-explore-harness.exe
-bin/omx-explore-harness.meta.json
+bin/omb-explore-harness
+bin/omb-explore-harness.exe
+bin/omb-explore-harness.meta.json
 
 # Local runtime bridge artifacts (generated)
 authority.json

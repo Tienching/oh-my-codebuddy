@@ -1,55 +1,55 @@
 /**
- * OMX State Management MCP Server
+ * OMB State Management MCP Server
  * Provides state read/write/clear/list tools for workflow modes
- * Storage: .omx/state/{mode}-state.json
+ * Storage: .omb/state/{mode}-state.json
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
-	CallToolRequestSchema,
-	ListToolsRequestSchema,
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
-	readFile,
-	writeFile,
-	readdir,
-	mkdir,
-	unlink,
-	rename,
+  readFile,
+  writeFile,
+  readdir,
+  mkdir,
+  unlink,
+  rename,
 } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
 import {
-	getAllScopedStatePaths,
-	getReadScopedStateDirs,
-	getReadScopedStatePaths,
-	resolveStateScope,
-	getStateDir,
-	getStatePath,
-	resolveWorkingDirectoryForState,
-	validateSessionId,
+  getAllScopedStatePaths,
+  getReadScopedStateDirs,
+  getReadScopedStatePaths,
+  resolveStateScope,
+  getStateDir,
+  getStatePath,
+  resolveWorkingDirectoryForState,
+  validateSessionId,
 } from "./state-paths.js";
 import { withModeRuntimeContext } from "../state/mode-state-context.js";
 import {
-	SKILL_ACTIVE_STATE_MODE,
-	readSkillActiveState,
-	syncCanonicalSkillStateForMode,
-	writeSkillActiveStateCopies,
+  SKILL_ACTIVE_STATE_MODE,
+  readSkillActiveState,
+  syncCanonicalSkillStateForMode,
+  writeSkillActiveStateCopies,
 } from "../state/skill-active.js";
 import {
-	isTrackedWorkflowMode,
+  isTrackedWorkflowMode,
 } from "../state/workflow-transition.js";
 import { reconcileWorkflowTransition } from "../state/workflow-transition-reconcile.js";
 import {
-	RALPH_PHASES,
-	validateAndNormalizeRalphState,
+  RALPH_PHASES,
+  validateAndNormalizeRalphState,
 } from "../ralph/contract.js";
 import { ensureCanonicalRalphArtifacts } from "../ralph/persistence.js";
 import { applyRunOutcomeContract } from "../runtime/run-outcome.js";
 import { autoStartStdioMcpServer } from "./bootstrap.js";
 import {
-	LEGACY_TEAM_MCP_TOOLS,
-	buildLegacyTeamDeprecationHint,
+  LEGACY_TEAM_MCP_TOOLS,
+  buildLegacyTeamDeprecationHint,
 } from "../team/api-interop.js";
 
 const SUPPORTED_MODES = [
@@ -137,7 +137,7 @@ async function writeClearedSessionScopedModeState(
 }
 
 const server = new Server(
-	{ name: "omx-state", version: "0.1.0" },
+	{ name: "omb-state", version: "0.1.0" },
 	{ capabilities: { tools: {} } },
 );
 
@@ -428,9 +428,9 @@ export async function handleStateToolCall(request: {
 						if (
 							mode === "ralph" &&
 							effectiveSessionId &&
-						typeof mergedRaw.owner_omx_session_id !== "string"
+						typeof mergedRaw.owner_omb_session_id !== "string"
 					) {
-						mergedRaw.owner_omx_session_id = effectiveSessionId;
+						mergedRaw.owner_omb_session_id = effectiveSessionId;
 					}
 
 						if (mode === "ralph") {

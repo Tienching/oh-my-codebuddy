@@ -4,9 +4,9 @@ import { appendFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { getPackageRoot } from "../../utils/package.js";
 import {
-	discoverHookPlugins,
-	isHookPluginsEnabled,
-	resolveHookPluginTimeoutMs,
+  discoverHookPlugins,
+  isHookPluginsEnabled,
+  resolveHookPluginTimeoutMs,
 } from "./loader.js";
 import type {
 	HookDispatchOptions,

@@ -2,7 +2,7 @@
  * OMB Trace MCP Server
  * Provides trace timeline and summary tools for debugging agent flows.
  * Reads .omb/logs/ turn JSONL files produced by the notify hook,
- * with legacy .omx/logs/ fallback for older workspaces.
+ * with legacy .omb/logs/ fallback for older workspaces.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -257,10 +257,9 @@ export async function handleTraceToolCall(request: {
     };
   }
   const ombDir = join(wd, '.omb');
-  const omxDir = join(wd, '.omx');
   const logsDir = existsSync(join(ombDir, 'logs'))
     ? join(ombDir, 'logs')
-    : join(omxDir, 'logs');
+    : join(ombDir, 'logs');
 
   switch (name) {
     case 'trace_timeline': {
@@ -305,7 +304,7 @@ export async function handleTraceToolCall(request: {
       const [logSummary, modeEvents, metrics] = await Promise.all([
         summarizeLogFiles(logsDir),
         readModeEvents(wd),
-        readMetrics(ombDir).then((result) => result ?? readMetrics(omxDir)),
+        readMetrics(ombDir).then((result) => result ?? readMetrics(ombDir)),
       ]);
 
       const modesByName: Record<string, { starts: number; ends: number }> = {};

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {}
@@ -47,7 +47,7 @@ describe('omb setup (gh star hint)', () => {
       const home = join(wd, 'home');
       await mkdir(home, { recursive: true });
 
-      const res = runOmx(wd, ['setup', '--dry-run'], {
+      const res = runOmb(wd, ['setup', '--dry-run'], {
         PATH: `${fakeBin}:${process.env.PATH || ''}`,
         HOME: home,
       });
@@ -65,7 +65,7 @@ describe('omb setup (gh star hint)', () => {
       const home = join(wd, 'home');
       await mkdir(home, { recursive: true });
 
-      const res = runOmx(wd, ['setup', '--dry-run'], { PATH: '', HOME: home });
+      const res = runOmb(wd, ['setup', '--dry-run'], { PATH: '', HOME: home });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.doesNotMatch(res.stdout, /gh repo star Tienching\/oh-my-codebuddy/);

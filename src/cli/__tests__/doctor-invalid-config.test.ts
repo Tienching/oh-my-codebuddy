@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
@@ -39,7 +39,7 @@ describe('omb doctor invalid config detection', () => {
         `{invalid json content`,
       );
 
-      const res = runOmx(wd, ['doctor'], {
+      const res = runOmb(wd, ['doctor'], {
         HOME: home,
         CODEBUDDY_HOME: codexDir,
       });

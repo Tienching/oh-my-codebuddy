@@ -1,7 +1,7 @@
 /**
  * Path utilities for oh-my-codebuddy.
  * Resolves CodeBuddy/Codex config, skills, prompts, and state directories
- * while preserving legacy Codex + OMX compatibility where required.
+ * while preserving legacy Codex + OMB compatibility where required.
  */
 
 import { createHash } from "crypto";
@@ -13,7 +13,6 @@ import { fileURLToPath } from "url";
 import {
   resolveCanonicalCodebuddyHome,
   resolveCanonicalEntryPath as boundaryResolveEntryPath,
-  resolveLegacyStateDir,
 } from "../compat/legacy-boundary.js";
 
 /** Legacy Codex CLI home directory (~/.codex/) — compat-only; prefer codebuddyHome() */
@@ -21,9 +20,8 @@ export function codexHome(): string {
   return process.env.CODEX_HOME || process.env.CODEBUDDY_HOME || join(homedir(), ".codex");
 }
 
-export const OMX_ENTRY_PATH_ENV = "OMX_ENTRY_PATH";
 export const OMB_ENTRY_PATH_ENV = "OMB_ENTRY_PATH";
-export const OMX_STARTUP_CWD_ENV = "OMX_STARTUP_CWD";
+export const OMB_STARTUP_CWD_ENV = "OMB_STARTUP_CWD";
 
 function resolveLauncherPath(rawPath: string, baseCwd: string): string {
   const absolutePath = isAbsolute(rawPath) ? rawPath : resolve(baseCwd, rawPath);
@@ -37,7 +35,7 @@ function resolveLauncherPath(rawPath: string, baseCwd: string): string {
   }
 }
 
-export function resolveOmxEntryPath(
+export function resolveOmbEntryPath(
   options: {
     argv1?: string | null;
     cwd?: string;
@@ -53,7 +51,7 @@ export function resolveOmxEntryPath(
   const rawPath = typeof argv1 === "string" ? argv1.trim() : "";
   if (rawPath === "") return null;
 
-  const startupCwd = String(env[OMX_STARTUP_CWD_ENV] ?? "").trim() || cwd;
+  const startupCwd = String(env[OMB_STARTUP_CWD_ENV] ?? "").trim() || cwd;
   return resolveLauncherPath(rawPath, startupCwd);
 }
 
@@ -61,14 +59,14 @@ function isCliEntryPath(value: string | null | undefined): boolean {
   if (typeof value !== "string") return false;
   const normalized = value.trim().replace(/\\/g, "/");
   return (
-    normalized.endsWith('/dist/cli/omx.js') ||
-    normalized.endsWith('/omx.js') ||
+    normalized.endsWith('/dist/cli/omb.js') ||
+    normalized.endsWith('/omb.js') ||
     normalized.endsWith('/dist/cli/omb.js') ||
     normalized.endsWith('/omb.js')
   );
 }
 
-export function resolveOmxCliEntryPath(
+export function resolveOmbCliEntryPath(
   options: {
     argv1?: string | null;
     cwd?: string;
@@ -81,24 +79,22 @@ export function resolveOmxCliEntryPath(
     if (rawArgv1 === '') return null;
     const resolvedArgv1 = resolveLauncherPath(
       rawArgv1,
-      String(options.env?.[OMX_STARTUP_CWD_ENV] ?? '').trim() || options.cwd || process.cwd(),
+      String(options.env?.[OMB_STARTUP_CWD_ENV] ?? '').trim() || options.cwd || process.cwd(),
     );
     return isCliEntryPath(resolvedArgv1) ? resolvedArgv1 : null;
   })();
   if (directArgvEntry) return directArgvEntry;
 
-  const entry = resolveOmxEntryPath(options);
+  const entry = resolveOmbEntryPath(options);
   if (isCliEntryPath(entry)) return entry;
 
   const packageRootDir = options.packageRootDir || packageRoot();
-  const omxFallback = resolveLauncherPath(join(packageRootDir, 'dist', 'cli', 'omx.js'), options.cwd || process.cwd());
-  if (existsSync(omxFallback)) return omxFallback;
   const ombFallback = resolveLauncherPath(join(packageRootDir, 'dist', 'cli', 'omb.js'), options.cwd || process.cwd());
   if (existsSync(ombFallback)) return ombFallback;
   return entry;
 }
 
-export function rememberOmxLaunchContext(
+export function rememberOmbLaunchContext(
   options: {
     argv1?: string | null;
     cwd?: string;
@@ -106,18 +102,18 @@ export function rememberOmxLaunchContext(
   } = {},
 ): void {
   const { cwd = process.cwd(), env = process.env } = options;
-  if (String(env[OMX_STARTUP_CWD_ENV] ?? "").trim() === "") {
-    env[OMX_STARTUP_CWD_ENV] = cwd;
+  if (String(env[OMB_STARTUP_CWD_ENV] ?? "").trim() === "") {
+    env[OMB_STARTUP_CWD_ENV] = cwd;
   }
-  if (String(env[OMX_ENTRY_PATH_ENV] ?? "").trim() !== "") return;
+  if (String(env[OMB_ENTRY_PATH_ENV] ?? "").trim() !== "") return;
 
-  const resolved = resolveOmxEntryPath({
+  const resolved = resolveOmbEntryPath({
     argv1: options.argv1,
     cwd,
     env,
   });
   if (resolved) {
-    env[OMX_ENTRY_PATH_ENV] = resolved;
+    env[OMB_ENTRY_PATH_ENV] = resolved;
   }
 }
 
@@ -156,7 +152,7 @@ export function legacyUserSkillsDir(): string {
   return join(homedir(), ".agents", "skills");
 }
 
-// ── Brand-migrated aliases (codex→codebuddy, omx→omb) ─────────────────────────────────
+// ── Brand-migrated aliases (codex→codebuddy, omb→omb) ─────────────────────────────────
 
 /** CodeBuddy CLI home directory (~/.codebuddy/, with $CODEX_HOME compatibility fallback) */
 export function codebuddyHome(): string {
@@ -343,53 +339,6 @@ async function hashSkillDirectory(
   }
 
   return hashes;
-}
-
-/** OMB compatibility state directory (.omx/state/) — compat-only; prefer ombStateDir() */
-export function omxStateDir(projectRoot?: string): string {
-  return resolveLegacyStateDir(projectRoot || process.cwd());
-}
-
-/** OMB compatibility project memory file (.omx/project-memory.json) — compat-only */
-export function omxProjectMemoryPath(projectRoot?: string): string {
-  return join(projectRoot || process.cwd(), ".omx", "project-memory.json");
-}
-
-/** OMB compatibility notepad file (.omx/notepad.md) — compat-only */
-export function omxNotepadPath(projectRoot?: string): string {
-  return join(projectRoot || process.cwd(), ".omx", "notepad.md");
-}
-
-/** OMB compatibility wiki directory (.omx/wiki/) — compat-only, with .omb canonical fallback */
-export function omxWikiDir(projectRoot?: string): string {
-  const root = projectRoot || process.cwd();
-  const canonical = ombWikiDir(root);
-  const legacy = join(root, '.omx', 'wiki');
-  if (existsSync(canonical) || !existsSync(legacy)) {
-    return canonical;
-  }
-  return legacy;
-}
-
-/** OMB compatibility plans directory (.omx/plans/) — compat-only */
-export function omxPlansDir(projectRoot?: string): string {
-  return join(projectRoot || process.cwd(), ".omx", "plans");
-}
-
-/** OMB compatibility adapters directory (.omx/adapters/) — compat-only, with .omb canonical fallback */
-export function omxAdaptersDir(projectRoot?: string): string {
-  const root = projectRoot || process.cwd();
-  const canonical = ombAdaptersDir(root);
-  const legacy = join(root, '.omx', 'adapters');
-  if (existsSync(canonical) || !existsSync(legacy)) {
-    return canonical;
-  }
-  return legacy;
-}
-
-/** OMB compatibility logs directory (.omx/logs/) — compat-only */
-export function omxLogsDir(projectRoot?: string): string {
-  return join(projectRoot || process.cwd(), ".omx", "logs");
 }
 
 /** Get the package root directory (where agents/, skills/, prompts/ live) */

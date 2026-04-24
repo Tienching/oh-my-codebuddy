@@ -58,7 +58,6 @@ function readPersistedTeamFollowupState(cwd: string): {
   linkedRalph?: boolean;
 } | null {
   for (const path of [
-    join(cwd, '.omx', 'state', 'team-state.json'),
     join(cwd, '.omb', 'state', 'team-state.json'),
   ]) {
     if (!existsSync(path)) continue;
@@ -139,7 +138,7 @@ Usage: omb team [N:agent-type] "<task description>"
 
 Notes:
   team workers use dedicated worktrees automatically by default.
-  --worktree is deprecated for omx team and is now only a backward-compatible no-op override.
+  --worktree is deprecated for omb team and is now only a backward-compatible no-op override.
   use native CodeBuddy/Codex subagents for small in-session fanout; use omb team for durable tmux/state/worktree coordination.
 
 Examples:
@@ -223,8 +222,8 @@ const TEAM_API_OPERATION_NOTES: Partial<Record<TeamApiOperation, string>> = {
   'transition-task-status': 'Lifecycle flow is claim-safe and typically transitions in_progress -> completed|failed.',
   'cleanup': 'Uses the runtime shutdown contract; add confirm_issues=true when failed tasks are acknowledged and shutdown should still proceed.',
   'orphan-cleanup': 'Destructive escape hatch for known orphan recovery. Bypasses shutdown orchestration.',
-  'read-events': 'Events are returned in canonical form; worker_idle log entries normalize to type worker_state_changed with source_type worker_idle. wakeable_only defaults to false; set wakeable_only=true to mirror omx team await semantics (wakeable events now include merge conflicts and per-signal stale alerts).',
-  'await-event': 'Waits for the next matching event and returns status=timeout when no matching event arrives before timeout_ms. wakeable_only defaults to false; set wakeable_only=true to mirror omx team await semantics (wakeable events now include merge conflicts and per-signal stale alerts).',
+  'read-events': 'Events are returned in canonical form; worker_idle log entries normalize to type worker_state_changed with source_type worker_idle. wakeable_only defaults to false; set wakeable_only=true to mirror omb team await semantics (wakeable events now include merge conflicts and per-signal stale alerts).',
+  'await-event': 'Waits for the next matching event and returns status=timeout when no matching event arrives before timeout_ms. wakeable_only defaults to false; set wakeable_only=true to mirror omb team await semantics (wakeable events now include merge conflicts and per-signal stale alerts).',
   'read-idle-state': 'Builds a structured idle summary from the existing monitor snapshot, team summary, and recent events.',
   'read-stall-state': 'Builds a structured stall summary from the existing monitor snapshot, team summary, and recent events.',
 };
@@ -320,12 +319,12 @@ function buildJsonBase(): { schema_version: string; timestamp: string } {
   };
 }
 
-function resolveTeamStatusCommandLabel(env: NodeJS.ProcessEnv = process.env): 'omx team status' | 'omb team status' {
-  return env.OMX_TEAM_STATE_ROOT && !env.OMB_TEAM_STATE_ROOT ? 'omx team status' : 'omb team status';
+function resolveTeamStatusCommandLabel(env: NodeJS.ProcessEnv = process.env): 'omb team status' | 'omb team status' {
+  return env.OMB_TEAM_STATE_ROOT && !env.OMB_TEAM_STATE_ROOT ? 'omb team status' : 'omb team status';
 }
 
-function resolveInteropCommandBrand(env: NodeJS.ProcessEnv = process.env): 'omx' | 'omb' {
-  const raw = String(env.OMB_INTEROP_VERSIONED_PAYLOAD ?? env.OMX_INTEROP_VERSIONED_PAYLOAD ?? '').trim().toLowerCase();
+function resolveInteropCommandBrand(env: NodeJS.ProcessEnv = process.env): 'omb' | 'omb' {
+  const raw = String(env.OMB_INTEROP_VERSIONED_PAYLOAD ?? env.OMB_INTEROP_VERSIONED_PAYLOAD ?? '').trim().toLowerCase();
   if (raw === '1' || raw === 'true' || raw === 'on') return 'omb';
   return 'omb';
 }
@@ -407,7 +406,7 @@ function parseTeamApiArgs(args: string[]): {
       }
       continue;
     }
-    throw new Error(`Unknown argument for "omb team api": ${token} (legacy omx alias still accepted)`);
+    throw new Error(`Unknown argument for "omb team api": ${token} (legacy omb alias still accepted)`);
   }
   return { operation, input, json };
 }
@@ -880,7 +879,7 @@ function parseTeamArgs(args: string[], cwd: string = process.cwd()): ParsedTeamA
   let explicitWorkerCount = false;
 
   if (tokens[0]?.toLowerCase() === 'ralph') {
-    throw new Error('Deprecated usage: `omb team ralph ...` has been removed. Use `omb team ...` or run `omb ralph ...` separately (legacy `omx` alias still works).');
+    throw new Error('Deprecated usage: `omb team ralph ...` has been removed. Use `omb team ...` or run `omb ralph ...` separately (legacy `omb` alias still works).');
   }
 
   const first = tokens[0] || '';

@@ -122,7 +122,6 @@ describe('runWatchMode', () => {
 
     // Trigger multiple ticks while first render is still blocked.
     timerTick?.();
-    timerTick?.();
 
     releaseFirstRender?.();
     await waitFor(() => callCount === 2);

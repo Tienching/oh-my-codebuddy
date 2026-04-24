@@ -1,12 +1,12 @@
 /**
- * OMX HUD - CLI entry point
+ * OMB HUD - CLI entry point
  *
  * Usage:
- *   omx hud              Show current HUD state
- *   omx hud --watch      Poll every 1s with terminal clear
- *   omx hud --json       Output raw state as JSON
- *   omx hud --preset=X   Use preset: minimal, focused, full
- *   omx hud --tmux       Open HUD in a tmux split pane (auto-detects orientation)
+ *   omb hud              Show current HUD state
+ *   omb hud --watch      Poll every 1s with terminal clear
+ *   omb hud --json       Output raw state as JSON
+ *   omb hud --preset=X   Use preset: minimal, focused, full
+ *   omb hud --tmux       Open HUD in a tmux split pane (auto-detects orientation)
  */
 
 import { execFileSync } from 'child_process';
@@ -16,15 +16,15 @@ import type { HudFlags, HudPreset, HudRenderContext, ResolvedHudConfig } from '.
 import { HUD_TMUX_HEIGHT_LINES, HUD_TMUX_MAX_HEIGHT_LINES } from './constants.js';
 import { sleep } from '../utils/sleep.js';
 import { runHudAuthorityTick } from './authority.js';
-import { resolveOmxCliEntryPath } from '../utils/paths.js';
+import { resolveOmbCliEntryPath } from '../utils/paths.js';
 
 export const HUD_USAGE = [
   'Usage:',
-  '  omx hud              Show current HUD state',
-  '  omx hud --watch      Poll every 1s with terminal clear',
-  '  omx hud --json       Output raw state as JSON',
-  '  omx hud --preset=X   Use preset: minimal, focused, full',
-  '  omx hud --tmux       Open HUD in a tmux split pane (auto-detects orientation)',
+  '  omb hud              Show current HUD state',
+  '  omb hud --watch      Poll every 1s with terminal clear',
+  '  omb hud --json       Output raw state as JSON',
+  '  omb hud --preset=X   Use preset: minimal, focused, full',
+  '  omb hud --tmux       Open HUD in a tmux split pane (auto-detects orientation)',
 ].join('\n');
 
 type SleepFn = (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -248,38 +248,38 @@ export function shellEscape(s: string): string {
  * Build the argument array for `execFileSync('tmux', args)`.
  *
  * By returning an argv array instead of a shell command string, `cwd` is
- * passed as a literal argument to tmux (no shell expansion).  `omxBin` is
+ * passed as a literal argument to tmux (no shell expansion).  `ombBin` is
  * shell-escaped inside the command string that tmux will execute in a shell.
  */
 export function buildTmuxSplitArgs(
   cwd: string,
-  omxBin: string,
+  ombBin: string,
   preset?: string,
 ): string[] {
   // Defense-in-depth: keep preset constrained even if this helper is reused.
   const safePreset = parseHudPreset(preset);
   const presetArg = safePreset ? ` --preset=${safePreset}` : '';
-  const cmd = `node ${shellEscape(omxBin)} hud --watch${presetArg}`;
+  const cmd = `node ${shellEscape(ombBin)} hud --watch${presetArg}`;
   return ['split-window', '-v', '-l', String(HUD_TMUX_HEIGHT_LINES), '-c', cwd, cmd];
 }
 
 async function launchTmuxPane(cwd: string, flags: HudFlags): Promise<void> {
   // Check if we're inside tmux
   if (!process.env.TMUX) {
-    console.error('Not inside a tmux session. Start tmux first, then run: omx hud --tmux');
+    console.error('Not inside a tmux session. Start tmux first, then run: omb hud --tmux');
     process.exit(1);
   }
 
-  const omxBin = resolveOmxCliEntryPath();
-  if (!omxBin) {
-    console.error('Failed to resolve OMX launcher path for tmux HUD startup.');
+  const ombBin = resolveOmbCliEntryPath();
+  if (!ombBin) {
+    console.error('Failed to resolve OMB launcher path for tmux HUD startup.');
     process.exit(1);
   }
-  const args = buildTmuxSplitArgs(cwd, omxBin, flags.preset);
+  const args = buildTmuxSplitArgs(cwd, ombBin, flags.preset);
 
   try {
-    // Split bottom pane, 4 lines tall, running omx hud --watch.
-    // execFileSync bypasses the shell – cwd and omxBin cannot inject commands.
+    // Split bottom pane, 4 lines tall, running omb hud --watch.
+    // execFileSync bypasses the shell – cwd and ombBin cannot inject commands.
     execFileSync('tmux', args, { stdio: 'inherit' });
     console.log('HUD launched in tmux pane below. Close with: Ctrl+C in that pane, or `tmux kill-pane -t bottom`');
   } catch {

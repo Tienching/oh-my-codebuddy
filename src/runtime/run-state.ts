@@ -32,7 +32,7 @@ export interface RunStateLike {
   lifecycle_outcome?: unknown;
   terminal_outcome?: unknown;
   question_enforcement?: unknown;
-  owner_omx_session_id?: unknown;
+  owner_omb_session_id?: unknown;
   [key: string]: unknown;
 }
 
@@ -50,7 +50,7 @@ export interface RunState {
   iteration?: number;
   max_iterations?: number;
   error?: string;
-  owner_omx_session_id?: string;
+  owner_omb_session_id?: string;
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -135,8 +135,8 @@ export function buildRunState(
   const error = optionalString(state.error);
   if (error) next.error = error;
 
-  const ownerSessionId = optionalString(state.owner_omx_session_id);
-  if (ownerSessionId) next.owner_omx_session_id = ownerSessionId;
+  const ownerSessionId = optionalString(state.owner_omb_session_id);
+  if (ownerSessionId) next.owner_omb_session_id = ownerSessionId;
 
   return next;
 }

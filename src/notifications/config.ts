@@ -29,7 +29,7 @@ import {
 
 function resolveNotificationConfigPath(): string {
   const home = codebuddyHome();
-  const canonical = join(home, ".omx-config.json");
+  const canonical = join(home, ".omb-config.json");
   if (existsSync(canonical)) return canonical;
   return join(home, ".omb-config.json");
 }

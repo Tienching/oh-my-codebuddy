@@ -87,7 +87,7 @@ describe('pickActiveMode', () => {
 describe('evaluateInjectionGuards', () => {
   const validConfig = normalizeTmuxHookConfig({
     enabled: true,
-    target: { type: 'session', value: 'omx' },
+    target: { type: 'session', value: 'omb' },
     allowed_modes: ['ralph'],
     cooldown_ms: 1000,
     max_injections_per_session: 2,

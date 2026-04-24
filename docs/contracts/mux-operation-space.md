@@ -1,6 +1,6 @@
-# OMX ↔ mux canonical operation space
+# OMB ↔ mux canonical operation space
 
-This document defines the mux boundary owned by OMX core semantics.
+This document defines the mux boundary owned by OMB core semantics.
 
 ## Canonical operations
 
@@ -46,4 +46,4 @@ Exact tmux CLI invocations per operation:
 | `Attach` | `tmux attach-session -t <target>` |
 | `Detach` | `tmux detach-client -t <target>` |
 
-Target handles use the format `session_name:window_index.pane_index` (e.g. `"omx:0.1"`). `MuxTarget::Detached` is rejected for all operations that require a real pane.
+Target handles use the format `session_name:window_index.pane_index` (e.g. `"omb:0.1"`). `MuxTarget::Detached` is rejected for all operations that require a real pane.

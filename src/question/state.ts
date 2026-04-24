@@ -48,7 +48,7 @@ export async function createQuestionRecord(
   const questionId = buildQuestionId(now);
   const nowIso = now.toISOString();
   const record: QuestionRecord = {
-    kind: 'omx.question/v1',
+    kind: 'omb.question/v1',
     question_id: questionId,
     ...(sessionId ? { session_id: sessionId } : {}),
     created_at: nowIso,

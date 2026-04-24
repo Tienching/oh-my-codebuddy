@@ -82,8 +82,8 @@ Before running `$team`, confirm:
 
 1. `tmux` installed (`tmux -V`)
 2. Current leader session is inside tmux (`$TMUX` is set)
-3. `omb` command resolves to the intended install/build (`omx` remains the compatibility alias)
-4. If running repo-local `node bin/omb.js ...` (or the legacy `node bin/omx.js ...` alias), run `npm run build` after `src` changes
+3. `omb` command resolves to the intended install/build (`omb` remains the compatibility alias)
+4. If running repo-local `node bin/omb.js ...` (or the legacy `node bin/omb.js ...` alias), run `npm run build` after `src` changes
 5. Check HUD pane count in the leader window and avoid duplicate `hud --watch` panes before split
 
 Suggested preflight:
@@ -475,27 +475,27 @@ For programmatic or agent-driven team spawning (as opposed to interactive CLI us
 
 | Tool | Description |
 |------|-------------|
-| `omx_run_team_start` | Spawn tmux CLI workers in the background; returns a `jobId` immediately |
-| `omx_run_team_status` | Non-blocking status check for a running job |
-| `omx_run_team_wait` | Block until the job completes, with automatic idle-pane nudging |
-| `omx_run_team_cleanup` | Kill worker tmux panes for a job (early stop only) |
+| `omb_run_team_start` | Spawn tmux CLI workers in the background; returns a `jobId` immediately |
+| `omb_run_team_status` | Non-blocking status check for a running job |
+| `omb_run_team_wait` | Block until the job completes, with automatic idle-pane nudging |
+| `omb_run_team_cleanup` | Kill worker tmux panes for a job (early stop only) |
 
 ### CLI vs MCP Tools
 
 - **`omb team ...` CLI** — Primary method for interactive team orchestration. Use this when you are operating inside a live tmux session and want direct pane visibility.
-- **`omx_run_team_*` MCP tools** — For programmatic or agent-driven team spawning (analogous to OMC's `omc_run_team_*` tools). Use these when an agent needs to launch workers, poll status, and collect results without manual intervention.
+- **`omb_run_team_*` MCP tools** — For programmatic or agent-driven team spawning (analogous to OMC's `omc_run_team_*` tools). Use these when an agent needs to launch workers, poll status, and collect results without manual intervention.
 
 ### Naming Distinction
 
 Two cleanup tools exist and must not be confused:
 
 - `team_cleanup` (**state-server**): Deletes team state **files** on disk (`.omb/state/team/<team>/`). Use after a team run is fully complete.
-- `omx_run_team_cleanup` (**team-server**): Kills tmux worker **panes** for a job. Use only when stopping workers early; otherwise `omx_run_team_wait` handles natural termination.
+- `omb_run_team_cleanup` (**team-server**): Kills tmux worker **panes** for a job. Use only when stopping workers early; otherwise `omb_run_team_wait` handles natural termination.
 
 ### Basic Usage Example
 
 ```
-1. omx_run_team_start({
+1. omb_run_team_start({
      teamName: "fix-bugs",
      agentTypes: ["codex"],
      tasks: [{ subject: "Fix bug", description: "..." }],
@@ -510,7 +510,7 @@ Two cleanup tools exist and must not be confused:
    → Only needed if stopping workers early
 ```
 
-`omx_run_team_status` can be called between steps 1 and 2 for a non-blocking poll if you need to interleave other work while workers run.
+`omb_run_team_status` can be called between steps 1 and 2 for a non-blocking poll if you need to interleave other work while workers run.
 
 ## Limitations
 

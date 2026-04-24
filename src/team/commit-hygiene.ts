@@ -65,7 +65,7 @@ export interface TeamCommitHygieneArtifactPaths {
 }
 
 function commitHygieneReportsDir(cwd: string): string {
-  return join(resolve(cwd), '.omx', 'reports', 'team-commit-hygiene')
+  return join(resolve(cwd), '.omb', 'reports', 'team-commit-hygiene')
 }
 
 function ledgerPathFor(teamName: string, cwd: string): string {
@@ -205,7 +205,7 @@ export function buildTeamCommitHygieneContext(params: {
   const taskSummary = summarizeTasks(params.tasks)
   const recommendedNextSteps = [
     'Inspect the current branch diff/log and identify which runtime-originated commits should be squashed or rewritten.',
-    'Derive semantic commit boundaries from completed task subjects, code diffs, and shutdown reports rather than from omx(team) operational commit subjects.',
+    'Derive semantic commit boundaries from completed task subjects, code diffs, and shutdown reports rather than from omb(team) operational commit subjects.',
     'Create final commit messages in Lore format with intent-first subjects and only the trailers that add decision context.',
   ]
 
@@ -283,7 +283,7 @@ export function renderTeamCommitHygieneMarkdown(context: TeamCommitHygieneContex
     '',
     '## Finalization Guidance',
     '',
-    '1. Treat `omx(team): ...` runtime commits as temporary scaffolding, not as the final PR history.',
+    '1. Treat `omb(team): ...` runtime commits as temporary scaffolding, not as the final PR history.',
     '2. Reconcile checkpoint, merge/cherry-pick, cross-rebase, and shutdown checkpoint activity into semantic Lore-format final commit(s).',
     '3. Use task outcomes, code diffs, and shutdown diff reports to name and scope the final commits.',
     '',

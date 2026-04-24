@@ -11,8 +11,8 @@ import { codebuddyHome, codexHome, listInstalledSkillDirectories } from "../util
 import { sleep } from "../utils/sleep.js";
 import type { TeamReminderDirective } from "./reminder-intents.js";
 
-const TEAM_OVERLAY_START = "<!-- OMX:TEAM:WORKER:START -->";
-const TEAM_OVERLAY_END = "<!-- OMX:TEAM:WORKER:END -->";
+const TEAM_OVERLAY_START = "<!-- OMB:TEAM:WORKER:START -->";
+const TEAM_OVERLAY_END = "<!-- OMB:TEAM:WORKER:END -->";
 const SKILL_REFERENCE_PATTERN = /\/skills\/([^/\s`]+)\/SKILL\.md\b/g;
 const AGENTS_LOCK_PATH = [".omb", "state", "agents-md.lock"];
 const LOCK_OWNER_FILE = "owner.json";
@@ -46,7 +46,7 @@ function buildWorkerRootAgentsBackupPath(
   const gitPath = tryReadGitValue(worktreePath, [
     "rev-parse",
     "--git-path",
-    "omx/root-agents-backup.json",
+    "omb/root-agents-backup.json",
   ]);
   return gitPath
     ? gitPath
@@ -65,7 +65,7 @@ export function generateWorkerRootAgentsContent(
 ): string {
   return `# Team Worker Runtime Instructions
 
-This file is generated for a live OMX team worker run and is disposable.
+This file is generated for a live OMB team worker run and is disposable.
 
 ## Worker Identity
 - Team: ${options.teamName}
@@ -93,7 +93,7 @@ This file is generated for a live OMX team worker run and is disposable.
 
    \`omb team api send-message --input "{\"team_name\":\"${options.teamName}\",\"from_worker\":\"${options.workerName}\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: ${options.workerName} initialized\"}" --json\`
 
-4. Resolve canonical team state root in this order: \`OMB_TEAM_STATE_ROOT\` env -> \`OMX_TEAM_STATE_ROOT\` compat env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
+4. Resolve canonical team state root in this order: \`OMB_TEAM_STATE_ROOT\` env -> \`OMB_TEAM_STATE_ROOT\` compat env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
 5. Read task files from \`${options.teamStateRoot}/team/${options.teamName}/tasks/task-<id>.json\` using bare \`task_id\` values in APIs.
 6. Use claim-safe lifecycle APIs only:
    - \`omb team api claim-task --json\`
@@ -309,7 +309,7 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
 3. Send an ACK to the lead using CLI interop \`omb team api send-message --json\` (to_worker="leader-fixed") once initialized
 4. Resolve canonical team state root in this order:
    - OMB_TEAM_STATE_ROOT env
-   - OMX_TEAM_STATE_ROOT compat env
+   - OMB_TEAM_STATE_ROOT compat env
    - worker identity team_state_root
    - team config/manifest team_state_root
    - local cwd fallback (.omb/state)
@@ -702,7 +702,7 @@ ${taskList}
    \`omb team api send-message --input "{\"team_name\":\"${teamName}\",\"from_worker\":\"${workerName}\",\"to_worker\":\"leader-fixed\",\"body\":\"ACK: ${workerName} initialized\"}" --json\`
 
 3. Start with the first non-blocked task
-4. Resolve canonical team state root in this order: \`OMB_TEAM_STATE_ROOT\` env -> \`OMX_TEAM_STATE_ROOT\` compat env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
+4. Resolve canonical team state root in this order: \`OMB_TEAM_STATE_ROOT\` env -> \`OMB_TEAM_STATE_ROOT\` compat env -> worker identity \`team_state_root\` -> config/manifest \`team_state_root\` -> local cwd fallback.
 5. Read the task file for your selected task id at \`${teamStateRoot}/team/${teamName}/tasks/task-<id>.json\` (example: \`task-1.json\`)
 6. Task id format:
    - State/MCP APIs use \`task_id: "<id>"\` (example: \`"1"\`), not \`"task-1"\`.

@@ -10,6 +10,11 @@ export const CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG = '--system-prompt-file';
 export const CODEBUDDY_APPEND_SYSTEM_PROMPT_FLAG = '--append-system-prompt';
 export const HIGH_REASONING_FLAG = '--high';
 export const XHIGH_REASONING_FLAG = '--xhigh';
+/** @deprecated Use --effort high instead */
+export const DEPRECATED_HIGH_REASONING_MSG = '--high is deprecated: use --effort high instead';
+/** @deprecated Use --effort xhigh instead */
+export const DEPRECATED_XHIGH_REASONING_MSG = '--xhigh is deprecated: use --effort xhigh instead';
+export const EFFORT_FLAG = '--effort';
 export const SPARK_FLAG = '--spark';
 export const MADMAX_SPARK_FLAG = '--madmax-spark';
 export const CONFIG_FLAG = '-c';

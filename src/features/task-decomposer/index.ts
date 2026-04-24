@@ -5,7 +5,6 @@ import {
 } from '../../cli/team.js';
 import {
   OMB_MAGIC_KEYWORD_ROUTER_ENV,
-  OMX_MAGIC_KEYWORD_ROUTER_ENV,
   isExperimentalMagicKeywordRouterEnabled,
 } from '../magic-keywords.js';
 import type {
@@ -24,7 +23,6 @@ export type {
 
 export {
   OMB_MAGIC_KEYWORD_ROUTER_ENV,
-  OMX_MAGIC_KEYWORD_ROUTER_ENV,
   isExperimentalMagicKeywordRouterEnabled,
 };
 

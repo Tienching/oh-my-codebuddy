@@ -6,7 +6,7 @@
 
 ## Included fixes and changes
 
-- native Codex hook ownership now lives in the repo/runtime contract for non-team OMX sessions
+- native Codex hook ownership now lives in the repo/runtime contract for non-team OMB sessions
 - first-party Bash `PreToolUse` / `PostToolUse` guidance is shipped and documented
 - team runtime delivery, mailbox handling, pane-status visibility, and next-action steering are more robust
 - leader nudge, reminder, session continuity, and persist-error paths are hardened across live operator flows
@@ -27,11 +27,11 @@
 
 - `npm ci` ✅
 - `npm run build` ✅
-- `node dist/cli/omx.js version` ✅ (`oh-my-codex v0.12.0`)
+- `node dist/cli/omb.js version` ✅ (`oh-my-codebuddy v0.12.0`)
 - `node --test dist/cli/__tests__/version-sync-contract.test.js` ✅
 - `npm run lint` ✅
 - `npm test` ✅
-- `cargo test -p omx-runtime-core` ✅
+- `cargo test -p omb-runtime-core` ✅
 - `npm run smoke:packed-install` ✅
 - `git diff --check origin/main...HEAD` ✅
 

@@ -96,7 +96,7 @@ function formatActiveModes(modes: readonly string[]): string {
 function clearInstructions(): string {
   return [
     'Clear incompatible workflow state yourself via `omb state clear --mode <mode>`',
-    '(legacy alias `omx state clear --mode <mode>` also works)',
+    '(legacy alias `omb state clear --mode <mode>` also works)',
     'or the `state_*` MCP tools, then retry.',
   ].join(' ');
 }

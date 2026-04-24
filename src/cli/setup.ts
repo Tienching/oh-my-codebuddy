@@ -51,7 +51,7 @@ import { tryReadCatalogManifest } from "../catalog/reader.js";
 import { DEFAULT_FRONTIER_MODEL } from "../config/models.js";
 import {
   addGeneratedAgentsMarker,
-  isOmxGeneratedAgentsMd,
+  isOmbGeneratedAgentsMd,
 } from "../utils/agents-md.js";
 import {
   resolveAgentsModelTableContext,
@@ -168,7 +168,7 @@ interface SetupBackupContext {
 
 interface ManagedConfigResult {
   finalConfig: string;
-  omxManagesTui: boolean;
+  ombManagesTui: boolean;
 }
 
 interface LegacySkillOverlapNotice {
@@ -439,7 +439,7 @@ function getScopeFilePath(projectRoot: string): string {
 }
 
 function getLegacyScopeFilePath(projectRoot: string): string {
-  return join(projectRoot, ".omx", "setup-scope.json");
+  return join(projectRoot, ".omb", "setup-scope.json");
 }
 
 export function resolveScopeDirectories(
@@ -604,7 +604,7 @@ function probeInstalledCodexVersion(): string | null {
   return stdout === "" ? null : stdout;
 }
 
-function shouldOmxManageTuiFromCodexVersion(versionOutput: string | null): boolean {
+function shouldOmbManageTuiFromCodexVersion(versionOutput: string | null): boolean {
   if (!versionOutput) return true;
   const parsed = parseSemverTriplet(versionOutput);
   if (!parsed) return true;
@@ -984,10 +984,10 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   console.log("[5.5/8] Verifying Team CLI API interop...");
   const teamToolsCheck = await verifyTeamCliApiInterop(pkgRoot);
   if (teamToolsCheck.ok) {
-    console.log("  omb team api command detected (legacy omx alias still works; CLI-first interop ready)");
+    console.log("  omb team api command detected (legacy omb alias still works; CLI-first interop ready)");
   } else {
     console.log(`  WARNING: ${teamToolsCheck.message}`);
-    console.log("  Run `npm run build` and then re-run `omb setup` (legacy: `omx setup`).");
+    console.log("  Run `npm run build` and then re-run `omb setup` (legacy: `omb setup`).");
   }
   console.log();
 
@@ -1024,7 +1024,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
     if (agentsMdExists) {
       const existing = await readFile(agentsMdDst, "utf-8");
       changed = existing !== rewritten;
-      if (isOmxGeneratedAgentsMd(existing)) {
+      if (isOmbGeneratedAgentsMd(existing)) {
         managedRefreshContent = upsertAgentsModelTable(
           existing,
           modelTableContext,
@@ -1122,7 +1122,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   } else {
     console.log("  HUD config already exists (use --force to overwrite).");
   }
-  if (managedConfig.omxManagesTui) {
+  if (managedConfig.ombManagesTui) {
     console.log("  StatusLine configured in config.toml via [tui] section.");
   } else {
     console.log("  CodeBuddy/Codex CLI >= 0.107.0 manages [tui]; OMB left that section untouched.");
@@ -1162,7 +1162,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
     "  5. Native agent defaults configured in config.toml [agents] and TOML files written to .codebuddy/agents/",
   );
   console.log(
-    '  6. "omb explore" and "omb sparkshell" can hydrate native release binaries on first use; the legacy `omx` alias still works, and source installs still allow repo-local fallbacks plus OMB_/OMX_ binary override env vars',
+    '  6. "omb explore" and "omb sparkshell" can hydrate native release binaries on first use; the legacy `omb` alias still works, and source installs still allow repo-local fallbacks plus OMB_/OMB_ binary override env vars',
   );
   if (isGitHubCliConfigured()) {
     console.log("\nSupport the project: gh repo star Tienching/oh-my-codebuddy");
@@ -1330,7 +1330,7 @@ async function syncManagedAgentsContent(
     if (!shouldOverwrite) {
       summary.skipped += 1;
       if (options.verbose) {
-        const managedLabel = isOmxGeneratedAgentsMd(existing)
+        const managedLabel = isOmbGeneratedAgentsMd(existing)
           ? "managed"
           : "unmanaged";
         console.log(`  skipped ${managedLabel} AGENTS.md at ${dstPath}`);
@@ -1692,7 +1692,7 @@ async function updateManagedConfig(
   let modelOverride: string | undefined;
   const codexVersion =
     options.codexVersionProbe?.() ?? probeInstalledCodexVersion();
-  const omxManagesTui = shouldOmxManageTuiFromCodexVersion(codexVersion);
+  const ombManagesTui = shouldOmbManageTuiFromCodexVersion(codexVersion);
 
   if (currentModel === LEGACY_SETUP_MODEL) {
     const shouldPrompt =
@@ -1709,7 +1709,7 @@ async function updateManagedConfig(
   }
 
   const finalConfig = buildMergedConfig(existing, pkgRoot, {
-    includeTui: omxManagesTui,
+    includeTui: ombManagesTui,
     modelOverride,
     sharedMcpServers: sharedMcpRegistry.servers,
     sharedMcpRegistrySource: sharedMcpRegistry.sourcePath,
@@ -1719,7 +1719,7 @@ async function updateManagedConfig(
 
   if (!changed) {
     summary.unchanged += 1;
-    return { finalConfig, omxManagesTui };
+    return { finalConfig, ombManagesTui };
   }
 
   if (
@@ -1754,7 +1754,7 @@ async function updateManagedConfig(
       `  ${options.dryRun ? "would update" : "updated"} config ${configPath}`,
     );
   }
-  return { finalConfig, omxManagesTui };
+  return { finalConfig, ombManagesTui };
 }
 
 function getClaudeCodeSettingsPath(homeDir = homedir()): string {

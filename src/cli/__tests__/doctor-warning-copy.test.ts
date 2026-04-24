@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { withPackagedExploreHarnessHidden, withPackagedExploreHarnessLock } from './packaged-explore-harness-lock.js';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
@@ -43,14 +43,14 @@ describe('omb doctor onboarding warning copy', () => {
         join(codexDir, 'settings.json'),
         JSON.stringify({
           mcpServers: {
-            non_omx: {
+            non_omb: {
               command: "node",
             },
           },
         }, null, 2),
       );
 
-      const res = runOmx(wd, ['doctor'], {
+      const res = runOmb(wd, ['doctor'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codex'),
       });
@@ -81,7 +81,7 @@ describe('omb doctor onboarding warning copy', () => {
         await writeFile(join(fakeBin, 'codex'), '#!/bin/sh\necho "codex test"\n');
         spawnSync('chmod', ['+x', join(fakeBin, 'codex')], { encoding: 'utf-8' });
 
-        const res = runOmx(wd, ['doctor'], {
+        const res = runOmb(wd, ['doctor'], {
           HOME: home,
           CODEBUDDY_HOME: join(home, '.codex'),
           PATH: fakeBin,
@@ -124,7 +124,7 @@ describe('omb doctor onboarding warning copy', () => {
         spawnSync('chmod', ['+x', packagedBinary], { encoding: 'utf-8' });
 
         try {
-          const res = runOmx(wd, ['doctor'], {
+          const res = runOmb(wd, ['doctor'], {
             HOME: home,
             CODEBUDDY_HOME: join(home, '.codex'),
             PATH: fakeBin,
@@ -169,7 +169,7 @@ describe('omb doctor onboarding warning copy', () => {
         }, null, 2),
       );
 
-      const res = runOmx(wd, ['doctor'], {
+      const res = runOmb(wd, ['doctor'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codex'),
       });
@@ -199,7 +199,7 @@ describe('omb doctor onboarding warning copy', () => {
       await writeFile(join(canonicalPlan, 'SKILL.md'), '# canonical plan\n');
       await writeFile(join(legacyHelp, 'SKILL.md'), '# legacy help\n');
 
-      const res = runOmx(wd, ['doctor'], {
+      const res = runOmb(wd, ['doctor'], {
         HOME: home,
         CODEBUDDY_HOME: codexDir,
       });
@@ -231,7 +231,7 @@ describe('omb doctor onboarding warning copy', () => {
         process.platform === 'win32' ? 'junction' : 'dir',
       );
 
-      const res = runOmx(wd, ['doctor'], {
+      const res = runOmb(wd, ['doctor'], {
         HOME: home,
         CODEBUDDY_HOME: codexDir,
       });

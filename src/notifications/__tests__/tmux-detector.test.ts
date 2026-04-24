@@ -18,7 +18,7 @@ describe('analyzePaneContent', () => {
     assert.ok(result.confidence >= 0.5);
   });
 
-  it('detects "omx" keyword', () => {
+  it('detects "omb" keyword', () => {
     const result = analyzePaneContent('omb session started');
     assert.equal(result.hasCodex, true);
   });

@@ -6,8 +6,6 @@ import { parseCommandFile } from "./parser.js";
 
 export const OMB_EXPERIMENTAL_COMMAND_TEMPLATES =
   "OMB_EXPERIMENTAL_COMMAND_TEMPLATES";
-export const OMX_EXPERIMENTAL_COMMAND_TEMPLATES =
-  "OMX_EXPERIMENTAL_COMMAND_TEMPLATES";
 export const COMMAND_TEMPLATE_DISALLOWED_ENV_VALUES = new Set(["0", "false", "no", "off"]);
 export const COMMAND_TEMPLATE_PLACEHOLDER = "$ARGUMENTS";
 
@@ -105,7 +103,7 @@ export function isCommandTemplateEnabled(
   if (codeBuddyValue !== null) {
     return codeBuddyValue;
   }
-  const omniValue = normalizeEnvValue(env[OMX_EXPERIMENTAL_COMMAND_TEMPLATES]);
+  const omniValue = normalizeEnvValue(env[OMB_EXPERIMENTAL_COMMAND_TEMPLATES]);
   if (omniValue !== null) {
     return omniValue;
   }

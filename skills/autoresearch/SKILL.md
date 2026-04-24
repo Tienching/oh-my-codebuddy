@@ -63,7 +63,7 @@ The completion artifact must include both an architect approval verdict and an o
 
 ## Migration note
 - `omb autoresearch` is hard-deprecated.
-- `.omx/...` artifact paths remain accepted as legacy compatibility inputs.
+- `.omb/...` artifact paths remain accepted as legacy compatibility inputs.
 - No direct CLI launch.
 - No tmux split-pane launch.
 - No noop-count completion gate.

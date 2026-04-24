@@ -1,9 +1,9 @@
-export const OMB_GENERATED_AGENTS_MARKER = '<!-- omx:generated:agents-md -->'
+export const OMB_GENERATED_AGENTS_MARKER = '<!-- omb:generated:agents-md -->'
 const OMB_GENERATED_AGENTS_TITLE =
   '# oh-my-codebuddy - Intelligent Multi-Agent Orchestration'
 const AUTONOMY_DIRECTIVE_END_MARKER = '<!-- END AUTONOMY DIRECTIVE -->'
 
-export function isOmxGeneratedAgentsMd(content: string): boolean {
+export function isOmbGeneratedAgentsMd(content: string): boolean {
   return (
     content.includes(OMB_GENERATED_AGENTS_MARKER) ||
     content.includes(OMB_GENERATED_AGENTS_TITLE)

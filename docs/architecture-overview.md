@@ -64,7 +64,7 @@ Dynamic instruction injection: generates and applies session-specific context to
 - **Recovery**: Crash-safe cleanup via recovery ledger
 
 ### Runtime Bridge (`src/runtime/`)
-Interface to the Rust `omx-runtime` binary. Owns authority, dispatch queue, mailbox, backlog, and replay cursor via `execFileSync`. All Rust-domain state is accessed through this bridge; TS never writes directly to Rust-owned files when the bridge is enabled.
+Interface to the Rust `omb-runtime` binary. Owns authority, dispatch queue, mailbox, backlog, and replay cursor via `execFileSync`. All Rust-domain state is accessed through this bridge; TS never writes directly to Rust-owned files when the bridge is enabled.
 
 ### Hooks (`src/hooks/`)
 CodeBuddy hook implementations: persistent-mode (blocks stop), think-mode (high-reasoning), pre-compact (state checkpoint), rules-injector (rule file discovery), todo-continuation (incomplete task detection).

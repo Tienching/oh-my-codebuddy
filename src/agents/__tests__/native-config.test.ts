@@ -87,7 +87,7 @@ describe("agents/native-config", () => {
   });
 
   it("installs only agents with prompt files and skips existing files without force", async () => {
-    const root = await mkdtemp(join(tmpdir(), "omx-native-config-"));
+    const root = await mkdtemp(join(tmpdir(), "omb-native-config-"));
     const promptsDir = join(root, "prompts");
     const outDir = join(root, "agents-out");
 
@@ -120,7 +120,7 @@ describe("agents/native-config", () => {
   });
 
   it("keeps standard agents off a custom gpt-5.2 root model", async () => {
-    const root = await mkdtemp(join(tmpdir(), "omx-native-config-root-model-"));
+    const root = await mkdtemp(join(tmpdir(), "omb-native-config-root-model-"));
     const codebuddyHome = join(root, ".codex");
     const promptsDir = join(root, "prompts");
     const outDir = join(codebuddyHome, "agents");
@@ -147,7 +147,7 @@ describe("agents/native-config", () => {
   });
 
   it("keeps executor on the frontier lane so an explicit gpt-5.2 root model still applies there", async () => {
-    const root = await mkdtemp(join(tmpdir(), "omx-native-config-executor-model-"));
+    const root = await mkdtemp(join(tmpdir(), "omb-native-config-executor-model-"));
     const codebuddyHome = join(root, ".codex");
     const promptsDir = join(root, "prompts");
     const outDir = join(codebuddyHome, "agents");

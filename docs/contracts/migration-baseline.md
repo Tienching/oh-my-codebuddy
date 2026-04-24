@@ -28,7 +28,7 @@ Coverage summary:
 |---|---|---|---|---|
 | `agents` | `src/agents`, prompt overlays | `reference-only` | T05, T07 | Keep current agent catalog authoritative |
 | `autoresearch` | `src/autoresearch` | `reference-only` | T12 | Treat upstream ideas as QA inputs only |
-| `cli` | `src/cli`, `src/commands` | `adapter-first` | T02, T03, T13 | Preserve `omb` / `omx` behavior until adapter tests pass |
+| `cli` | `src/cli`, `src/commands` | `adapter-first` | T02, T03, T13 | Preserve `omb` / `omb` behavior until adapter tests pass |
 | `config` | `src/config`, `src/utils/paths.ts` | `adapter-first` | T02, T04, T07 | Keep existing config resolution authoritative |
 | `features` | `src/features` | `adapter-first` | T04, T05 | Route new behavior through off-by-default flags |
 | `hooks` | `src/hooks` | `adapter-first` | T05, T07, T13 | Fail-open and isolate hook faults from the main path |
@@ -37,7 +37,7 @@ Coverage summary:
 | `mcp` | `src/mcp`, `src/team/mcp-comm.ts` | `adapter-first` | T08, T14 | Preserve current MCP server wiring as the default |
 | `notifications` | `src/notifications` | `reference-only` | T12 | Keep current notify flow unless a release gate says otherwise |
 | `openclaw` | `src/openclaw` | `reference-only` | T12 | Track only as an observability reference |
-| `planning` | `src/planning`, `.omx/plans` | `reference-only` | T01, T12 | Planning artifacts stay additive |
+| `planning` | `src/planning`, `.omb/plans` | `reference-only` | T01, T12 | Planning artifacts stay additive |
 | `team` | `src/team` | `adapter-first` | T06, T14 | Legacy runtime remains the only write path until shadow parity is green |
 | `tools` | `src/tools`, `src/shared-memory` | `adapter-first` | T08, T13 | Keep the existing tool registry and memory paths authoritative |
 | `providers` (upstream-only) | `src/providers`, `src/features/context-injector` | `adapter-first` | T04 | Do not alter routing without provider fallback coverage |
@@ -49,8 +49,8 @@ Coverage summary:
 
 | Surface | Current conflict to preserve | Owning tasks | Guardrail | Regression evidence |
 |---|---|---|---|---|
-| CLI | `omb` / `omx` command names and argument forwarding must remain stable while adapters are introduced | T02, T03, T13 | Wrap new command loaders behind feature flags and keep existing dispatch as fallback | CLI tests + `migration-baseline-gate` |
-| Paths | `.omb` / `.omx` are canonical; `.codex` / legacy paths are compatibility-only | T02, T03, T15 | Never change canonical path ownership in the first port step | setup/update tests + release gates |
+| CLI | `omb` / `omb` command names and argument forwarding must remain stable while adapters are introduced | T02, T03, T13 | Wrap new command loaders behind feature flags and keep existing dispatch as fallback | CLI tests + `migration-baseline-gate` |
+| Paths | `.omb` / `.omb` are canonical; `.codex` / legacy paths are compatibility-only | T02, T03, T15 | Never change canonical path ownership in the first port step | setup/update tests + release gates |
 | Hooks | Hook extensions may fail, but must not block the main workflow | T05, T07, T13 | Preserve fail-open isolation and keep old load order as default | hooks tests + QA gate checklist |
 | State | Team, Ralph, and interop payloads must freeze schema before any v2 writer lands | T01A, T06, T08, T14 | Freeze fixtures first, then allow only shadow diffs behind flags | `src/ralph/__tests__/persistence.test.ts`, `src/team/__tests__/state.test.ts`, `src/team/__tests__/api-interop.test.ts` |
 

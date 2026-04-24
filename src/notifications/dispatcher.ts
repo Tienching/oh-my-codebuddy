@@ -497,7 +497,7 @@ export async function dispatchNotifications(
                 success: false,
                 error: String(s.reason),
               },
-        ),
+          ),
       ),
       new Promise<NotificationResult[]>((resolve) => {
         timer = setTimeout(

@@ -6,13 +6,13 @@
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { rememberOmxLaunchContext } from '../utils/paths.js';
+import { rememberOmbLaunchContext } from '../utils/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const root = join(__dirname, '..', '..');
 
-rememberOmxLaunchContext();
+rememberOmbLaunchContext();
 
 // Execute compiled entrypoint
 const distEntry = join(root, 'dist', 'cli', 'index.js');

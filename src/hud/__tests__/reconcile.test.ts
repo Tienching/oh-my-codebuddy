@@ -28,13 +28,13 @@ describe('reconcileHudForPromptSubmit', () => {
         resized.push({ paneId, heightLines });
         return true;
       },
-      resolveOmxCliEntryPath: () => '/repo/dist/cli/omx.js',
+      resolveOmbCliEntryPath: () => '/repo/dist/cli/omb.js',
     });
 
     assert.equal(result.status, 'recreated');
     assert.equal(result.paneId, '%9');
     assert.equal(created.length, 1);
-    assert.match(created[0]?.cmd || '', /\/repo\/dist\/cli\/omx\.js' hud --watch/);
+    assert.match(created[0]?.cmd || '', /\/repo\/dist\/cli\/omb\.js' hud --watch/);
     assert.equal(created[0]?.options?.heightLines, 3);
     assert.equal(resized.length, 1);
     assert.equal(resized[0]?.heightLines, 3);
@@ -47,8 +47,8 @@ describe('reconcileHudForPromptSubmit', () => {
       env: { TMUX: '1', TMUX_PANE: '%1' },
       listCurrentWindowPanes: () => [
         { paneId: '%1', currentCommand: 'codex', startCommand: 'codex' },
-        { paneId: '%2', currentCommand: 'node', startCommand: 'node omx hud --watch' },
-        { paneId: '%3', currentCommand: 'node', startCommand: 'node omx hud --watch' },
+        { paneId: '%2', currentCommand: 'node', startCommand: 'node omb hud --watch' },
+        { paneId: '%3', currentCommand: 'node', startCommand: 'node omb hud --watch' },
         { paneId: '%4', currentCommand: 'codex', startCommand: 'codex' },
       ],
       killTmuxPane: (paneId) => {
@@ -61,7 +61,7 @@ describe('reconcileHudForPromptSubmit', () => {
         return '%9';
       },
       resizeTmuxPane: () => true,
-      resolveOmxCliEntryPath: () => '/repo/dist/cli/omx.js',
+      resolveOmbCliEntryPath: () => '/repo/dist/cli/omb.js',
     });
 
     assert.equal(result.status, 'replaced_duplicates');
@@ -74,13 +74,13 @@ describe('reconcileHudForPromptSubmit', () => {
       env: { TMUX: '1', TMUX_PANE: '%1' },
       listCurrentWindowPanes: () => [
         { paneId: '%1', currentCommand: 'codex', startCommand: 'codex' },
-        { paneId: '%2', currentCommand: 'node', startCommand: 'node omx hud --watch' },
+        { paneId: '%2', currentCommand: 'node', startCommand: 'node omb hud --watch' },
       ],
       resizeTmuxPane: (paneId, heightLines) => {
         resized.push({ paneId, heightLines });
         return true;
       },
-      resolveOmxCliEntryPath: () => '/repo/dist/cli/omx.js',
+      resolveOmbCliEntryPath: () => '/repo/dist/cli/omb.js',
     });
 
     assert.equal(result.status, 'resized');

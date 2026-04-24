@@ -107,7 +107,7 @@ function matchesDestructiveFixture(command: string): boolean {
 }
 
 function isMcpLikeToolName(toolName: string): boolean {
-  return /^(mcp__|omx_(?:state|memory|trace|code_intel)\b|state_|project_memory_|notepad_|trace_)/i.test(toolName);
+  return /^(mcp__|omb_(?:state|memory|trace|code_intel)\b|state_|project_memory_|notepad_|trace_)/i.test(toolName);
 }
 
 const MCP_TRANSPORT_FAILURE_PATTERNS = [
@@ -123,7 +123,7 @@ const MCP_TRANSPORT_FAILURE_PATTERNS = [
   /mcp(?: server)? .*closed/i,
 ];
 
-type OmxParityCommand =
+type OmbParityCommand =
   | "state"
   | "notepad"
   | "project-memory"
@@ -160,8 +160,8 @@ export function detectMcpTransportFailure(
   };
 }
 
-function resolveOmxParityTarget(toolName: string): { command: OmxParityCommand; tool: string } | null {
-  const match = toolName.match(/^mcp__omx_(state|memory|trace|code_intel)__([a-z0-9_]+)$/i);
+function resolveOmbParityTarget(toolName: string): { command: OmbParityCommand; tool: string } | null {
+  const match = toolName.match(/^mcp__omb_(state|memory|trace|code_intel)__([a-z0-9_]+)$/i);
   if (!match) return null;
 
   const [, server, tool] = match;
@@ -181,11 +181,11 @@ function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function buildOmxParityFallbackCommand(payload: CodexHookPayload, toolName: string): string | null {
-  const target = resolveOmxParityTarget(toolName);
+function buildOmbParityFallbackCommand(payload: CodexHookPayload, toolName: string): string | null {
+  const target = resolveOmbParityTarget(toolName);
   if (!target) return null;
   const input = safeObject(payload.tool_input) ?? {};
-  return `omx ${target.command} ${target.tool} --input ${shellSingleQuote(JSON.stringify(input))} --json`;
+  return `omb ${target.command} ${target.tool} --input ${shellSingleQuote(JSON.stringify(input))} --json`;
 }
 
 export function buildNativePreToolUseOutput(
@@ -213,17 +213,17 @@ export function buildNativePostToolUseOutput(
 ): Record<string, unknown> | null {
   const mcpTransportFailure = detectMcpTransportFailure(payload);
   if (mcpTransportFailure) {
-    const fallbackCommand = buildOmxParityFallbackCommand(payload, mcpTransportFailure.toolName);
+    const fallbackCommand = buildOmbParityFallbackCommand(payload, mcpTransportFailure.toolName);
     const fallbackText = fallbackCommand
       ? `Retry via CLI parity with \`${fallbackCommand}\`.`
-      : "Retry via the matching OMX CLI parity surface instead of retrying the MCP transport blindly.";
+      : "Retry via the matching OMB CLI parity surface instead of retrying the MCP transport blindly.";
     return {
       decision: "block",
-      reason: "The MCP tool appears to have lost its transport/server connection. Preserve state, debug the transport failure, and use OMX CLI/file-backed fallbacks instead of retrying blindly.",
+      reason: "The MCP tool appears to have lost its transport/server connection. Preserve state, debug the transport failure, and use OMB CLI/file-backed fallbacks instead of retrying blindly.",
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
-          `Clear MCP transport-death signal detected. Preserve current team/runtime state. ${fallbackText} OMX MCP servers are plain Node stdio processes, so they still shut down when stdin/transport closes. If this happened during team runtime, inspect first with \`omx team status <team>\` or \`omx team api read-stall-state --input '{"team_name":"<team>"}' --json\`, and only force cleanup after capturing needed state. For root-cause debugging, rerun with \`OMX_MCP_TRANSPORT_DEBUG=1\` to log why the stdio transport closed.`,
+          `Clear MCP transport-death signal detected. Preserve current team/runtime state. ${fallbackText} OMB MCP servers are plain Node stdio processes, so they still shut down when stdin/transport closes. If this happened during team runtime, inspect first with \`omb team status <team>\` or \`omb team api read-stall-state --input '{"team_name":"<team>"}' --json\`, and only force cleanup after capturing needed state. For root-cause debugging, rerun with \`OMB_MCP_TRANSPORT_DEBUG=1\` to log why the stdio transport closed.`,
       },
     };
   }

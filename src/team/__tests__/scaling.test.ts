@@ -23,7 +23,7 @@ delete process.env.OMB_TEAM_STATE_ROOT;
 async function initCommittedGitRepo(cwd: string): Promise<void> {
   execFileSync('git', ['init'], { cwd, stdio: 'pipe' });
   execFileSync('git', ['config', 'user.name', 'OMB Test'], { cwd, stdio: 'pipe' });
-  execFileSync('git', ['config', 'user.email', 'omx@example.com'], { cwd, stdio: 'pipe' });
+  execFileSync('git', ['config', 'user.email', 'omb@example.com'], { cwd, stdio: 'pipe' });
   execFileSync('git', ['add', '.'], { cwd, stdio: 'pipe' });
   execFileSync('git', ['commit', '-m', 'init'], { cwd, stdio: 'pipe' });
 }
@@ -471,7 +471,7 @@ exit 0
 
       const workerRootAgents = join(cwd, '.omb', 'team', 'rollback-worktree', 'worktrees', 'worker-2', 'AGENTS.md');
       assert.equal(await readFile(workerRootAgents, 'utf-8'), '# Root project instructions\n');
-      const backupPath = join(cwd, '.git', 'worktrees', 'worker-2', 'omx', 'root-agents-backup.json');
+      const backupPath = join(cwd, '.git', 'worktrees', 'worker-2', 'omb', 'root-agents-backup.json');
       assert.equal(existsSync(backupPath), false);
     } finally {
       if (typeof previousPath === 'string') process.env.PATH = previousPath;

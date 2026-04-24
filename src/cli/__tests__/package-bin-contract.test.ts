@@ -21,10 +21,10 @@ type NpmPackDryRunResult = {
 };
 
 describe('package bin contract', () => {
-  it('declares omx with an explicit relative bin path and avoids packaging platform-specific native binaries', () => {
+  it('declares omb with an explicit relative bin path and avoids packaging platform-specific native binaries', () => {
     const packageJsonPath = join(process.cwd(), 'package.json');
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as PackageJson;
-    const binaryName = platform() === 'win32' ? 'omx-sparkshell.exe' : 'omx-sparkshell';
+    const binaryName = platform() === 'win32' ? 'omb-sparkshell.exe' : 'omb-sparkshell';
     const packagedSparkShellPath = join(
       process.cwd(),
       'bin',
@@ -33,14 +33,14 @@ describe('package bin contract', () => {
       binaryName,
     );
 
-    assert.deepEqual(pkg.bin, { omb: 'dist/cli/omb.js', omx: 'dist/cli/omx.js' });
-    assert.equal(pkg.scripts?.['build:explore'], 'cargo build -p omx-explore-harness');
+    assert.deepEqual(pkg.bin, { omb: 'dist/cli/omb.js' });
+    assert.equal(pkg.scripts?.['build:explore'], 'cargo build -p omb-explore-harness');
     assert.equal(pkg.scripts?.['build:explore:release'], 'node dist/scripts/build-explore-harness.js');
     assert.equal(pkg.scripts?.['build:full'], 'npm run build && npm run build:explore:release && npm run build:sparkshell');
     assert.equal(pkg.scripts?.['clean:native-package-assets'], 'node dist/scripts/cleanup-explore-harness.js');
     assert.equal(pkg.scripts?.prepack, 'npm run build && npm run clean:native-package-assets');
     assert.equal(pkg.scripts?.postpack, 'npm run clean:native-package-assets');
-    assert.equal(pkg.scripts?.['test:explore'], 'cargo test -p omx-explore-harness && node --test dist/cli/__tests__/explore.test.js dist/hooks/__tests__/explore-routing.test.js dist/hooks/__tests__/explore-sparkshell-guidance-contract.test.js');
+    assert.equal(pkg.scripts?.['test:explore'], 'cargo test -p omb-explore-harness && node --test dist/cli/__tests__/explore.test.js dist/hooks/__tests__/explore-routing.test.js dist/hooks/__tests__/explore-sparkshell-guidance-contract.test.js');
     assert.equal(pkg.scripts?.['test:team:cross-rebase-smoke:compiled'], 'node --test dist/team/__tests__/cross-rebase-smoke.test.js');
     assert.equal(pkg.scripts?.['test:node'], 'node dist/scripts/run-test-files.js dist');
     assert.equal(pkg.scripts?.['test:ci:compiled'], 'npm run test:node && node dist/scripts/generate-catalog-docs.js --check');
@@ -79,7 +79,7 @@ describe('package bin contract', () => {
     assert.ok(pkg.files?.includes('Cargo.lock'));
     assert.ok(pkg.files?.includes('crates/'));
 
-    const binPath = join(process.cwd(), 'dist', 'cli', 'omx.js');
+    const binPath = join(process.cwd(), 'dist', 'cli', 'omb.js');
 
     const binSource = readFileSync(binPath, 'utf-8');
     assert.match(binSource, /^#!\/usr\/bin\/env node/);
@@ -99,25 +99,23 @@ describe('package bin contract', () => {
     assert.equal(Array.isArray(results), true, 'expected npm pack --json array output');
 
     const ombBinEntry = results[0]?.files?.find((file) => file.path === 'dist/cli/omb.js');
-    const omxBinEntry = results[0]?.files?.find((file) => file.path === 'dist/cli/omx.js');
     assert.ok(ombBinEntry, 'expected npm pack output to include dist/cli/omb.js');
-    assert.ok(omxBinEntry, 'expected npm pack output to include dist/cli/omx.js');
 
-    const packagedHarnessPath = process.platform === 'win32' ? 'bin/omx-explore-harness.exe' : 'bin/omx-explore-harness';
+    const packagedHarnessPath = process.platform === 'win32' ? 'bin/omb-explore-harness.exe' : 'bin/omb-explore-harness';
     const packagedHarnessEntry = results[0]?.files?.find((file) => file.path === packagedHarnessPath);
-    const packagedHarnessMetaEntry = results[0]?.files?.find((file) => file.path === 'bin/omx-explore-harness.meta.json');
+    const packagedHarnessMetaEntry = results[0]?.files?.find((file) => file.path === 'bin/omb-explore-harness.meta.json');
     const sparkshellEntry = results[0]?.files?.find((file) => file.path.includes('bin/native/'));
     const cargoTomlEntry = results[0]?.files?.find((file) => file.path === 'Cargo.toml');
     const cargoLockEntry = results[0]?.files?.find((file) => file.path === 'Cargo.lock');
-    const crateManifestEntry = results[0]?.files?.find((file) => file.path === 'crates/omx-explore/Cargo.toml');
-    const crateMainEntry = results[0]?.files?.find((file) => file.path === 'crates/omx-explore/src/main.rs');
+    const crateManifestEntry = results[0]?.files?.find((file) => file.path === 'crates/omb-explore/Cargo.toml');
+    const crateMainEntry = results[0]?.files?.find((file) => file.path === 'crates/omb-explore/src/main.rs');
 
     assert.equal(packagedHarnessEntry, undefined, `did not expect ${packagedHarnessPath} in npm pack output`);
     assert.equal(packagedHarnessMetaEntry, undefined, 'did not expect packaged explore harness metadata in npm pack output');
     assert.equal(sparkshellEntry, undefined, 'did not expect staged sparkshell binaries in npm pack output');
     assert.ok(cargoTomlEntry, 'expected npm pack output to include Cargo.toml');
     assert.ok(cargoLockEntry, 'expected npm pack output to include Cargo.lock');
-    assert.ok(crateManifestEntry, 'expected npm pack output to include crates/omx-explore/Cargo.toml');
-    assert.ok(crateMainEntry, 'expected npm pack output to include crates/omx-explore/src/main.rs');
+    assert.ok(crateManifestEntry, 'expected npm pack output to include crates/omb-explore/Cargo.toml');
+    assert.ok(crateMainEntry, 'expected npm pack output to include crates/omb-explore/src/main.rs');
   });
 });

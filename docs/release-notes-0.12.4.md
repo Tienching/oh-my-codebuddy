@@ -6,7 +6,7 @@
 
 ## Highlights
 
-- **MCP-CLI parity** — `omx state`, `omx notepad`, `omx project-memory`, `omx trace`, and `omx code-intel` expose MCP server tools through the CLI, making every MCP operation scriptable without transport overhead.
+- **MCP-CLI parity** — `omb state`, `omb notepad`, `omb project-memory`, `omb trace`, and `omb code-intel` expose MCP server tools through the CLI, making every MCP operation scriptable without transport overhead.
 - **HUD self-healing** — a new reconciliation module (`src/hud/reconcile.ts`) and shared tmux helpers (`src/hud/tmux.ts`) keep HUD panes alive across session boundaries, including prompt-submit recovery that actually restores the real HUD process.
 - **Native-hook and team-runtime hardening** — stale Ralph state, unknown `$tokens`, stale stop-hook blockers, MCP transport death, and dirty worktree races are all resolved.
 - **State operations extraction** — `src/state/operations.ts` provides a clean read/write/clear/list/status API that backs both the MCP state server and the new CLI parity surface.
@@ -14,15 +14,15 @@
 ## Included fixes and changes
 
 ### Added
-- MCP-CLI parity surface: `omx state`, `omx notepad`, `omx project-memory`, `omx trace`, `omx code-intel`
+- MCP-CLI parity surface: `omb state`, `omb notepad`, `omb project-memory`, `omb trace`, `omb code-intel`
 - HUD reconciliation module (`src/hud/reconcile.ts`)
 - Shared HUD tmux helpers extracted to `src/hud/tmux.ts`
 - State operations module (`src/state/operations.ts`)
 - Path traversal safety utilities (`src/utils/paths.ts`)
 
 ### Fixed
-- HUD recovery through the OMX CLI entry during prompt-submit recovery (#1413, #1414)
-- User-owned Codex hooks preserved during `omx setup` refresh
+- HUD recovery through the OMB CLI entry during prompt-submit recovery (#1413, #1414)
+- User-owned Codex hooks preserved during `omb setup` refresh
 - HUD prompt-submit layout churn stopped
 - Duplicate native-hook continuations from stale Ralph state and unknown `$tokens`
 - Stale team worktree cleanup at `startTeam()` time (#1354, #1382)
@@ -34,7 +34,7 @@
 - CI hang prevention and reduced teardown dead-time (#1405)
 
 ### Changed
-- State CLI routed consistently through `omx state`
+- State CLI routed consistently through `omb state`
 - Tmux session name truncation preserves session token when name > 120 chars
 - Release metadata synced to `0.12.4`
 

@@ -25,12 +25,12 @@ describe('sparkshell packaging scaffold', () => {
   it('registers native helper scripts but keeps staged native artifacts out of npm releases', () => {
     const packageJsonPath = join(process.cwd(), 'package.json');
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as PackageJson;
-    const binaryName = platform() === 'win32' ? 'omx-sparkshell.exe' : 'omx-sparkshell';
+    const binaryName = platform() === 'win32' ? 'omb-sparkshell.exe' : 'omb-sparkshell';
     const stagedRoot = mkdtempSync(join(tmpdir(), 'omb-sparkshell-stage-'));
     const packagedBinaryRelativePath = join(`${platform()}-${arch()}`, binaryName);
     const packagedBinaryPath = join(stagedRoot, packagedBinaryRelativePath);
 
-    assert.deepEqual(pkg.bin, { omb: 'dist/cli/omb.js', omx: 'dist/cli/omx.js' });
+    assert.deepEqual(pkg.bin, { omb: 'dist/cli/omb.js' });
     assert.equal(pkg.scripts?.['build:sparkshell'], 'node dist/scripts/build-sparkshell.js');
     assert.equal(pkg.scripts?.['test:sparkshell'], 'node dist/scripts/test-sparkshell.js');
     assert.equal(pkg.files?.includes('dist/'), true, 'expected package files allowlist to include dist/');

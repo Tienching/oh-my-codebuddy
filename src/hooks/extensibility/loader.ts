@@ -36,7 +36,7 @@ export function hooksDir(cwd: string): string {
 }
 
 function resolveExistingHooksDir(cwd: string): string {
-  const canonical = join(cwd, '.omx', 'hooks');
+  const canonical = join(cwd, '.omb', 'hooks');
   if (existsSync(canonical)) return canonical;
   return hooksDir(cwd);
 }

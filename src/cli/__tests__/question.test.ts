@@ -9,14 +9,14 @@ import { markQuestionAnswered, readQuestionRecord } from '../../question/state.j
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..', '..', '..');
-const omxBin = join(repoRoot, 'dist', 'cli', 'omx.js');
+const ombBin = join(repoRoot, 'dist', 'cli', 'omb.js');
 const tempDirs: string[] = [];
 
 async function makeRepo(): Promise<string> {
-  const cwd = await mkdtemp(join(tmpdir(), 'omx-question-cli-'));
+  const cwd = await mkdtemp(join(tmpdir(), 'omb-question-cli-'));
   tempDirs.push(cwd);
-  await mkdir(join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions'), { recursive: true });
-  await writeFile(join(cwd, '.omx', 'state', 'session.json'), JSON.stringify({ session_id: 'sess-q' }));
+  await mkdir(join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions'), { recursive: true });
+  await writeFile(join(cwd, '.omb', 'state', 'session.json'), JSON.stringify({ session_id: 'sess-q' }));
   return cwd;
 }
 
@@ -24,17 +24,17 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-describe('omx question CLI', () => {
+describe('omb question CLI', () => {
   it('hard-fails worker contexts before UI launch', async () => {
     const cwd = await makeRepo();
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-      const child = spawn(process.execPath, [omxBin, 'question', '--input', JSON.stringify({
+      const child = spawn(process.execPath, [ombBin, 'question', '--input', JSON.stringify({
         question: 'Pick one',
         options: ['A'],
         allow_other: true,
       }), '--json'], {
         cwd,
-        env: { ...process.env, OMX_TEAM_WORKER: 'demo/worker-1', OMX_AUTO_UPDATE: '0' },
+        env: { ...process.env, OMB_TEAM_WORKER: 'demo/worker-1', OMB_AUTO_UPDATE: '0' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let stdout = '';
@@ -47,7 +47,7 @@ describe('omx question CLI', () => {
     assert.equal(result.code, 1);
     const parsed = JSON.parse(result.stdout);
     assert.equal(parsed.error.code, 'worker_blocked');
-    assert.deepEqual(await readdir(join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions')), []);
+    assert.deepEqual(await readdir(join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions')), []);
   });
 
   it('blocks until an answer is written and returns structured payload', async () => {
@@ -61,9 +61,9 @@ describe('omx question CLI', () => {
       session_id: 'sess-q',
     });
 
-    const child = spawn(process.execPath, [omxBin, 'question', '--input', input, '--json'], {
+    const child = spawn(process.execPath, [ombBin, 'question', '--input', input, '--json'], {
       cwd,
-      env: { ...process.env, OMX_AUTO_UPDATE: '0', OMX_NOTIFY_FALLBACK: '0', OMX_HOOK_DERIVED_SIGNALS: '0', OMX_QUESTION_TEST_RENDERER: 'noop' },
+      env: { ...process.env, OMB_AUTO_UPDATE: '0', OMB_NOTIFY_FALLBACK: '0', OMB_HOOK_DERIVED_SIGNALS: '0', OMB_QUESTION_TEST_RENDERER: 'noop' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -72,7 +72,7 @@ describe('omx question CLI', () => {
     child.stdout.on('data', (chunk) => { stdout += String(chunk); });
     child.stderr.on('data', (chunk) => { stderr += String(chunk); });
 
-    const questionsDir = join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions');
+    const questionsDir = join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions');
     let recordFile = '';
     for (let attempt = 0; attempt < 50; attempt += 1) {
       try {
@@ -143,16 +143,16 @@ esac
     });
 
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-      const child = spawn(process.execPath, [omxBin, 'question', '--input', input, '--json'], {
+      const child = spawn(process.execPath, [ombBin, 'question', '--input', input, '--json'], {
         cwd,
         env: {
           ...process.env,
           PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
           TMUX: '/tmp/fake',
           TMUX_PANE: '%0',
-          OMX_AUTO_UPDATE: '0',
-          OMX_NOTIFY_FALLBACK: '0',
-          OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMB_AUTO_UPDATE: '0',
+          OMB_NOTIFY_FALLBACK: '0',
+          OMB_HOOK_DERIVED_SIGNALS: '0',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -169,9 +169,9 @@ esac
     assert.equal(payload.error.code, 'question_runtime_failed');
     assert.match(payload.error.message, /pane %5 disappeared immediately after launch/i);
 
-    const entries = await readdir(join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions'));
+    const entries = await readdir(join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions'));
     assert.equal(entries.length, 1);
-    const recordPath = join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions', entries[0]!);
+    const recordPath = join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions', entries[0]!);
     const record = JSON.parse(await readFile(recordPath, 'utf-8')) as { status: string; error?: { code?: string; message?: string } };
     assert.equal(record.status, 'error');
     assert.equal(record.error?.code, 'question_runtime_failed');
@@ -198,16 +198,16 @@ exit 0
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
-      OMX_AUTO_UPDATE: '0',
-      OMX_NOTIFY_FALLBACK: '0',
-      OMX_HOOK_DERIVED_SIGNALS: '0',
+      OMB_AUTO_UPDATE: '0',
+      OMB_NOTIFY_FALLBACK: '0',
+      OMB_HOOK_DERIVED_SIGNALS: '0',
     };
     delete childEnv.TMUX;
     delete childEnv.TMUX_PANE;
-    delete childEnv.OMX_QUESTION_TEST_RENDERER;
+    delete childEnv.OMB_QUESTION_TEST_RENDERER;
 
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
-      const child = spawn(process.execPath, [omxBin, 'question', '--input', input, '--json'], {
+      const child = spawn(process.execPath, [ombBin, 'question', '--input', input, '--json'], {
         cwd,
         env: childEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -225,12 +225,12 @@ exit 0
     assert.equal(payload.error.code, 'question_runtime_failed');
     assert.match(payload.error.message, /visible renderer/i);
     assert.match(payload.error.message, /attached tmux pane/i);
-    assert.match(payload.error.message, /Run omx question from inside tmux/i);
+    assert.match(payload.error.message, /Run omb question from inside tmux/i);
     assert.doesNotMatch(payload.error.message, /tmux is unavailable/i);
 
-    const entries = await readdir(join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions'));
+    const entries = await readdir(join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions'));
     assert.equal(entries.length, 1);
-    const recordPath = join(cwd, '.omx', 'state', 'sessions', 'sess-q', 'questions', entries[0]!);
+    const recordPath = join(cwd, '.omb', 'state', 'sessions', 'sess-q', 'questions', entries[0]!);
     const record = JSON.parse(await readFile(recordPath, 'utf-8')) as { status: string; error?: { code?: string; message?: string } };
     assert.equal(record.status, 'error');
     assert.equal(record.error?.code, 'question_runtime_failed');

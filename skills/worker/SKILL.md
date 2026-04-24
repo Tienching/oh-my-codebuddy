@@ -52,7 +52,7 @@ omb team api send-message --input "{\"team_name\":\"<teamName>\",\"from_worker\"
 
 1. Resolve canonical team state root in this order:
    1) `OMB_TEAM_STATE_ROOT` env
-   2) `OMB_TEAM_STATE_ROOT` primary env (`OMX_TEAM_STATE_ROOT` remains the compatibility alias)
+   2) `OMB_TEAM_STATE_ROOT` primary env (`OMB_TEAM_STATE_ROOT` remains the compatibility alias)
    3) worker identity `team_state_root`
    4) team config/manifest `team_state_root`
    5) local cwd fallback (`.omb/state`)

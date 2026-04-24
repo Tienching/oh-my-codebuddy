@@ -9,12 +9,8 @@ import {
 
 export const OMB_EXPERIMENTAL_PLATFORM_FACADE_ENV =
   'OMB_EXPERIMENTAL_PLATFORM_FACADE';
-export const OMX_EXPERIMENTAL_PLATFORM_FACADE_ENV =
-  'OMX_EXPERIMENTAL_PLATFORM_FACADE';
 export const OMB_EXPERIMENTAL_INSTALLER_FACADE_ENV =
   'OMB_EXPERIMENTAL_INSTALLER_FACADE';
-export const OMX_EXPERIMENTAL_INSTALLER_FACADE_ENV =
-  'OMX_EXPERIMENTAL_INSTALLER_FACADE';
 
 export type InstallerScope = 'user' | 'project';
 
@@ -51,9 +47,8 @@ export function isExperimentalInstallerFacadeEnabled(
 ): boolean {
   return (
     isTruthyFlag(env[OMB_EXPERIMENTAL_PLATFORM_FACADE_ENV]) ||
-    isTruthyFlag(env[OMX_EXPERIMENTAL_PLATFORM_FACADE_ENV]) ||
     isTruthyFlag(env[OMB_EXPERIMENTAL_INSTALLER_FACADE_ENV]) ||
-    isTruthyFlag(env[OMX_EXPERIMENTAL_INSTALLER_FACADE_ENV])
+    isTruthyFlag(env[OMB_EXPERIMENTAL_INSTALLER_FACADE_ENV])
   );
 }
 

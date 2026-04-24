@@ -47,7 +47,7 @@ describe('team-server wait semantics', () => {
       const { handleTeamToolCall } = await loadTeamServer();
       const response = await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_wait',
+          name: 'omb_run_team_wait',
           arguments: { job_id: jobId, timeout_ms: 50 },
         },
       });
@@ -92,7 +92,7 @@ describe('team-server wait semantics', () => {
       const { handleTeamToolCall } = await loadTeamServer();
       const response = await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_wait',
+          name: 'omb_run_team_wait',
           arguments: {
             job_id: jobId,
             timeout_ms: 100,
@@ -151,7 +151,7 @@ describe('team-server wait semantics', () => {
       const { handleTeamToolCall } = await loadTeamServer();
       const response = await handleTeamToolCall({
         params: {
-          name: 'omx_run_team_wait',
+          name: 'omb_run_team_wait',
           arguments: {
             job_id: jobId,
             timeout_ms: 100,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# clean-team-env.sh — Unset all OMB_TEAM_* and OMX_TEAM_* environment variables.
+# clean-team-env.sh — Unset all OMB_TEAM_* and OMB_TEAM_* environment variables.
 #
 # Usage:
 #   source scripts/clean-team-env.sh    # unset in current shell
@@ -16,7 +16,7 @@ vars_to_unset=()
 
 while IFS='=' read -r name _; do
   case "$name" in
-    OMB_TEAM_*|OMX_TEAM_*)
+    OMB_TEAM_*|OMB_TEAM_*)
       vars_to_unset+=("$name")
       ;;
   esac
@@ -24,7 +24,7 @@ done < <(env)
 
 if [[ "${#vars_to_unset[@]}" -eq 0 ]]; then
   if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    echo "# No OMB_TEAM_* or OMX_TEAM_* variables found"
+    echo "# No OMB_TEAM_* or OMB_TEAM_* variables found"
   fi
   exit 0
 fi

@@ -4,10 +4,10 @@
  * Table-driven tests covering every canonical↔legacy alias pair:
  *   - CODEBUDDY_HOME vs CODEX_HOME priority
  *   - .codebuddy vs .codex directory detection
- *   - omb vs omx command alias
- *   - OMB_* vs OMX_* env var priority
+ *   - canonical OMB command has no legacy binary alias
+ *   - OMB_* env var priority
  *   - Setup scope migration rules
- *   - Session read priority (canonical first, legacy fallback)
+ *   - Session state path compatibility
  */
 
 import { describe, it, beforeEach, afterEach } from "node:test";
@@ -140,9 +140,8 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
   interface DirTestCase {
     name: string;
     create: string[];  // dirs to create
-    expectOmx: boolean;
-    expectCodex: boolean;
     expectOmb: boolean;
+    expectCodex: boolean;
     expectCodebuddy: boolean;
   }
 
@@ -150,57 +149,43 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
     {
       name: "empty project — no legacy dirs",
       create: [],
-      expectOmx: false,
-      expectCodex: false,
       expectOmb: false,
+      expectCodex: false,
       expectCodebuddy: false,
     },
     {
       name: "only .codex exists",
       create: [".codex"],
-      expectOmx: false,
+      expectOmb: false,
       expectCodex: true,
-      expectOmb: false,
-      expectCodebuddy: false,
-    },
-    {
-      name: "only .omx exists",
-      create: [".omx"],
-      expectOmx: true,
-      expectCodex: false,
-      expectOmb: false,
       expectCodebuddy: false,
     },
     {
       name: "only .omb exists",
       create: [".omb"],
-      expectOmx: false,
-      expectCodex: false,
       expectOmb: true,
+      expectCodex: false,
       expectCodebuddy: false,
     },
     {
       name: "only .codebuddy exists",
       create: [".codebuddy"],
-      expectOmx: false,
+      expectOmb: false,
       expectCodex: false,
-      expectOmb: false,
       expectCodebuddy: true,
     },
     {
-      name: "all four dirs exist",
-      create: [".codex", ".omx", ".omb", ".codebuddy"],
-      expectOmx: true,
-      expectCodex: true,
+      name: "all canonical/current dirs exist",
+      create: [".codex", ".omb", ".codebuddy"],
       expectOmb: true,
+      expectCodex: true,
       expectCodebuddy: true,
     },
     {
-      name: "both legacy dirs (.codex + .omx)",
-      create: [".codex", ".omx"],
-      expectOmx: true,
+      name: "legacy codex plus OMB state dir",
+      create: [".codex", ".omb"],
+      expectOmb: true,
       expectCodex: true,
-      expectOmb: false,
       expectCodebuddy: false,
     },
   ];
@@ -211,7 +196,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
         await mkdir(join(tmpDir, dir), { recursive: true });
       }
       const report = readLegacyAliasIfPresent(tmpDir);
-      assert.equal(report.hasLegacyOmxDir, tc.expectOmx);
+      assert.equal(report.hasLegacyOmbDir, tc.expectOmb);
       assert.equal(report.hasLegacyCodexDir, tc.expectCodex);
       assert.equal(report.hasCanonicalOmbDir, tc.expectOmb);
       assert.equal(report.hasCanonicalCodebuddyDir, tc.expectCodebuddy);
@@ -220,39 +205,21 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// SECTION 3: omb vs omx command alias
+// SECTION 3: OMB command binary alias registry
 // ══════════════════════════════════════════════════════════════════════════
 
-describe("E1-T05: omb vs omx command alias in registry", () => {
-  it("omb alias exists in registry", () => {
-    const alias = findAlias("omb");
-    assert.ok(alias, "omb alias must exist");
-    assert.equal(alias.canonical, "omb");
-    assert.equal(alias.legacy, "omx");
-  });
-
-  it("omx resolves to omb via findAlias", () => {
-    const alias = findAlias("omx");
-    assert.ok(alias, "omx should resolve to an alias");
-    assert.equal(alias.canonical, "omb");
-    assert.equal(alias.legacy, "omx");
-  });
-
-  it("omb alias status is active_compat", () => {
-    const alias = findAlias("omb");
-    assert.equal(alias?.status, "active_compat");
-  });
-
-  it("omb alias supports dual-write", () => {
-    assert.equal(shouldDualWrite("omb"), true);
+describe("E1-T05: OMB command binary alias registry", () => {
+  it("does not register a legacy binary alias for omb", () => {
+    assert.equal(findAlias("omb"), undefined);
+    assert.equal(shouldDualWrite("omb"), false);
   });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// SECTION 4: OMB_* vs OMX_* env var priority
+// SECTION 4: OMB_* env var priority
 // ══════════════════════════════════════════════════════════════════════════
 
-describe("E1-T05: OMB_* vs OMX_* env var priority matrix", () => {
+describe("E1-T05: OMB_* env var priority matrix", () => {
   interface EnvVarTestCase {
     name: string;
     resolver: "entry" | "runtime_binary" | "runtime_bridge";
@@ -261,23 +228,11 @@ describe("E1-T05: OMB_* vs OMX_* env var priority matrix", () => {
   }
 
   const cases: EnvVarTestCase[] = [
-    // ── OMB_ENTRY_PATH / OMX_ENTRY_PATH ──────────────────────────────
+    // ── OMB_ENTRY_PATH ───────────────────────────────────────────────
     {
-      name: "ENTRY: canonical only",
+      name: "ENTRY: set",
       resolver: "entry",
       env: { OMB_ENTRY_PATH: "/omb/entry" },
-      expected: "/omb/entry",
-    },
-    {
-      name: "ENTRY: legacy only",
-      resolver: "entry",
-      env: { OMX_ENTRY_PATH: "/omx/entry" },
-      expected: "/omx/entry",
-    },
-    {
-      name: "ENTRY: both set — canonical wins",
-      resolver: "entry",
-      env: { OMB_ENTRY_PATH: "/omb/entry", OMX_ENTRY_PATH: "/omx/entry" },
       expected: "/omb/entry",
     },
     {
@@ -287,23 +242,11 @@ describe("E1-T05: OMB_* vs OMX_* env var priority matrix", () => {
       expected: null,
     },
 
-    // ── OMB_RUNTIME_BINARY / OMX_RUNTIME_BINARY ──────────────────────
+    // ── OMB_RUNTIME_BINARY ───────────────────────────────────────────
     {
-      name: "BINARY: canonical only",
+      name: "BINARY: set",
       resolver: "runtime_binary",
       env: { OMB_RUNTIME_BINARY: "/omb/bin" },
-      expected: "/omb/bin",
-    },
-    {
-      name: "BINARY: legacy only",
-      resolver: "runtime_binary",
-      env: { OMX_RUNTIME_BINARY: "/omx/bin" },
-      expected: "/omx/bin",
-    },
-    {
-      name: "BINARY: both set — canonical wins",
-      resolver: "runtime_binary",
-      env: { OMB_RUNTIME_BINARY: "/omb/bin", OMX_RUNTIME_BINARY: "/omx/bin" },
       expected: "/omb/bin",
     },
     {
@@ -313,41 +256,17 @@ describe("E1-T05: OMB_* vs OMX_* env var priority matrix", () => {
       expected: undefined,
     },
 
-    // ── OMB_RUNTIME_BRIDGE / OMX_RUNTIME_BRIDGE ──────────────────────
+    // ── OMB_RUNTIME_BRIDGE ───────────────────────────────────────────
     {
-      name: "BRIDGE: canonical=0 — disabled",
+      name: "BRIDGE: 0 — disabled",
       resolver: "runtime_bridge",
       env: { OMB_RUNTIME_BRIDGE: "0" },
       expected: false,
     },
     {
-      name: "BRIDGE: canonical=1 — enabled",
+      name: "BRIDGE: 1 — enabled",
       resolver: "runtime_bridge",
       env: { OMB_RUNTIME_BRIDGE: "1" },
-      expected: true,
-    },
-    {
-      name: "BRIDGE: legacy=0 — disabled",
-      resolver: "runtime_bridge",
-      env: { OMX_RUNTIME_BRIDGE: "0" },
-      expected: false,
-    },
-    {
-      name: "BRIDGE: legacy=1 — enabled",
-      resolver: "runtime_bridge",
-      env: { OMX_RUNTIME_BRIDGE: "1" },
-      expected: true,
-    },
-    {
-      name: "BRIDGE: canonical=0 overrides legacy=1",
-      resolver: "runtime_bridge",
-      env: { OMB_RUNTIME_BRIDGE: "0", OMX_RUNTIME_BRIDGE: "1" },
-      expected: false,
-    },
-    {
-      name: "BRIDGE: canonical=1 overrides legacy=0",
-      resolver: "runtime_bridge",
-      env: { OMB_RUNTIME_BRIDGE: "1", OMX_RUNTIME_BRIDGE: "0" },
       expected: true,
     },
     {
@@ -389,10 +308,10 @@ describe("E1-T05: Setup scope migration rules", () => {
     assert.equal(rule.to, ".codebuddy");
   });
 
-  it("compat rules cover legacy .omx state directory", () => {
-    const rule = COMPAT_RULES.find((r) => r.id === "legacy-omx-state");
-    assert.ok(rule, "legacy-omx-state rule must exist");
-    assert.equal(rule.from, ".omx");
+  it("compat rules cover legacy .omb state directory", () => {
+    const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
+    assert.ok(rule, "legacy-omb-state rule must exist");
+    assert.equal(rule.from, ".omb");
     assert.equal(rule.to, ".omb");
   });
 
@@ -401,13 +320,13 @@ describe("E1-T05: Setup scope migration rules", () => {
     assert.equal(rule?.autoFix, true);
   });
 
-  it("legacy-omx-state rule has autoFix=false", () => {
-    const rule = COMPAT_RULES.find((r) => r.id === "legacy-omx-state");
+  it("legacy-omb-state rule has autoFix=false", () => {
+    const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
     assert.equal(rule?.autoFix, false);
   });
 
-  it("legacy-omx-state is deprecated", () => {
-    const rule = COMPAT_RULES.find((r) => r.id === "legacy-omx-state");
+  it("legacy-omb-state is deprecated", () => {
+    const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
     assert.equal(rule?.status, "deprecated");
   });
 
@@ -432,21 +351,21 @@ describe("E1-T05: Setup scope migration rules", () => {
     }
   });
 
-  it("legacy-omx-state condition detects .omx directory", async () => {
+  it("legacy-omb-state condition detects .omb directory", async () => {
     const dir = makeTmpDir();
     try {
-      await mkdir(join(dir, ".omx"), { recursive: true });
-      const rule = COMPAT_RULES.find((r) => r.id === "legacy-omx-state");
+      await mkdir(join(dir, ".omb"), { recursive: true });
+      const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
       assert.equal(rule?.condition(dir), true);
     } finally {
       await cleanupTmpDir();
     }
   });
 
-  it("legacy-omx-state condition returns false without .omx", async () => {
+  it("legacy-omb-state condition returns false without .omb", async () => {
     const dir = makeTmpDir();
     try {
-      const rule = COMPAT_RULES.find((r) => r.id === "legacy-omx-state");
+      const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
       assert.equal(rule?.condition(dir), false);
     } finally {
       await cleanupTmpDir();
@@ -458,7 +377,7 @@ describe("E1-T05: Setup scope migration rules", () => {
 // SECTION 6: Session read priority (canonical first, legacy fallback)
 // ══════════════════════════════════════════════════════════════════════════
 
-describe("E1-T05: Session read priority — canonical first, legacy fallback", () => {
+describe("E1-T05: Session state path compatibility", () => {
   beforeEach(makeTmpDir);
   afterEach(cleanupTmpDir);
 
@@ -472,37 +391,30 @@ describe("E1-T05: Session read priority — canonical first, legacy fallback", (
       pid: 12345,
     }));
 
-    // Verify canonical path exists and legacy does not
+    assert.equal(resolveLegacyStateDir(tmpDir), ombState);
     assert.ok(existsSync(join(ombState, "session.json")));
-    assert.ok(!existsSync(join(resolveLegacyStateDir(tmpDir), "session.json")));
   });
 
-  it("falls back to legacy .omx/state when canonical missing", async () => {
-    const omxState = resolveLegacyStateDir(tmpDir);
-    await mkdir(omxState, { recursive: true });
-    const legacyData = {
-      session_id: "legacy-session",
+  it("compat state resolver targets canonical .omb/state", async () => {
+    const ombState = resolveLegacyStateDir(tmpDir);
+    await mkdir(ombState, { recursive: true });
+    const data = {
+      session_id: "compat-session",
       started_at: new Date().toISOString(),
       cwd: tmpDir,
       pid: 54321,
     };
-    await writeFile(join(omxState, "session.json"), JSON.stringify(legacyData));
+    await writeFile(join(ombState, "session.json"), JSON.stringify(data));
 
-    // Verify legacy exists, canonical does not
-    assert.ok(existsSync(join(omxState, "session.json")));
-    assert.ok(!existsSync(join(resolveCanonicalStateDir(tmpDir), "session.json")));
-
-    // Read directly from legacy path (simulating read-through pattern)
-    const content = await readFile(join(omxState, "session.json"), "utf-8");
+    assert.equal(ombState, resolveCanonicalStateDir(tmpDir));
+    const content = await readFile(join(resolveCanonicalStateDir(tmpDir), "session.json"), "utf-8");
     const parsed = JSON.parse(content);
-    assert.equal(parsed.session_id, "legacy-session");
+    assert.equal(parsed.session_id, "compat-session");
   });
 
   it("canonical takes priority when both exist", async () => {
     const ombState = resolveCanonicalStateDir(tmpDir);
-    const omxState = resolveLegacyStateDir(tmpDir);
     await mkdir(ombState, { recursive: true });
-    await mkdir(omxState, { recursive: true });
 
     await writeFile(join(ombState, "session.json"), JSON.stringify({
       session_id: "canonical-session",
@@ -510,17 +422,10 @@ describe("E1-T05: Session read priority — canonical first, legacy fallback", (
       cwd: tmpDir,
       pid: 11111,
     }));
-    await writeFile(join(omxState, "session.json"), JSON.stringify({
-      session_id: "legacy-session",
-      started_at: new Date().toISOString(),
-      cwd: tmpDir,
-      pid: 22222,
-    }));
 
     // Simulate canonical-first read
     const canonicalPath = join(ombState, "session.json");
-    const legacyPath = join(omxState, "session.json");
-    const readPath = [canonicalPath, legacyPath].find((p) => existsSync(p));
+    const readPath = [canonicalPath].find((p) => existsSync(p));
     assert.ok(readPath);
     assert.equal(readPath, canonicalPath);
 
@@ -529,12 +434,12 @@ describe("E1-T05: Session read priority — canonical first, legacy fallback", (
     assert.equal(parsed.session_id, "canonical-session");
   });
 
-  it("isLegacyPathActive detects .omx/state directory", async () => {
-    await mkdir(join(tmpDir, ".omx", "state"), { recursive: true });
+  it("isLegacyPathActive detects .omb/state directory", async () => {
+    await mkdir(join(tmpDir, ".omb", "state"), { recursive: true });
     assert.equal(isLegacyPathActive(tmpDir), true);
   });
 
-  it("isLegacyPathActive returns false without .omx/state", () => {
+  it("isLegacyPathActive returns false without .omb/state", () => {
     assert.equal(isLegacyPathActive(tmpDir), false);
   });
 });

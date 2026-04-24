@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ombStateDir, omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 
 export type CurrentTaskStatus = 'active' | 'merged' | 'closed' | 'superseded';
 
@@ -35,7 +35,7 @@ export interface UpsertCurrentTaskBaselineInput {
 function baselinePaths(repoRoot: string): { canonical: string; legacy: string } {
   return {
     canonical: join(ombStateDir(repoRoot), 'current-task-baseline.json'),
-    legacy: join(omxStateDir(repoRoot), 'current-task-baseline.json'),
+    legacy: join(ombStateDir(repoRoot), 'current-task-baseline.json'),
   };
 }
 
@@ -76,7 +76,7 @@ function writeCurrentTaskBaseline(repoRoot: string, data: CurrentTaskBaselineFil
   writeFileSync(canonical, payload, 'utf-8');
 
   if (legacy !== canonical) {
-    mkdirSync(omxStateDir(repoRoot), { recursive: true });
+    mkdirSync(ombStateDir(repoRoot), { recursive: true });
     writeFileSync(legacy, payload, 'utf-8');
   }
 }

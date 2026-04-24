@@ -45,7 +45,6 @@ describe('allocation-policy', () => {
       ],
       [
         { owner: 'worker-1', role: 'executor' },
-        { owner: 'worker-1', role: 'executor' },
       ],
     );
 

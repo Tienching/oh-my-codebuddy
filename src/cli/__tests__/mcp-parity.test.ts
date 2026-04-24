@@ -22,7 +22,7 @@ function captureLogs(): string[] {
 
 describe("mcpParityCommand", () => {
   it("supports state write/read parity via CLI", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-mcp-parity-state-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-mcp-parity-state-"));
     const logs = captureLogs();
 
     try {
@@ -50,7 +50,7 @@ describe("mcpParityCommand", () => {
   });
 
   it("supports notepad and project-memory parity via CLI", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-mcp-parity-memory-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-mcp-parity-memory-"));
     const logs = captureLogs();
 
     try {
@@ -97,7 +97,7 @@ describe("mcpParityCommand", () => {
   });
 
   it("supports trace summary parity via CLI", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-mcp-parity-trace-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-mcp-parity-trace-"));
     const logs = captureLogs();
 
     try {

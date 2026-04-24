@@ -210,7 +210,6 @@ async function syncRootTeamModeStateOnTerminalPhase(
 
   for (const rootStatePath of [
     join(cwd, '.omb', 'state', 'team-state.json'),
-    join(cwd, '.omx', 'state', 'team-state.json'),
   ]) {
     if (!existsSync(rootStatePath)) continue;
     try {
@@ -254,11 +253,11 @@ async function assertTeamStartupIsNonDestructive(
   const currentPhase = existingPhase?.current_phase;
   if (currentPhase && isTerminalPhase(currentPhase)) return;
 
-  const tmuxSession = existingConfig?.tmux_session ?? existingManifest?.tmux_session ?? `omx-team-${teamName}`;
+  const tmuxSession = existingConfig?.tmux_session ?? existingManifest?.tmux_session ?? `omb-team-${teamName}`;
   const renderedPhase = currentPhase ?? 'team-exec';
   throw new Error(
     `team_name_conflict: active team state already exists for "${teamName}" (phase: ${renderedPhase}, tmux: ${tmuxSession}). `
-    + `Use "omb team status ${teamName}", "omb team resume ${teamName}", or "omb team shutdown ${teamName}" instead of launching a duplicate team (legacy \`omx\` aliases still work).`,
+    + `Use "omb team status ${teamName}", "omb team resume ${teamName}", or "omb team shutdown ${teamName}" instead of launching a duplicate team (legacy \`omb\` aliases still work).`,
   );
 }
 
@@ -563,7 +562,7 @@ function autoCommitDirtyWorktree(
   const addResult = runGitCommand(repoRoot, ['add', '-A'], worktreePath);
   if (!addResult.ok) return { committed: false, commitHash: null };
 
-  const msg = `omx(team): auto-checkpoint ${worker.name} [${taskId}]`;
+  const msg = `omb(team): auto-checkpoint ${worker.name} [${taskId}]`;
   const commitResult = runGitCommand(repoRoot, ['commit', '--no-verify', '-m', msg], worktreePath);
   if (!commitResult.ok) return { committed: false, commitHash: null };
 
@@ -586,10 +585,10 @@ function appendIntegrationReport(
   const timestamp = new Date().toISOString();
   const line = `- [${timestamp}] ${entry.workerName}: ${entry.operation} conflict auto-resolved (${entry.strategy}) on files: ${entry.files.join(', ') || 'unknown'}. ${entry.detail}\n`;
   const reportRoots = new Set([teamStateRoot]);
-  if (teamStateRoot.includes(`${sep}.omx${sep}state`)) {
-    reportRoots.add(teamStateRoot.replace(`${sep}.omx${sep}state`, `${sep}.omb${sep}state`));
+  if (teamStateRoot.includes(`${sep}.omb${sep}state`)) {
+    reportRoots.add(teamStateRoot.replace(`${sep}.omb${sep}state`, `${sep}.omb${sep}state`));
   } else if (teamStateRoot.includes(`${sep}.omb${sep}state`)) {
-    reportRoots.add(teamStateRoot.replace(`${sep}.omb${sep}state`, `${sep}.omx${sep}state`));
+    reportRoots.add(teamStateRoot.replace(`${sep}.omb${sep}state`, `${sep}.omb${sep}state`));
   }
   for (const root of reportRoots) {
     const reportPath = join(root, 'team', teamName, 'integration-report.md');
@@ -677,7 +676,7 @@ async function integrateWorkerCommitsIntoLeader(params: {
       // Worker is cleanly ahead → merge --no-ff -X theirs
       const workerBranch = runGitCommand(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'], worktreePath);
       const branchRef = resolveWorkerMergeRef(workerBranch, workerHead);
-      const merge = runGitCommand(repoRoot, ['merge', '--no-ff', '-X', 'theirs', '-m', `omx(team): merge ${worker.name}`, branchRef], cwd);
+      const merge = runGitCommand(repoRoot, ['merge', '--no-ff', '-X', 'theirs', '-m', `omb(team): merge ${worker.name}`, branchRef], cwd);
 
       if (merge.ok) {
         const newLeaderHead = resolveLeaderHead(repoRoot, cwd) ?? leaderHead;
@@ -1020,7 +1019,7 @@ async function prepareShutdownMergeReport(
       return {
         workerName: worker.name,
         worktreePath,
-        reportPath: join(worktreePath, '.omx', 'diff.md'),
+        reportPath: join(worktreePath, '.omb', 'diff.md'),
         sourceRef: null,
         syntheticCommit: null,
         diffText: getWorktreeDiffText(worktreePath),
@@ -1033,7 +1032,7 @@ async function prepareShutdownMergeReport(
     }
     const commitResult = runGitCommand(
       repoRoot,
-      ['commit', '--no-verify', '-m', `omx(team): checkpoint ${worker.name} shutdown changes`],
+      ['commit', '--no-verify', '-m', `omb(team): checkpoint ${worker.name} shutdown changes`],
       worktreePath,
     );
     if (commitResult.ok) {
@@ -1043,7 +1042,7 @@ async function prepareShutdownMergeReport(
       return {
         workerName: worker.name,
         worktreePath,
-        reportPath: join(worktreePath, '.omx', 'diff.md'),
+        reportPath: join(worktreePath, '.omb', 'diff.md'),
         sourceRef: null,
         syntheticCommit: null,
         diffText: getWorktreeDiffText(worktreePath),
@@ -1060,7 +1059,7 @@ async function prepareShutdownMergeReport(
   const sourceRef = sourceRefResult.ok && sourceRefResult.stdout ? sourceRefResult.stdout : null;
   const diffText = getWorktreeDiffText(worktreePath);
   const summaryText = summarizeWorktreeDiffWithSparkShell(worktreePath);
-  const reportPath = join(worktreePath, '.omx', 'diff.md');
+  const reportPath = join(worktreePath, '.omb', 'diff.md');
   const leaderHeadBefore = resolveLeaderHead(repoRoot, leaderCwd);
 
   let mergeOutcome: WorkerShutdownMergeReport['mergeOutcome'] = 'skipped';
@@ -1102,7 +1101,7 @@ async function prepareShutdownMergeReport(
 
   const legacyReportPath = join(worktreePath, '.omb', 'diff.md');
   const renderedReport = renderWorktreeMergeReport(report);
-  await mkdir(join(worktreePath, '.omx'), { recursive: true });
+  await mkdir(join(worktreePath, '.omb'), { recursive: true });
   await writeFile(reportPath, renderedReport, 'utf-8');
   await mkdir(join(worktreePath, '.omb'), { recursive: true }).catch(() => {});
   await writeFile(legacyReportPath, renderedReport, 'utf-8').catch(() => {});
@@ -1119,7 +1118,7 @@ async function prepareWorkerWorktreeShutdownReports(config: TeamConfig, leaderCw
       if (report) reports.push(report);
     } catch (error) {
       const worktreePath = resolve(worker.worktree_path);
-      const reportPath = join(worktreePath, '.omx', 'diff.md');
+      const reportPath = join(worktreePath, '.omb', 'diff.md');
       const legacyReportPath = join(worktreePath, '.omb', 'diff.md');
       const fallback = [
         `# Worker ${worker.name} shutdown report`,
@@ -1130,7 +1129,7 @@ async function prepareWorkerWorktreeShutdownReports(config: TeamConfig, leaderCw
         `- merge_detail: ${String(error)}`,
         '',
       ].join('\n');
-      await mkdir(join(worktreePath, '.omx'), { recursive: true }).catch(() => {});
+      await mkdir(join(worktreePath, '.omb'), { recursive: true }).catch(() => {});
       await writeFile(reportPath, fallback, 'utf-8').catch(() => {});
       await mkdir(join(worktreePath, '.omb'), { recursive: true }).catch(() => {});
       await writeFile(legacyReportPath, fallback, 'utf-8').catch(() => {});
@@ -1245,11 +1244,11 @@ function resolveEffectiveTeamWorktreeMode(
 }
 
 const OMB_MODEL_INSTRUCTIONS_FILE_ENV = 'OMB_MODEL_INSTRUCTIONS_FILE';
-const MODEL_INSTRUCTIONS_FILE_ENV = 'OMX_MODEL_INSTRUCTIONS_FILE';
+const MODEL_INSTRUCTIONS_FILE_ENV = 'OMB_MODEL_INSTRUCTIONS_FILE';
 const OMB_TEAM_STATE_ROOT_ENV = 'OMB_TEAM_STATE_ROOT';
-const TEAM_STATE_ROOT_ENV = 'OMX_TEAM_STATE_ROOT';
+const TEAM_STATE_ROOT_ENV = 'OMB_TEAM_STATE_ROOT';
 const OMB_TEAM_LEADER_CWD_ENV = 'OMB_TEAM_LEADER_CWD';
-const TEAM_LEADER_CWD_ENV = 'OMX_TEAM_LEADER_CWD';
+const TEAM_LEADER_CWD_ENV = 'OMB_TEAM_LEADER_CWD';
 const WORKTREE_TRIGGER_STATE_ROOT = '$OMB_TEAM_STATE_ROOT';
 const STARTUP_EVIDENCE_TIMEOUT_MS = 2_000;
 const STARTUP_EVIDENCE_POLL_MS = 100;
@@ -1271,7 +1270,7 @@ function resolveInstructionStateRoot(worktreePath?: string | null): string | und
 }
 
 function resolveWorkerReadyTimeoutMs(env: NodeJS.ProcessEnv): number {
-  const raw = env.OMX_TEAM_READY_TIMEOUT_MS;
+  const raw = env.OMB_TEAM_READY_TIMEOUT_MS;
   const parsed = Number.parseInt(String(raw ?? ''), 10);
   if (Number.isFinite(parsed) && parsed >= 5_000) return parsed;
   return 45_000;
@@ -1307,7 +1306,7 @@ function resolveGovernancePolicy(
 }
 
 async function assertNestedTeamAllowed(cwd: string): Promise<void> {
-  const workerContext = parseTeamWorkerContext(process.env.OMB_TEAM_WORKER ?? process.env.OMX_TEAM_WORKER);
+  const workerContext = parseTeamWorkerContext(process.env.OMB_TEAM_WORKER);
   if (!workerContext) return;
 
   for (const candidateCwd of resolveManifestLookupCwds(cwd)) {
@@ -1381,7 +1380,7 @@ export async function waitForClaudeStartupEvidence(params: {
 }
 
 function shouldSkipWorkerReadyWait(env: NodeJS.ProcessEnv): boolean {
-  return env.OMX_TEAM_SKIP_READY_WAIT === '1';
+  return env.OMB_TEAM_SKIP_READY_WAIT === '1';
 }
 
 function setTeamModelInstructionsFile(teamName: string, filePath: string): void {
@@ -1778,12 +1777,12 @@ export function resolveWorkerLaunchArgsFromEnv(
   const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEBUDDY_HOME ?? env.CODEX_HOME);
 
   // Detect if an explicit reasoning override exists before resolving (for log source labelling)
-  const preEnvArgs = splitWorkerLaunchArgs(env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMX_TEAM_WORKER_LAUNCH_ARGS);
+  const preEnvArgs = splitWorkerLaunchArgs(env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMB_TEAM_WORKER_LAUNCH_ARGS);
   const preAllArgs = [...preEnvArgs, ...inheritedArgs];
   const hasExplicitReasoning = parseTeamWorkerLaunchArgs(preAllArgs).reasoningOverride !== null;
 
   const resolved = resolveTeamWorkerLaunchArgs({
-    existingRaw: env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMX_TEAM_WORKER_LAUNCH_ARGS,
+    existingRaw: env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMB_TEAM_WORKER_LAUNCH_ARGS,
     inheritedArgs,
     fallbackModel,
     preferredReasoning,
@@ -1813,7 +1812,7 @@ function resolveEffectiveWorkerCliForStartupLog(
   resolvedLaunchArgs: string[],
   env: NodeJS.ProcessEnv,
 ): TeamWorkerCli {
-  const rawCliMap = String(env.OMB_TEAM_WORKER_CLI_MAP ?? env.OMX_TEAM_WORKER_CLI_MAP ?? '').trim();
+  const rawCliMap = String(env.OMB_TEAM_WORKER_CLI_MAP ?? env.OMB_TEAM_WORKER_CLI_MAP ?? '').trim();
   if (rawCliMap !== '') {
     const entries = rawCliMap
       .split(',')
@@ -1823,7 +1822,6 @@ function resolveEffectiveWorkerCliForStartupLog(
       const autoCli = resolveTeamWorkerCli(resolvedLaunchArgs, {
         ...env,
         OMB_TEAM_WORKER_CLI: 'auto',
-        OMX_TEAM_WORKER_CLI: 'auto',
       });
       const resolvedMap = entries.map((entry): TeamWorkerCli | null => {
         if (entry === 'auto') return autoCli;
@@ -1919,7 +1917,7 @@ export async function startTeam(
   }
 
   // 2. Team name is already sanitized above.
-  let sessionName = `omx-team-${sanitized}`;
+  let sessionName = `omb-team-${sanitized}`;
   const overlay = generateWorkerOverlay(sanitized);
   let workerInstructionsPath: string | null = null;
   let sessionCreated = false;
@@ -1927,7 +1925,7 @@ export async function startTeam(
   let createdLeaderPaneId: string | undefined;
   let config: TeamConfig | null = null;
   const sharedWorkerLaunchArgs = resolveTeamWorkerLaunchArgs({
-    existingRaw: process.env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? process.env.OMX_TEAM_WORKER_LAUNCH_ARGS,
+    existingRaw: process.env.OMB_TEAM_WORKER_LAUNCH_ARGS,
     fallbackModel: resolveAgentDefaultModel(agentType, process.env.CODEBUDDY_HOME ?? process.env.CODEX_HOME),
   });
   const workerCliPlan = resolveTeamWorkerCliPlan(workerCount, sharedWorkerLaunchArgs, process.env);
@@ -1946,9 +1944,7 @@ export async function startTeam(
       {
         ...process.env,
         OMB_TEAM_DISPLAY_MODE: displayMode,
-        OMX_TEAM_DISPLAY_MODE: displayMode,
         OMB_TEAM_WORKER_LAUNCH_MODE: workerLaunchMode,
-        OMX_TEAM_WORKER_LAUNCH_MODE: workerLaunchMode,
       },
       {
         leader_cwd: leaderCwd,
@@ -2083,20 +2079,17 @@ export async function startTeam(
     const workerStartups = workerBootstrapPlans.map((plan) => {
       const env: Record<string, string> = {
         [OMB_TEAM_STATE_ROOT_ENV]: teamStateRoot,
-        [TEAM_STATE_ROOT_ENV]: teamStateRoot,
         [OMB_TEAM_LEADER_CWD_ENV]: leaderCwd,
-        [TEAM_LEADER_CWD_ENV]: leaderCwd,
         [OMB_MODEL_INSTRUCTIONS_FILE_ENV]: plan.instructionsFilePath,
-        [MODEL_INSTRUCTIONS_FILE_ENV]: plan.instructionsFilePath,
       };
       if (plan.workerWorkspace.worktreePath) {
-        env.OMX_TEAM_WORKTREE_PATH = plan.workerWorkspace.worktreePath;
+        env.OMB_TEAM_WORKTREE_PATH = plan.workerWorkspace.worktreePath;
       }
       if (plan.workerWorkspace.worktreeBranch) {
-        env.OMX_TEAM_WORKTREE_BRANCH = plan.workerWorkspace.worktreeBranch;
+        env.OMB_TEAM_WORKTREE_BRANCH = plan.workerWorkspace.worktreeBranch;
       }
       if (typeof plan.workerWorkspace.worktreeDetached === 'boolean') {
-        env.OMX_TEAM_WORKTREE_DETACHED = plan.workerWorkspace.worktreeDetached ? '1' : '0';
+        env.OMB_TEAM_WORKTREE_DETACHED = plan.workerWorkspace.worktreeDetached ? '1' : '0';
       }
       return {
         cwd: plan.workerWorkspace.cwd,
@@ -2774,7 +2767,7 @@ export async function shutdownTeam(teamName: string, cwd: string, options: Shutd
   if (!config) {
     // No config -- just try to kill tmux session and clean up
     try {
-      destroyTeamSession(`omx-team-${sanitized}`);
+      destroyTeamSession(`omb-team-${sanitized}`);
     } catch (err) {
       process.stderr.write(`[team/runtime] operation failed: ${err}\n`);
     }
@@ -3142,7 +3135,7 @@ export async function resumeTeam(teamName: string, cwd: string): Promise<TeamRun
 }
 
 async function findActiveTeams(cwd: string, leaderSessionId: string): Promise<string[]> {
-  const root = join(cwd, '.omx', 'state', 'team');
+  const root = join(cwd, '.omb', 'state', 'team');
   if (!existsSync(root)) return [];
   const sessions = new Set(listTeamSessions());
   const entries = await readdir(root, { withFileTypes: true });
@@ -3157,7 +3150,7 @@ async function findActiveTeams(cwd: string, leaderSessionId: string): Promise<st
     const workerLaunchMode = cfg?.worker_launch_mode
       ?? manifest?.policy?.worker_launch_mode
       ?? 'interactive';
-    const tmuxSession = (manifest?.tmux_session || cfg?.tmux_session || `omx-team-${teamName}`).split(':')[0];
+    const tmuxSession = (manifest?.tmux_session || cfg?.tmux_session || `omb-team-${teamName}`).split(':')[0];
     if (leaderSessionId) {
       const ownerSessionId = manifest?.leader?.session_id?.trim() ?? '';
       if (ownerSessionId && ownerSessionId !== leaderSessionId) continue;
@@ -3179,11 +3172,11 @@ async function detectAndCleanStaleTeam(
   workerCount: number,
   confirmFn?: (summary: StaleTeamSummary) => Promise<boolean>,
 ): Promise<void> {
-  const stateDir = join(leaderCwd, '.omx', 'state', 'team', teamName);
+  const stateDir = join(leaderCwd, '.omb', 'state', 'team', teamName);
   if (!existsSync(stateDir)) return;
 
   const sessions = new Set(listTeamSessions());
-  if (sessions.has(`omx-team-${teamName}`)) return;
+  if (sessions.has(`omb-team-${teamName}`)) return;
 
   const repoRootResult = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: leaderCwd, encoding: 'utf-8', windowsHide: true,
@@ -3193,7 +3186,7 @@ async function detectAndCleanStaleTeam(
 
   const worktreePaths: string[] = [];
   for (let i = 1; i <= workerCount; i++) {
-    const wtPath = join(repoRoot, '.omx', 'team', teamName, 'worktrees', `worker-${i}`);
+    const wtPath = join(repoRoot, '.omb', 'team', teamName, 'worktrees', `worker-${i}`);
     if (existsSync(wtPath)) worktreePaths.push(wtPath);
   }
 
@@ -3232,12 +3225,11 @@ async function detectAndCleanStaleTeam(
 async function resolveLeaderSessionId(cwd: string): Promise<string> {
   const fromEnv =
     process.env.OMB_SESSION_ID ||
-    process.env.OMX_SESSION_ID ||
     process.env.CODEX_SESSION_ID ||
     process.env.SESSION_ID;
   if (fromEnv && fromEnv.trim() !== '') return fromEnv.trim();
 
-  for (const p of [join(cwd, '.omb', 'state', 'session.json'), join(cwd, '.omx', 'state', 'session.json')]) {
+  for (const p of [join(cwd, '.omb', 'state', 'session.json'), join(cwd, '.omb', 'state', 'session.json')]) {
     if (!existsSync(p)) continue;
     try {
       const raw = await readFile(p, 'utf-8');
@@ -3663,14 +3655,17 @@ async function finalizeHookPreferredMailboxDispatch(params: {
   if (receipt?.status === 'failed') {
     if (fallback.ok) {
       await markMessageNotified(teamName, workerName, messageId, cwd).catch(() => false);
-      await transitionDispatchRequest(
-        teamName,
-        requestId,
-        'failed',
-        'failed',
-        { message_id: messageId, last_reason: `fallback_confirmed_after_failed_receipt:${fallback.reason}` },
-        cwd,
-      ).catch(() => null);
+      const current = await readDispatchRequest(teamName, requestId, cwd);
+      if (current) {
+        await transitionDispatchRequest(
+          teamName,
+          requestId,
+          current.status,
+          'failed',
+          { message_id: messageId, last_reason: `fallback_confirmed_after_failed_receipt:${fallback.reason}` },
+          cwd,
+        ).catch(() => null);
+      }
       const outcome = {
         ok: true,
         transport: fallback.transport,

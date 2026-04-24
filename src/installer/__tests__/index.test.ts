@@ -84,7 +84,7 @@ describe('installer facade helpers', () => {
     );
     assert.equal(
       isExperimentalInstallerFacadeEnabled({
-        OMX_EXPERIMENTAL_INSTALLER_FACADE: '1',
+        OMB_EXPERIMENTAL_INSTALLER_FACADE: '1',
       }),
       true,
     );

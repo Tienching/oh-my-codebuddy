@@ -3,11 +3,11 @@ oh-my-codebuddy (omb) - Multi-agent orchestration for CodeBuddy CLI
 
 Usage:
   omb           Launch CodeBuddy CLI (HUD auto-attaches only when already inside tmux)
-  omb exec      Run codebuddy exec non-interactively with OMX AGENTS/overlay injection
+  omb exec      Run codebuddy exec non-interactively with OMB AGENTS/overlay injection
   omb setup     Install skills, prompts, MCP servers, and scope-specific AGENTS.md
-  omb uninstall Remove OMX configuration and clean up installed artifacts
+  omb uninstall Remove OMB configuration and clean up installed artifacts
   omb doctor    Check installation health
-  omb cleanup   Kill orphaned OMX MCP server processes from prior sessions
+  omb cleanup   Kill orphaned OMB MCP server processes from prior sessions
   omb doctor --team  Check team/swarm runtime health diagnostics
   omb ask       Ask local provider CLI (claude|gemini) and write artifact output
   omb autoresearch Launch thin-supervisor autoresearch with keep/discard/reset parity
@@ -34,10 +34,10 @@ Usage:
 
 Options:
   --yolo        Launch CodeBuddy in yolo mode (shorthand for: omb launch --yolo)
-  --high        Launch CodeBuddy with high reasoning effort
-                (shorthand for: -c model_reasoning_effort="high")
-  --xhigh       Launch CodeBuddy with xhigh reasoning effort
-                (shorthand for: -c model_reasoning_effort="xhigh")
+  --model <id>  Pass through to CodeBuddy to choose the exact model directly
+  --high        [DEPRECATED] Use --effort high instead
+  --xhigh       [DEPRECATED] Use --effort xhigh instead
+  --effort <l>  Set reasoning effort: low | medium | high | xhigh
   --madmax      DANGEROUS: bypass CodeBuddy approvals and sandbox
                 (alias for --dangerously-skip-permissions)
   --spark       Use the CodeBuddy spark model (~1.3x faster) for team workers only

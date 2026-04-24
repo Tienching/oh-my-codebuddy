@@ -72,7 +72,7 @@ describe('shouldSendIdleNotification', () => {
   });
 
   it('returns true when cooldown is 0 even for unchanged fingerprints', () => {
-    process.env.OMX_IDLE_COOLDOWN_SECONDS = '0';
+    process.env.OMB_IDLE_COOLDOWN_SECONDS = '0';
     const sessionId = 'test-session-disabled-fingerprint';
     const fingerprint = '{"phase":"idle","summary":"Waiting for input"}';
 
@@ -119,7 +119,7 @@ describe('shouldSendIdleNotification', () => {
   });
 
   it('allows a changed summary fingerprint immediately', () => {
-    process.env.OMX_IDLE_COOLDOWN_SECONDS = '60';
+    process.env.OMB_IDLE_COOLDOWN_SECONDS = '60';
     const sessionId = 'test-session-summary-change';
 
     recordIdleNotificationSent(stateDir, sessionId, '{"phase":"idle","summary":"Waiting on review"}');
@@ -131,7 +131,7 @@ describe('shouldSendIdleNotification', () => {
   });
 
   it('allows a progress transition to clear prior idle suppression', () => {
-    process.env.OMX_IDLE_COOLDOWN_SECONDS = '60';
+    process.env.OMB_IDLE_COOLDOWN_SECONDS = '60';
     const sessionId = 'test-session-progress-reset';
     const blockedFingerprint = '{"phase":"idle","summary":"Blocked on dependency"}';
     const progressFingerprint = '{"phase":"progress","summary":"Applied fix and running tests"}';
@@ -144,7 +144,7 @@ describe('shouldSendIdleNotification', () => {
   });
 
   it('allows terminal transitions to clear prior idle suppression', () => {
-    process.env.OMX_IDLE_COOLDOWN_SECONDS = '60';
+    process.env.OMB_IDLE_COOLDOWN_SECONDS = '60';
     const sessionId = 'test-session-terminal-reset';
     const blockedFingerprint = '{"phase":"idle","summary":"Awaiting next step"}';
 
@@ -158,7 +158,7 @@ describe('shouldSendIdleNotification', () => {
   });
 
   it('still honors cooldown-only behavior when no fingerprint is provided', () => {
-    process.env.OMX_IDLE_COOLDOWN_SECONDS = '60';
+    process.env.OMB_IDLE_COOLDOWN_SECONDS = '60';
     const sessionId = 'test-session-cooldown-only';
 
     recordIdleNotificationSent(stateDir, sessionId);
@@ -210,16 +210,16 @@ describe('session-idle hook event dedupe', () => {
 
   beforeEach(() => {
     stateDir = makeTmpStateDir();
-    delete process.env.OMX_IDLE_COOLDOWN_SECONDS;
+    delete process.env.OMB_IDLE_COOLDOWN_SECONDS;
   });
 
   afterEach(() => {
     rmSync(stateDir, { recursive: true, force: true });
-    delete process.env.OMX_IDLE_COOLDOWN_SECONDS;
+    delete process.env.OMB_IDLE_COOLDOWN_SECONDS;
   });
 
   it('suppresses unchanged hook fingerprints even when lifecycle cooldown is disabled', () => {
-    process.env.OMX_IDLE_COOLDOWN_SECONDS = '0';
+    process.env.OMB_IDLE_COOLDOWN_SECONDS = '0';
     const sessionId = 'test-session-hook-zero-cooldown';
     const fingerprint = '{"phase":"idle","summary":"Waiting for input"}';
 

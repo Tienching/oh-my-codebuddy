@@ -28,7 +28,7 @@ Verdict: **GO** ✅
 ## Required release-note items
 
 1. **Native Codex hook ownership moved into the repo/runtime contract.**
-   - Call out that non-team OMX sessions now own native Codex hook setup locally, preserve session-start + stop-state continuity, and expose documented setup/uninstall behavior.
+   - Call out that non-team OMB sessions now own native Codex hook setup locally, preserve session-start + stop-state continuity, and expose documented setup/uninstall behavior.
 2. **First-party native Bash pre/post tool hooks landed.**
    - Mention `PreToolUse` / `PostToolUse` guidance and the new native hook execution lane instead of burying it under general hook cleanup.
 3. **Team runtime delivery/state handling was substantially hardened.**
@@ -58,11 +58,11 @@ Verdict: **GO** ✅
 | Diff scope inventory | `git diff --name-only v0.11.13..HEAD` | PASS |
 | Commit inventory | `git rev-list --count --no-merges v0.11.13..HEAD` + `git rev-list --count --merges v0.11.13..HEAD` | PASS (`65` non-merge / `26` merge) |
 | Version sync contract | `node --test dist/cli/__tests__/version-sync-contract.test.js` | PASS |
-| CLI version smoke | `node dist/cli/omx.js version` | PASS (`oh-my-codex v0.12.0`) |
+| CLI version smoke | `node dist/cli/omb.js version` | PASS (`oh-my-codebuddy v0.12.0`) |
 | Build | `npm run build` | PASS |
 | Lint | `npm run lint` | PASS |
 | Full Node suite | `npm test` | PASS (`2949` pass / `0` fail) |
-| Rust runtime core | `cargo test -p omx-runtime-core` | PASS (`54` pass / `0` fail) |
+| Rust runtime core | `cargo test -p omb-runtime-core` | PASS (`54` pass / `0` fail) |
 | Packed install smoke | `npm run smoke:packed-install` | PASS |
 | Working-tree whitespace check | `git diff --check origin/main...HEAD` | PASS |
 

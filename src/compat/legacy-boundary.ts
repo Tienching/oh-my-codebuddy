@@ -1,7 +1,7 @@
 /**
  * Legacy alias boundary — single entry point for all legacy name resolution.
  *
- * Codex→CodeBuddy and OMX→OMB brand migrations left behind dual-named env
+ * Codex→CodeBuddy and OMB→OMB brand migrations left behind dual-named env
  * vars, directories, and binaries. This module centralises every legacy→canonical
  * mapping so that business modules never need to know about legacy names.
  *
@@ -42,24 +42,6 @@ const ALIAS_REGISTRY: LegacyAlias[] = [
     status: "active_compat",
     description: "CodeBuddy home directory override",
   },
-  {
-    canonical: "OMB_ENTRY_PATH",
-    legacy: "OMX_ENTRY_PATH",
-    status: "active_compat",
-    description: "CLI entry-point path override",
-  },
-  {
-    canonical: "OMB_RUNTIME_BRIDGE",
-    legacy: "OMX_RUNTIME_BRIDGE",
-    status: "active_compat",
-    description: "Runtime bridge enable/disable flag",
-  },
-  {
-    canonical: "OMB_RUNTIME_BINARY",
-    legacy: "OMX_RUNTIME_BINARY",
-    status: "active_compat",
-    description: "Runtime binary path override",
-  },
 
   // Directory names
   {
@@ -67,20 +49,6 @@ const ALIAS_REGISTRY: LegacyAlias[] = [
     legacy: ".codex",
     status: "read_only",
     description: "User-level config directory (~/.codebuddy)",
-  },
-  {
-    canonical: ".omb",
-    legacy: ".omx",
-    status: "active_compat",
-    description: "Project-level state directory",
-  },
-
-  // Binary names
-  {
-    canonical: "omb",
-    legacy: "omx",
-    status: "active_compat",
-    description: "CLI binary name",
   },
 ];
 
@@ -149,22 +117,22 @@ export function resolveLegacyCodexHome(env?: NodeJS.ProcessEnv): string {
 
 /**
  * Resolve the canonical state directory (.omb/state).
- * Read-through from legacy (.omx/state) is handled by the caller.
+ * Read-through from legacy (.omb/state) is handled by the caller.
  */
 export function resolveCanonicalStateDir(cwd: string): string {
   return join(cwd, ".omb", "state");
 }
 
 /**
- * Resolve the legacy state directory (.omx/state) for read-through.
+ * Resolve the legacy state directory (.omb/state) for read-through.
  */
 export function resolveLegacyStateDir(cwd: string): string {
-  return join(cwd, ".omx", "state");
+  return join(cwd, ".omb", "state");
 }
 
 /**
- * Resolve OMB_ENTRY_PATH with OMX_ENTRY_PATH fallback.
- * Priority: OMB_ENTRY_PATH > OMX_ENTRY_PATH
+ * Resolve OMB_ENTRY_PATH with OMB_ENTRY_PATH fallback.
+ * Priority: OMB_ENTRY_PATH > OMB_ENTRY_PATH
  */
 export function resolveCanonicalEntryPath(
   options: {
@@ -176,81 +144,72 @@ export function resolveCanonicalEntryPath(
   const { env = process.env } = options;
   const canonicalVal = String(env.OMB_ENTRY_PATH ?? "").trim();
   if (canonicalVal !== "") return canonicalVal;
-  const legacyVal = String(env.OMX_ENTRY_PATH ?? "").trim();
-  if (legacyVal !== "") return legacyVal;
   return null;
 }
 
 /**
- * Resolve OMB_RUNTIME_BINARY with OMX_RUNTIME_BINARY fallback.
- * Priority: OMB_RUNTIME_BINARY > OMX_RUNTIME_BINARY
+ * Resolve OMB_RUNTIME_BINARY with OMB_RUNTIME_BINARY fallback.
+ * Priority: OMB_RUNTIME_BINARY > OMB_RUNTIME_BINARY
  */
 export function resolveCanonicalRuntimeBinary(env?: NodeJS.ProcessEnv): string | undefined {
   const e = env ?? process.env;
   const canonicalVal = String(e.OMB_RUNTIME_BINARY ?? "").trim();
   if (canonicalVal !== "") return canonicalVal;
-  const legacyVal = String(e.OMX_RUNTIME_BINARY ?? "").trim();
-  if (legacyVal !== "") return legacyVal;
   return undefined;
 }
 
 /**
- * Check if OMB_RUNTIME_BRIDGE (or legacy OMX_RUNTIME_BRIDGE) is enabled.
+ * Check if OMB_RUNTIME_BRIDGE (or legacy OMB_RUNTIME_BRIDGE) is enabled.
  * The bridge is enabled unless explicitly set to '0'.
  */
 export function isRuntimeBridgeEnabled(env?: NodeJS.ProcessEnv): boolean {
   const e = env ?? process.env;
   const canonicalVal = String(e.OMB_RUNTIME_BRIDGE ?? "").trim();
   if (canonicalVal !== "") return canonicalVal !== "0";
-  const legacyVal = String(e.OMX_RUNTIME_BRIDGE ?? "").trim();
-  if (legacyVal !== "") return legacyVal !== "0";
   return true; // default: enabled
 }
 
 // ── Legacy path detection ─────────────────────────────────────────────────
 
 export interface LegacyPathReport {
-  hasLegacyOmxDir: boolean;
+  hasLegacyOmbDir: boolean;
   hasLegacyCodexDir: boolean;
   hasCanonicalOmbDir: boolean;
   hasCanonicalCodebuddyDir: boolean;
-  omxDir: string;
-  codexDir: string;
   ombDir: string;
+  codexDir: string;
   codebuddyDir: string;
 }
 
 /**
- * Check if legacy .omx/.codex paths exist in a given project root.
+ * Check if legacy .omb/.codex paths exist in a given project root.
  */
 export function readLegacyAliasIfPresent(cwd: string): LegacyPathReport {
-  const omxDir = join(cwd, ".omx");
-  const codexDir = join(cwd, ".codex");
   const ombDir = join(cwd, ".omb");
+  const codexDir = join(cwd, ".codex");
   const codebuddyDir = join(cwd, ".codebuddy");
 
   return {
-    hasLegacyOmxDir: existsSync(omxDir),
+    hasLegacyOmbDir: existsSync(ombDir),
     hasLegacyCodexDir: existsSync(codexDir),
     hasCanonicalOmbDir: existsSync(ombDir),
     hasCanonicalCodebuddyDir: existsSync(codebuddyDir),
-    omxDir,
-    codexDir,
     ombDir,
+    codexDir,
     codebuddyDir,
   };
 }
 
 /**
- * Whether legacy state paths (.omx) are still in active use in the project.
- * This is true if the .omx directory exists and contains state files.
+ * Whether legacy state paths (.omb) are still in active use in the project.
+ * This is true if the .omb directory exists and contains state files.
  */
 export function isLegacyPathActive(cwd: string): boolean {
-  const omxStateDir = join(cwd, ".omx", "state");
-  if (!existsSync(omxStateDir)) return false;
+  const ombStateDir = join(cwd, ".omb", "state");
+  if (!existsSync(ombStateDir)) return false;
   // Check if it has any state files
   try {
-    const entries = existsSync(omxStateDir);
+    const entries = existsSync(ombStateDir);
     return entries; // directory exists = active
   } catch {
     return false;

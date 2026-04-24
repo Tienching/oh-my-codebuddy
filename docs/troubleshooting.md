@@ -19,13 +19,13 @@ Treat the boundary this way:
 - `codex login status` green: the active Codex profile can see login state.
 - `omb exec ...` returns `OMB-EXEC-OK`: real execution, auth, provider routing, and current working-directory assumptions are working together.
 
-## Green doctor, but `omx exec` fails with auth errors
+## Green doctor, but `omb exec` fails with auth errors
 
 Common failure strings include `401 Unauthorized`, `Missing bearer or basic authentication in header`, or `Incorrect API key provided`.
 
 Check the active runtime profile, not only your normal login shell:
 
-1. Print `HOME` and `CODEX_HOME` in the shell that launches OMX.
+1. Print `HOME` and `CODEX_HOME` in the shell that launches OMB.
 2. Confirm that the active `~/.codex` or `CODEX_HOME` contains the expected auth and `config.toml`.
 3. Re-run `codex login status` from that same shell.
 
@@ -43,7 +43,7 @@ Use your actual proxy URL. If the profile-local `~/.codex/config.toml` is missin
 
 ## Stale `doctor --team` or dead tmux session state
 
-`omb doctor --team`, `omb team resume`, or startup diagnostics can fail when a previous team state references a tmux session that no longer exists. The state may mention `resume_blocker`, or the dead session may be recorded under `.omb/state/team/<team-name>/config.json` or `manifest.v2.json` (legacy `.omx/state/...` copies may also exist).
+`omb doctor --team`, `omb team resume`, or startup diagnostics can fail when a previous team state references a tmux session that no longer exists. The state may mention `resume_blocker`, or the dead session may be recorded under `.omb/state/team/<team-name>/config.json` or `manifest.v2.json` (legacy `.omb/state/...` copies may also exist).
 
 If the team is intentionally abandoned and no live tmux session remains, clean it up with:
 
@@ -70,8 +70,8 @@ So if `Shift+Enter` still behaves like plain `Enter`, the narrowest likely cause
 1. **tmux is not actually forwarding extended keys for the reporter's terminal path**
    - tmux only forwards the richer key event when the attached terminal is detected as supporting extended keys
    - `tmux show -gv extended-keys` can say `always`, but forwarding can still fail if the terminal capability is missing or not detected
-2. **the reporter is not in the OMX-owned tmux launch path**
-   - for example, reproducing in a different pane/session than the one OMX launched or after attaching through a different client path
+2. **the reporter is not in the OMB-owned tmux launch path**
+   - for example, reproducing in a different pane/session than the one OMB launched or after attaching through a different client path
 3. **terminal-specific capability mismatch**
    - some terminals need an explicit tmux `terminal-features` hint for `extkeys`
 

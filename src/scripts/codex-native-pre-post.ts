@@ -107,7 +107,7 @@ function matchesDestructiveFixture(command: string): boolean {
 }
 
 function isMcpLikeToolName(toolName: string): boolean {
-  return /^(mcp__|omx_(?:state|memory|trace|code_intel)\b|state_|project_memory_|notepad_|trace_)/i.test(toolName);
+  return /^(mcp__|omb_(?:state|memory|trace|code_intel)\b|state_|project_memory_|notepad_|trace_)/i.test(toolName);
 }
 
 const MCP_TRANSPORT_FAILURE_PATTERNS = [
@@ -123,7 +123,7 @@ const MCP_TRANSPORT_FAILURE_PATTERNS = [
   /mcp(?: server)? .*closed/i,
 ];
 
-type OmxParityCommand =
+type OmbParityCommand =
   | "state"
   | "notepad"
   | "project-memory"
@@ -147,7 +147,7 @@ export function detectMcpTransportFailure(
 
   const mcpContextDetected = isMcpLikeToolName(normalized.toolName)
     || /\bmcp\b/i.test(combined)
-    || /\bomx-(?:state|memory|trace|code-intel)-server\b/i.test(combined);
+    || /\bomb-(?:state|memory|trace|code-intel)-server\b/i.test(combined);
   if (!mcpContextDetected) return null;
   if (!combined) return null;
   if (!MCP_TRANSPORT_FAILURE_PATTERNS.some((pattern) => pattern.test(combined))) {
@@ -160,8 +160,8 @@ export function detectMcpTransportFailure(
   };
 }
 
-function resolveOmxParityTarget(toolName: string): { command: OmxParityCommand; tool: string } | null {
-  const match = toolName.match(/^mcp__omx_(state|memory|trace|code_intel)__([a-z0-9_]+)$/i);
+function resolveOmbParityTarget(toolName: string): { command: OmbParityCommand; tool: string } | null {
+  const match = toolName.match(/^mcp__omb_(state|memory|trace|code_intel)__([a-z0-9_]+)$/i);
   if (!match) return null;
 
   const [, server, tool] = match;
@@ -181,8 +181,8 @@ function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function buildOmxParityFallbackCommand(payload: CodexHookPayload, toolName: string): string | null {
-  const target = resolveOmxParityTarget(toolName);
+function buildOmbParityFallbackCommand(payload: CodexHookPayload, toolName: string): string | null {
+  const target = resolveOmbParityTarget(toolName);
   if (!target) return null;
   const input = safeObject(payload.tool_input) ?? {};
   return `omb ${target.command} ${target.tool} --input ${shellSingleQuote(JSON.stringify(input))} --json`;
@@ -213,7 +213,7 @@ export function buildNativePostToolUseOutput(
 ): Record<string, unknown> | null {
   const mcpTransportFailure = detectMcpTransportFailure(payload);
   if (mcpTransportFailure) {
-    const fallbackCommand = buildOmxParityFallbackCommand(payload, mcpTransportFailure.toolName);
+    const fallbackCommand = buildOmbParityFallbackCommand(payload, mcpTransportFailure.toolName);
     const fallbackText = fallbackCommand
       ? `Retry via CLI parity with \`${fallbackCommand}\`.`
       : "Retry via the matching OMB CLI parity surface instead of retrying the MCP transport blindly.";
@@ -223,7 +223,7 @@ export function buildNativePostToolUseOutput(
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
-          `Clear MCP transport-death signal detected. Preserve current team/runtime state. ${fallbackText} OMB MCP servers are plain Node stdio processes, so they still shut down when stdin/transport closes. If this happened during team runtime, inspect first with \`omb team status <team>\` or \`omb team api read-stall-state --input '{"team_name":"<team>"}' --json\`, and only force cleanup after capturing needed state. For root-cause debugging, rerun with \`OMX_MCP_TRANSPORT_DEBUG=1\` to log why the stdio transport closed.`,
+          `Clear MCP transport-death signal detected. Preserve current team/runtime state. ${fallbackText} OMB MCP servers are plain Node stdio processes, so they still shut down when stdin/transport closes. If this happened during team runtime, inspect first with \`omb team status <team>\` or \`omb team api read-stall-state --input '{"team_name":"<team>"}' --json\`, and only force cleanup after capturing needed state. For root-cause debugging, rerun with \`OMB_MCP_TRANSPORT_DEBUG=1\` to log why the stdio transport closed.`,
       },
     };
   }

@@ -34,7 +34,7 @@ function makeConfig(overrides: Partial<TeamConfig> = {}): TeamConfig {
     max_workers: 20,
     workers: [makeWorkerInfo()],
     created_at: new Date().toISOString(),
-    tmux_session: 'omx-team-test-team',
+    tmux_session: 'omb-team-test-team',
     next_task_id: 1,
     leader_pane_id: null,
     hud_pane_id: null,

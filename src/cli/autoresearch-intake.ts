@@ -59,7 +59,7 @@ const BLOCKED_EVALUATOR_PATTERNS = [
 
 const DEEP_INTERVIEW_DRAFT_PREFIX = 'deep-interview-autoresearch-';
 const AUTORESEARCH_ARTIFACT_DIR_PREFIX = 'autoresearch-';
-export const AUTORESEARCH_DEEP_INTERVIEW_RESULT_KIND = 'omx.autoresearch.deep-interview/v1';
+export const AUTORESEARCH_DEEP_INTERVIEW_RESULT_KIND = 'omb.autoresearch.deep-interview/v1';
 
 function defaultDraftEvaluator(topic: string): string {
   const detail = topic.trim() || 'the mission';

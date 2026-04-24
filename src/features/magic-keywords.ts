@@ -23,7 +23,6 @@ export interface TaskSizeFilterOptions {
 }
 
 export const OMB_MAGIC_KEYWORD_ROUTER_ENV = 'OMB_MAGIC_KEYWORD_ROUTER';
-export const OMX_MAGIC_KEYWORD_ROUTER_ENV = 'OMX_MAGIC_KEYWORD_ROUTER';
 
 function isTruthyFlag(value: string | undefined): boolean {
   if (typeof value !== 'string') return false;
@@ -34,7 +33,7 @@ function isTruthyFlag(value: string | undefined): boolean {
 export function isExperimentalMagicKeywordRouterEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
-  return isTruthyFlag(env[OMB_MAGIC_KEYWORD_ROUTER_ENV]) || isTruthyFlag(env[OMX_MAGIC_KEYWORD_ROUTER_ENV]);
+  return isTruthyFlag(env[OMB_MAGIC_KEYWORD_ROUTER_ENV]) || isTruthyFlag(env[OMB_MAGIC_KEYWORD_ROUTER_ENV]);
 }
 
 function escapeRegex(text: string): string {

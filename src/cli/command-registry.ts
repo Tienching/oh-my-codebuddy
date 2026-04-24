@@ -96,10 +96,10 @@ Usage:
 
 Options:
   --yolo        Launch {product} in yolo mode (shorthand for: {cmd} launch --yolo)
-  --high        Launch {product} with high reasoning effort
-                (shorthand for: --effort high)
-  --xhigh       Launch {product} with xhigh reasoning effort
-                (shorthand for: --effort xhigh)
+  --model <id>  Pass through to {product} to choose the exact model directly
+  --high        [DEPRECATED] Use --effort high instead
+  --xhigh       [DEPRECATED] Use --effort xhigh instead
+  --effort <l>  Set reasoning effort: low | medium | high | xhigh
   --madmax      DANGEROUS: bypass {product} approvals and sandbox
                 (alias for --dangerously-skip-permissions)
   --spark       Use the {product} spark model (~1.3x faster) for team workers only

@@ -69,9 +69,9 @@ function buildTmuxSessionName(cwd: any, sessionId: any): string {
   const grandparentDir = basename(grandparentPath);
   const repoDir = parentDir.endsWith('.omb-worktrees')
     ? parentDir.slice(0, -'.omb-worktrees'.length)
-    : parentDir.endsWith('.omx-worktrees')
-      ? parentDir.slice(0, -'.omx-worktrees'.length)
-      : parentDir === 'worktrees' && (grandparentDir === '.omb' || grandparentDir === '.omx')
+    : parentDir.endsWith('.omb-worktrees')
+      ? parentDir.slice(0, -'.omb-worktrees'.length)
+      : parentDir === 'worktrees' && (grandparentDir === '.omb' || grandparentDir === '.omb')
         ? basename(dirname(grandparentPath))
         : null;
   const dirToken = repoDir
@@ -80,7 +80,7 @@ function buildTmuxSessionName(cwd: any, sessionId: any): string {
   const branch = gitValue(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
   const branchToken = branch ? sanitizeTmuxToken(branch) : 'detached';
   const sessionToken = sanitizeTmuxToken(
-    safeString(sessionId).replace(/^(?:omb|omx)-/, ''),
+    safeString(sessionId).replace(/^(?:omb|omb)-/, ''),
   );
   const prefix = `omb-${dirToken}-${branchToken}`;
   const name = `${prefix}-${sessionToken}`;

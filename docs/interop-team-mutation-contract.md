@@ -1,4 +1,4 @@
-# OMX Team Mutation Contract for Interop Brokers
+# OMB Team Mutation Contract for Interop Brokers
 
 This document defines the supported **mutation path** for external interoperability brokers.
 

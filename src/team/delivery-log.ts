@@ -67,5 +67,5 @@ export async function appendTeamDeliveryLog(logsDir: string, event: TeamDelivery
 }
 
 export async function appendTeamDeliveryLogForCwd(cwd: string, event: TeamDeliveryLogEvent): Promise<void> {
-  await appendTeamDeliveryLog(join(cwd, '.omx', 'logs'), event);
+  await appendTeamDeliveryLog(join(cwd, '.omb', 'logs'), event);
 }

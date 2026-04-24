@@ -17,7 +17,7 @@ Verdict: **NO-GO** ❌
 | Check | Command | Result |
 |---|---|---|
 | Build | `npm run build` | PASS |
-| Rust runtime core | `cargo test -p omx-runtime-core` | PASS (`54` pass / `0` fail) |
+| Rust runtime core | `cargo test -p omb-runtime-core` | PASS (`54` pass / `0` fail) |
 | Lint | `npm run lint` | PASS |
 | Notify fallback watcher suite | `node --test dist/hooks/__tests__/notify-fallback-watcher.test.js` | PASS (`40` pass / `0` fail) |
 | Version sync contract | `node --test dist/cli/__tests__/version-sync-contract.test.js` | PASS |

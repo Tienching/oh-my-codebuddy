@@ -10,7 +10,7 @@
  *   - Idempotency (running twice produces same plan)
  *   - Dry-run golden output (no files created)
  *   - Migration regression: .codex dir → symlink action
- *   - Migration regression: .omx state dir → compat warning
+ *   - Migration regression: .omb state dir → compat warning
  *   - Apply with dryRun=true leaves all actions as 'skipped'
  */
 
@@ -512,15 +512,15 @@ describe("migration regression tests", () => {
     }
   });
 
-  // Note: .omx compat rule is deprecated, so it does not generate warnings.
-  // The .omb/.omx dual-read behavior is automatic; no user action needed.
-  it("project with .omx state dir does not get compat warning", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omb-regression-omx-"));
+  // Note: .omb compat rule is deprecated, so it does not generate warnings.
+  // The .omb/.omb dual-read behavior is automatic; no user action needed.
+  it("project with .omb state dir does not get compat warning", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-regression-omb-"));
     try {
       const pkgRoot = await createMinimalPkgRoot(wd);
 
-      // Pre-create .omx state directory
-      await mkdir(join(wd, ".omx"), { recursive: true });
+      // Pre-create .omb state directory
+      await mkdir(join(wd, ".omb"), { recursive: true });
 
       const plan = await generateSetupPlan({
         scope: "project",
@@ -528,28 +528,28 @@ describe("migration regression tests", () => {
         pkgRoot,
       });
 
-      // Should NOT include a warning about legacy .omx (rule is deprecated)
-      const omxWarnings = plan.warnings.filter((w) =>
-        w.includes(".omx") || w.includes("legacy .omx"),
+      // Should NOT include a warning about legacy .omb (rule is deprecated)
+      const ombWarnings = plan.warnings.filter((w) =>
+        w.includes(".omb") || w.includes("legacy .omb"),
       );
       assert.equal(
-        omxWarnings.length,
+        ombWarnings.length,
         0,
-        "deprecated .omx rule should not produce warnings",
+        "deprecated .omb rule should not produce warnings",
       );
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
   });
 
-  it("project with both .codex and .omx gets .codex symlink warning but not .omx", async () => {
+  it("project with both .codex and .omb gets .codex symlink warning but not .omb", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-regression-both-"));
     try {
       const pkgRoot = await createMinimalPkgRoot(wd);
 
       // Pre-create both legacy directories
       await mkdir(join(wd, ".codex"), { recursive: true });
-      await mkdir(join(wd, ".omx"), { recursive: true });
+      await mkdir(join(wd, ".omb"), { recursive: true });
 
       const plan = await generateSetupPlan({
         scope: "project",
@@ -563,12 +563,12 @@ describe("migration regression tests", () => {
       );
       assert.equal(symlinkToCodex.length, 0, "should not symlink existing .codex");
 
-      // Should NOT have .omx warning (rule is deprecated)
-      const omxWarnings = plan.warnings.filter((w) => w.includes(".omx"));
+      // Should NOT have .omb warning (rule is deprecated)
+      const ombWarnings = plan.warnings.filter((w) => w.includes(".omb"));
       assert.equal(
-        omxWarnings.length,
+        ombWarnings.length,
         0,
-        "deprecated .omx rule should not produce warnings",
+        "deprecated .omb rule should not produce warnings",
       );
     } finally {
       await rm(wd, { recursive: true, force: true });

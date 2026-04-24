@@ -158,8 +158,8 @@ export async function writeSessionStart(
   const stateDir = resolveCanonicalStateDir(cwd);
   await mkdir(stateDir, { recursive: true });
 
-  const dualWriteOmx = shouldDualWrite('.omb');
-  if (dualWriteOmx) {
+  const dualWriteOmb = shouldDualWrite('.omb');
+  if (dualWriteOmb) {
     const legacyDir = resolveLegacyStateDir(cwd);
     await mkdir(legacyDir, { recursive: true });
   }
@@ -183,7 +183,7 @@ export async function writeSessionStart(
 
   const serialized = JSON.stringify(state, null, 2);
   await writeFile(sessionPath(cwd), serialized);
-  if (dualWriteOmx) {
+  if (dualWriteOmb) {
     await writeFile(legacySessionPath(cwd), serialized);
   }
   await appendToLog(cwd, {

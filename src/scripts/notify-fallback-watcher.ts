@@ -96,7 +96,7 @@ const authorityOnly = process.argv.includes('--authority-only');
 const pollMs = Math.max(50, asNumber(argValue('--poll-ms', '250'), 250));
 const idleMaxPollMs = Math.max(
   pollMs,
-  asNumber(argValue('--idle-max-poll-ms', process.env.OMX_NOTIFY_FALLBACK_IDLE_MAX_POLL_MS || '1000'), 1000),
+  asNumber(argValue('--idle-max-poll-ms', process.env.OMB_NOTIFY_FALLBACK_IDLE_MAX_POLL_MS || '1000'), 1000),
 );
 const parentPid = Math.trunc(asNumber(argValue('--parent-pid', String(process.ppid || 0)), process.ppid || 0));
 const startedAt = Date.now();
@@ -109,15 +109,15 @@ const maxLifetimeMs = runOnce
     asNumber(
       argValue(
         '--max-lifetime-ms',
-        envValue('OMX_NOTIFY_FALLBACK_MAX_LIFETIME_MS', 'OMB_NOTIFY_FALLBACK_MAX_LIFETIME_MS') || String(defaultMaxLifetimeMs)
+        envValue('OMB_NOTIFY_FALLBACK_MAX_LIFETIME_MS') || String(defaultMaxLifetimeMs)
       ),
       defaultMaxLifetimeMs
     )
   );
 
-const omxDir = join(cwd, '.omx');
-const logsDir = join(omxDir, 'logs');
-const stateDir = join(omxDir, 'state');
+const ombDir = join(cwd, '.omb');
+const logsDir = join(ombDir, 'logs');
+const stateDir = join(ombDir, 'state');
 const teamStateDir = resolveBridgeStateDir(cwd);
 const statePath = join(stateDir, 'notify-fallback-state.json');
 const pidFilePath = resolve(argValue('--pid-file', join(stateDir, 'notify-fallback.pid')));
@@ -127,7 +127,7 @@ const logLockPath = `${logPath}.lock`;
 const defaultMaxLogBytes = 10 * 1024 * 1024;
 const maxLogBytes = Math.max(
   0,
-  asNumber(argValue('--log-max-bytes', process.env.OMX_NOTIFY_FALLBACK_LOG_MAX_BYTES || String(defaultMaxLogBytes)), defaultMaxLogBytes),
+  asNumber(argValue('--log-max-bytes', process.env.OMB_NOTIFY_FALLBACK_LOG_MAX_BYTES || String(defaultMaxLogBytes)), defaultMaxLogBytes),
 );
 const ralphSteerTimestampPath = join(stateDir, 'ralph-last-steer-at');
 const ralphSteerLockPath = join(stateDir, 'ralph-continue-steer.lock');
@@ -136,7 +136,7 @@ const RALPH_CONTINUE_TEXT = 'Ralph loop active continue';
 const RALPH_CONTINUE_CADENCE_MS = 60_000;
 const RALPH_STEER_LOCK_STALE_MS = 30_000;
 const RALPH_TERMINAL_PHASES = new Set(['complete', 'failed', 'cancelled']);
-const FALLBACK_WATCHER_INJECT_MARKER = '[OMX_TMUX_INJECT]';
+const FALLBACK_WATCHER_INJECT_MARKER = '[OMB_TMUX_INJECT]';
 const QUIET_ONCE_EVENT_TYPES = new Set(['watcher_start', 'watcher_once_complete']);
 
 interface WatcherFileMeta {
@@ -259,7 +259,7 @@ let shutdownPromise: Promise<void> | null = null;
 const dispatchTickMax = Math.max(1, asNumber(argValue('--dispatch-max-per-tick', '5'), 5));
 let dispatchDrainRuns = 0;
 let lastDispatchDrain: DispatchDrainState = {
-  leader_only: safeString(envValue('OMX_TEAM_WORKER', 'OMB_TEAM_WORKER') || '').trim() === '',
+  leader_only: safeString(envValue('OMB_TEAM_WORKER') || '').trim() === '',
   last_tick_at: null,
   last_result: null,
   last_error: null,
@@ -267,7 +267,7 @@ let lastDispatchDrain: DispatchDrainState = {
 let leaderNudgeRuns = 0;
 let lastLeaderNudge: LeaderNudgeState = {
   enabled: true,
-  leader_only: safeString(envValue('OMX_TEAM_WORKER', 'OMB_TEAM_WORKER') || '').trim() === '',
+  leader_only: safeString(envValue('OMB_TEAM_WORKER') || '').trim() === '',
   stale_threshold_ms: null,
   precomputed_leader_stale: null,
   last_tick_at: null,
@@ -308,7 +308,7 @@ let lastAuthorityBackoff: AuthorityBackoffState = {
 };
 const AUTO_NUDGE_STALL_MS = Math.max(
   pollMs,
-  asNumber(envValue('OMX_NOTIFY_FALLBACK_AUTO_NUDGE_STALL_MS', 'OMB_NOTIFY_FALLBACK_AUTO_NUDGE_STALL_MS') || '5000', 5000),
+  asNumber(envValue('OMB_NOTIFY_FALLBACK_AUTO_NUDGE_STALL_MS') || '5000', 5000),
 );
 let lastFallbackAutoNudge: FallbackAutoNudgeState = {
   enabled: true,
@@ -1542,7 +1542,7 @@ async function pollFiles(): Promise<number> {
 
 async function runLeaderNudgeTick(): Promise<boolean> {
   const startedIso = new Date().toISOString();
-  const leaderOnly = safeString(envValue('OMX_TEAM_WORKER', 'OMB_TEAM_WORKER') || '').trim() === '';
+  const leaderOnly = safeString(envValue('OMB_TEAM_WORKER') || '').trim() === '';
   const staleThresholdMs = resolveLeaderStalenessThresholdMs();
 
   if (!leaderOnly) {
@@ -1617,7 +1617,7 @@ async function runDispatchDrainTick(): Promise<boolean> {
     const result = await drainPendingTeamDispatch({ cwd, stateDir: teamStateDir, logsDir, maxPerTick: dispatchTickMax } as any);
     dispatchDrainRuns += 1;
     lastDispatchDrain = {
-      leader_only: safeString(envValue('OMX_TEAM_WORKER', 'OMB_TEAM_WORKER') || '').trim() === '',
+      leader_only: safeString(envValue('OMB_TEAM_WORKER') || '').trim() === '',
       last_tick_at: startedIso,
       last_result: result,
       last_error: null,
@@ -1635,7 +1635,7 @@ async function runDispatchDrainTick(): Promise<boolean> {
   } catch (err) {
     dispatchDrainRuns += 1;
     lastDispatchDrain = {
-      leader_only: safeString(envValue('OMX_TEAM_WORKER', 'OMB_TEAM_WORKER') || '').trim() === '',
+      leader_only: safeString(envValue('OMB_TEAM_WORKER') || '').trim() === '',
       last_tick_at: startedIso,
       last_result: null,
       last_error: err instanceof Error ? err.message : safeString(err),

@@ -6,9 +6,9 @@ Accepted
 
 ## Context
 
-oh-my-codebuddy has both a Rust runtime (`omx-runtime`) and TypeScript orchestration code. Currently, the two layers have overlapping and sometimes conflicting ownership of state:
+oh-my-codebuddy has both a Rust runtime (`omb-runtime`) and TypeScript orchestration code. Currently, the two layers have overlapping and sometimes conflicting ownership of state:
 
-### Rust layer (omx-runtime)
+### Rust layer (omb-runtime)
 
 The Rust binary owns authority/lease management, dispatch queue, mailbox records, backlog counters, and replay cursor. It exposes these through a command/event protocol via `execFileSync`:
 
@@ -23,8 +23,8 @@ TS directly writes state files for team state, session state, mode state, and AG
 - `execCommand()` sends a `RuntimeCommand` via `execFileSync` and returns a `RuntimeEvent`
 - `readSnapshot()` reads the full `RuntimeSnapshot` from Rust
 - `readCompatFile<T>()` reads Rust-authored compatibility JSON files
-- Bridge is enabled by default (`OMX_RUNTIME_BRIDGE !== '0'`)
-- Binary discovery: `OMB_RUNTIME_BINARY` / `OMX_RUNTIME_BINARY` env → workspace debug → workspace release → PATH fallback
+- Bridge is enabled by default (`OMB_RUNTIME_BRIDGE !== '0'`)
+- Binary discovery: `OMB_RUNTIME_BINARY` / `OMB_RUNTIME_BINARY` env → workspace debug → workspace release → PATH fallback
 
 ### Current problems
 
@@ -72,7 +72,7 @@ When `RuntimeBridge.isEnabled()` returns true:
 
 ### 5. Fallback mode maintains minimum TS-only support
 
-When the bridge is disabled (`OMX_RUNTIME_BRIDGE=0`):
+When the bridge is disabled (`OMB_RUNTIME_BRIDGE=0`):
 - TS provides minimum-viable fallback for critical operations
 - Fallback code paths are clearly separated from bridge-enabled paths
 - Fallback mode does not write into Rust-owned state directories to avoid corruption on bridge re-enablement

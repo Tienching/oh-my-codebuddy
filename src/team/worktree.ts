@@ -153,7 +153,7 @@ export function assertCleanLeaderWorkspaceForWorkerWorktrees(cwd: string): void 
   if (lines.length === 0) return;
   const preview = lines.slice(0, 8).join(' | ');
   throw new Error(
-    `leader_workspace_dirty_for_worktrees:${resolve(cwd)}:${preview}:commit_or_stash_before_omx_team`,
+    `leader_workspace_dirty_for_worktrees:${resolve(cwd)}:${preview}:commit_or_stash_before_omb_team`,
   );
 }
 

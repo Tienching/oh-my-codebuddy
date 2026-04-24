@@ -1,8 +1,8 @@
 import {
-	ADAPT_TARGETS,
-	type AdaptCapabilityReport,
-	type AdaptTarget,
-	type AdaptTargetDescriptor,
+  ADAPT_TARGETS,
+  type AdaptCapabilityReport,
+  type AdaptTarget,
+  type AdaptTargetDescriptor,
 } from "./contracts.js";
 
 function capability(
@@ -23,18 +23,18 @@ function capability(
 
 const FOUNDATION_CAPABILITIES: AdaptCapabilityReport[] = [
 	capability(
-		"omx-adapter-paths",
-		"OMX-owned adapter paths",
-		"omx-owned",
+		"omb-adapter-paths",
+		"OMB-owned adapter paths",
+		"omb-owned",
 		"ready",
-		"Adapter artifacts stay under .omx/adapters/<target>/... rather than .omx/state or target internals.",
+		"Adapter artifacts stay under .omb/adapters/<target>/... rather than .omb/state or target internals.",
 	),
 	capability(
 		"planning-artifact-linkage",
 		"Planning artifact linkage",
 		"shared-contract",
 		"ready",
-		"Envelope output links canonical OMX PRD/test-spec artifacts when they exist.",
+		"Envelope output links canonical OMB PRD/test-spec artifacts when they exist.",
 	),
 	capability(
 		"foundation-reporting",
@@ -50,7 +50,7 @@ const TARGET_DESCRIPTORS: Record<AdaptTarget, AdaptTargetDescriptor> = {
 		target: "openclaw",
 		displayName: "OpenClaw",
 		summary:
-			"OMX-owned adapter around existing OpenClaw notification, gateway, and lifecycle observation surfaces.",
+			"OMB-owned adapter around existing OpenClaw notification, gateway, and lifecycle observation surfaces.",
 		followupHint:
 			"Status reflects local OpenClaw config/env/gateway evidence only; remote acknowledgement remains out of scope.",
 		capabilities: [
@@ -67,7 +67,7 @@ const TARGET_DESCRIPTORS: Record<AdaptTarget, AdaptTargetDescriptor> = {
 				"Lifecycle bridge metadata",
 				"shared-contract",
 				"ready",
-				"Probe, status, and envelope surface the existing OMX to OpenClaw lifecycle mapping without claiming remote execution health.",
+				"Probe, status, and envelope surface the existing OMB to OpenClaw lifecycle mapping without claiming remote execution health.",
 			),
 		],
 	},
@@ -75,9 +75,9 @@ const TARGET_DESCRIPTORS: Record<AdaptTarget, AdaptTargetDescriptor> = {
 		target: "hermes",
 		displayName: "Hermes",
 		summary:
-			"Foundation seam for an OMX-owned adapter around Hermes ACP, gateway, and persistent-session surfaces.",
+			"Foundation seam for an OMB-owned adapter around Hermes ACP, gateway, and persistent-session surfaces.",
 		followupHint:
-			"Hermes adapter reads external ACP, gateway, and session-store evidence while keeping all writes under .omx/adapters/hermes/.",
+			"Hermes adapter reads external ACP, gateway, and session-store evidence while keeping all writes under .omb/adapters/hermes/.",
 		capabilities: [
 			...FOUNDATION_CAPABILITIES,
 			capability(
@@ -92,7 +92,7 @@ const TARGET_DESCRIPTORS: Record<AdaptTarget, AdaptTargetDescriptor> = {
 				"ACP envelope bridge",
 				"shared-contract",
 				"stub",
-				"Hermes envelope/bootstrap metadata maps OMX lifecycle intent into ACP and gateway guidance without claiming deep control.",
+				"Hermes envelope/bootstrap metadata maps OMB lifecycle intent into ACP and gateway guidance without claiming deep control.",
 			),
 		],
 	},

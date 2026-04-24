@@ -145,6 +145,68 @@ describe("normalizeCodexLaunchArgs", () => {
     ]);
   });
 
+  it("maps --effort low to CodeBuddy effort flag", () => {
+    assert.deepEqual(normalizeCodexLaunchArgs(["--effort", "low"]), [
+      "--effort",
+      "low",
+    ]);
+  });
+
+  it("maps --effort medium to CodeBuddy effort flag", () => {
+    assert.deepEqual(normalizeCodexLaunchArgs(["--effort", "medium"]), [
+      "--effort",
+      "medium",
+    ]);
+  });
+
+  it("maps --effort high to CodeBuddy effort flag", () => {
+    assert.deepEqual(normalizeCodexLaunchArgs(["--effort", "high"]), [
+      "--effort",
+      "high",
+    ]);
+  });
+
+  it("maps --effort xhigh to CodeBuddy effort flag", () => {
+    assert.deepEqual(normalizeCodexLaunchArgs(["--effort", "xhigh"]), [
+      "--effort",
+      "xhigh",
+    ]);
+  });
+
+  it("--high emits deprecation warning to stderr", () => {
+    const origWrite = process.stderr.write;
+    const chunks: string[] = [];
+    process.stderr.write = (chunk: string | Buffer) => {
+      chunks.push(String(chunk));
+      return true;
+    };
+    try {
+      normalizeCodexLaunchArgs(["--high"]);
+      const output = chunks.join("");
+      assert.ok(output.includes("deprecated"), `expected deprecation warning, got: ${output}`);
+      assert.ok(output.includes("--effort high"), `expected direct --effort migration hint, got: ${output}`);
+    } finally {
+      process.stderr.write = origWrite;
+    }
+  });
+
+  it("--xhigh emits deprecation warning to stderr", () => {
+    const origWrite = process.stderr.write;
+    const chunks: string[] = [];
+    process.stderr.write = (chunk: string | Buffer) => {
+      chunks.push(String(chunk));
+      return true;
+    };
+    try {
+      normalizeCodexLaunchArgs(["--xhigh"]);
+      const output = chunks.join("");
+      assert.ok(output.includes("deprecated"), `expected deprecation warning, got: ${output}`);
+      assert.ok(output.includes("--effort xhigh"), `expected direct --effort migration hint, got: ${output}`);
+    } finally {
+      process.stderr.write = origWrite;
+    }
+  });
+
   it("translates Codex config shorthands into CodeBuddy system prompt and effort flags", () => {
     assert.deepEqual(
       normalizeCodexLaunchArgs([
@@ -322,24 +384,24 @@ describe("resolveNotifyTempContract", () => {
 });
 
 describe("cleanupLaunchOrphanedMcpProcesses", () => {
-  it("reaps only detached OMX MCP processes without a live Codex ancestor", async () => {
+  it("reaps only detached OMB MCP processes without a live Codex ancestor", async () => {
     const processes: ProcessEntry[] = [
       { pid: 700, ppid: 500, command: "codex" },
-      { pid: 701, ppid: 700, command: "node /repo/bin/omx.js" },
+      { pid: 701, ppid: 700, command: "node /repo/bin/omb.js" },
       {
         pid: 710,
         ppid: 700,
-        command: "node /repo/oh-my-codex/dist/mcp/state-server.js",
+        command: "node /repo/oh-my-codebuddy/dist/mcp/state-server.js",
       },
       {
         pid: 800,
         ppid: 1,
-        command: "node /tmp/oh-my-codex/dist/mcp/memory-server.js",
+        command: "node /tmp/oh-my-codebuddy/dist/mcp/memory-server.js",
       },
       {
         pid: 810,
         ppid: 42,
-        command: "node /tmp/oh-my-codex/dist/mcp/trace-server.js",
+        command: "node /tmp/oh-my-codebuddy/dist/mcp/trace-server.js",
       },
       {
         pid: 820,
@@ -354,7 +416,7 @@ describe("cleanupLaunchOrphanedMcpProcesses", () => {
       {
         pid: 830,
         ppid: 50,
-        command: "node /repo/bin/omx.js autoresearch --topic launch",
+        command: "node /repo/bin/omb.js autoresearch --topic launch",
       },
       {
         pid: 831,
@@ -387,12 +449,12 @@ describe("cleanupLaunchOrphanedMcpProcesses", () => {
     assert.equal(
       signals.some(({ pid }) => pid === 821),
       false,
-      "launch-safe cleanup must preserve OMX MCP processes still attached to another live Codex tree",
+      "launch-safe cleanup must preserve OMB MCP processes still attached to another live Codex tree",
     );
     assert.equal(
       signals.some(({ pid }) => pid === 831),
       false,
-      "launch-safe cleanup must preserve OMX MCP processes still attached to another live OMX launch tree",
+      "launch-safe cleanup must preserve OMB MCP processes still attached to another live OMB launch tree",
     );
   });
 });
@@ -419,11 +481,11 @@ describe("reapPostLaunchOrphanedMcpProcesses", () => {
     assert.deepEqual(errors, []);
     assert.match(
       info.join("\n"),
-      /postLaunch: reaped 2 orphaned OMX MCP process/,
+      /postLaunch: reaped 2 orphaned OMB MCP process/,
     );
     assert.match(
       warnings.join("\n"),
-      /postLaunch: failed to reap 1 orphaned OMX MCP process/,
+      /postLaunch: failed to reap 1 orphaned OMB MCP process/,
     );
   });
 
@@ -443,7 +505,7 @@ describe("reapPostLaunchOrphanedMcpProcesses", () => {
 
 describe("cleanupPostLaunchModeStateFiles", () => {
   it("repairs empty or truncated mode state files and still cancels valid siblings", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-postlaunch-mode-cleanup-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-postlaunch-mode-cleanup-"));
     const sessionId = "sess-postlaunch-cleanup";
     const stateDir = join(wd, ".omb", "state");
     const sessionStateDir = join(stateDir, "sessions", sessionId);
@@ -488,7 +550,7 @@ describe("cleanupPostLaunchModeStateFiles", () => {
   });
 
   it("retries a transient parse failure before cancelling the rewritten mode state", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-postlaunch-mode-retry-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-postlaunch-mode-retry-"));
     const sessionId = "sess-postlaunch-retry";
     const stateDir = join(wd, ".omb", "state");
     const statePath = join(stateDir, "ralph-state.json");
@@ -531,7 +593,7 @@ describe("cleanupPostLaunchModeStateFiles", () => {
   });
 
   it("warns on structurally complete malformed JSON without aborting sibling cleanup", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-postlaunch-mode-malformed-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-postlaunch-mode-malformed-"));
     const sessionId = "sess-postlaunch-malformed";
     const stateDir = join(wd, ".omb", "state");
     const warnings: string[] = [];
@@ -584,7 +646,6 @@ describe("buildNotifyFallbackWatcherEnv", () => {
       { codexHomeOverride: "/tmp/codebuddy-home", enableAuthority: true },
     );
     assert.equal(env.OMB_HUD_AUTHORITY, "1");
-    assert.equal(env.OMX_HUD_AUTHORITY, "1");
     assert.equal(env.CODEBUDDY_HOME, "/tmp/codebuddy-home");
     assert.equal(env.CODEX_HOME, "/tmp/codebuddy-home");
     assert.equal(env.HOME, "/tmp/home");
@@ -598,7 +659,6 @@ describe("buildNotifyFallbackWatcherEnv", () => {
       { enableAuthority: false },
     );
     assert.equal(env.OMB_HUD_AUTHORITY, "0");
-    assert.equal(env.OMX_HUD_AUTHORITY, "0");
     assert.equal(env.HOME, "/tmp/home");
     assert.equal(env.TMUX, undefined);
     assert.equal(env.TMUX_PANE, undefined);
@@ -612,7 +672,7 @@ describe("shouldEnableNotifyFallbackWatcher", () => {
 
   it("disables notify fallback explicitly on non-Windows hosts", () => {
     assert.equal(
-      shouldEnableNotifyFallbackWatcher({ OMX_NOTIFY_FALLBACK: "0" }, "linux"),
+      shouldEnableNotifyFallbackWatcher({ OMB_NOTIFY_FALLBACK: "0" }, "linux"),
       false,
     );
   });
@@ -623,7 +683,7 @@ describe("shouldEnableNotifyFallbackWatcher", () => {
 
   it("allows explicit opt-in for notify fallback on win32", () => {
     assert.equal(
-      shouldEnableNotifyFallbackWatcher({ OMX_NOTIFY_FALLBACK: "1" }, "win32"),
+      shouldEnableNotifyFallbackWatcher({ OMB_NOTIFY_FALLBACK: "1" }, "win32"),
       true,
     );
   });
@@ -631,7 +691,7 @@ describe("shouldEnableNotifyFallbackWatcher", () => {
 
 describe("reapStaleNotifyFallbackWatcher", () => {
   it("stops an existing watcher even when a later startup gate would skip relaunch", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-stale-notify-fallback-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-stale-notify-fallback-"));
     try {
       const pidPath = join(cwd, "notify-fallback.pid");
       await writeFile(
@@ -656,7 +716,7 @@ describe("reapStaleNotifyFallbackWatcher", () => {
   });
 
   it("ignores missing pid files", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-missing-notify-fallback-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-missing-notify-fallback-"));
     try {
       const pidPath = join(cwd, "notify-fallback.pid");
       let killCalls = 0;
@@ -675,7 +735,7 @@ describe("reapStaleNotifyFallbackWatcher", () => {
   });
 
   it("suppresses ESRCH cleanup errors but warns on unexpected failures", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-esrch-notify-fallback-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-esrch-notify-fallback-"));
     try {
       const pidPath = join(cwd, "notify-fallback.pid");
       await writeFile(pidPath, JSON.stringify({ pid: 99 }), "utf-8");
@@ -776,7 +836,7 @@ describe("resolveWorkerSparkModel", () => {
   });
 
   it("reads low-complexity team model from config when codebuddyHomeOverride is provided", async () => {
-    const codebuddyHome = await mkdtemp(join(tmpdir(), "omx-codex-home-"));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codex-home-"));
     try {
       await writeFile(
         join(codebuddyHome, ".omb-config.json"),
@@ -979,7 +1039,7 @@ describe("resolveCliInvocation", () => {
 
 describe("resolveCommandTemplateLaunchPrompt", () => {
   it("returns undefined when command templates are disabled", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-cli-template-disabled-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-cli-template-disabled-"));
     try {
       await mkdir(join(cwd, ".codebuddy", "commands"), { recursive: true });
       await writeFile(join(cwd, ".codebuddy", "commands", "greet.md"), "say $ARGUMENTS");
@@ -996,7 +1056,7 @@ describe("resolveCommandTemplateLaunchPrompt", () => {
   });
 
   it("resolves command prompt with $ARGUMENTS substitution when enabled", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-cli-template-enabled-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-cli-template-enabled-"));
     try {
       await mkdir(join(cwd, ".codebuddy", "commands"), { recursive: true });
       await writeFile(
@@ -1048,7 +1108,7 @@ describe("resolveSetupScopeArg", () => {
 });
 describe("project launch scope helpers", () => {
   it("reads persisted setup scope when valid", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(
@@ -1062,7 +1122,7 @@ describe("project launch scope helpers", () => {
   });
 
   it("reads persisted setup preferences when skill target is present", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(
@@ -1078,7 +1138,7 @@ describe("project launch scope helpers", () => {
   });
 
   it("ignores malformed persisted setup scope", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(join(wd, ".omb", "setup-scope.json"), "{not-json");
@@ -1089,7 +1149,7 @@ describe("project launch scope helpers", () => {
   });
 
   it("uses project CODEBUDDY_HOME when persisted scope is project", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(
@@ -1103,7 +1163,7 @@ describe("project launch scope helpers", () => {
   });
 
   it("keeps explicit CODEBUDDY_HOME override from env", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(
@@ -1122,7 +1182,7 @@ describe("project launch scope helpers", () => {
   });
 
   it('migrates legacy "project-local" persisted scope to "project"', async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(
@@ -1136,7 +1196,7 @@ describe("project launch scope helpers", () => {
   });
 
   it('resolves CODEBUDDY_HOME for legacy "project-local" persisted scope', async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-launch-scope-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
       await mkdir(join(wd, ".omb"), { recursive: true });
       await writeFile(
@@ -1175,7 +1235,6 @@ describe("resolveCodexLaunchPolicy", () => {
         { TMUX: "psmux-session" },
         "win32",
         true,
-        true,
       ),
       "inside-tmux",
     );
@@ -1199,7 +1258,6 @@ describe("resolveCodexLaunchPolicy", () => {
         "win32",
         true,
         false,
-        true,
         true,
       ),
       "direct",
@@ -1448,8 +1506,8 @@ describe("detached tmux new-session sequencing", () => {
     assert.match(leaderCmd!, /^\/bin\/sh -c '/);
     assert.doesNotMatch(leaderCmd!, /^\/bin\/sh -lc '/);
     assert.match(leaderCmd!, /acquireTmuxExtendedKeysLease/);
-    assert.match(leaderCmd!, /omx_detached_session_cleanup\(\)/);
-    assert.match(leaderCmd!, /trap omx_detached_session_cleanup 0;/);
+    assert.match(leaderCmd!, /omb_detached_session_cleanup\(\)/);
+    assert.match(leaderCmd!, /trap omb_detached_session_cleanup 0;/);
     assert.match(leaderCmd!, /releaseTmuxExtendedKeysLease/);
     assert.match(leaderCmd!, /if \[ "\$status" -lt 128 \]; then/);
     assert.match(leaderCmd!, /tmux kill-session -t/);
@@ -1458,7 +1516,7 @@ describe("detached tmux new-session sequencing", () => {
   });
 
   it("detached leader command executes codex and cleanup without shell-quote breakage", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-detached-leader-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-"));
     const fakeBin = join(cwd, "bin");
     const logPath = join(cwd, "leader.log");
 
@@ -1496,14 +1554,14 @@ exit 0
       await chmod(join(fakeBin, "tmux"), 0o755);
 
       const steps = buildDetachedSessionBootstrapSteps(
-        "omx-demo",
+        "omb-demo",
         cwd,
         buildTmuxPaneCommand(
           "codex",
           ["--dangerously-bypass-approvals-and-sandbox"],
           "/bin/sh",
         ),
-        "'node' '/tmp/omx.js' 'hud' '--watch'",
+        "'node' '/tmp/omb.js' 'hud' '--watch'",
         null,
       );
       const leaderCmd = steps[0]?.args.at(-1);
@@ -1525,14 +1583,14 @@ exit 0
       assert.match(log, /tmux:show-options -sv extended-keys/);
       assert.match(log, /tmux:set-option -sq extended-keys always/);
       assert.match(log, /tmux:set-option -sq extended-keys off/);
-      assert.match(log, /tmux:kill-session -t omx-demo/);
+      assert.match(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
   it("detached leader command preserves the detached tmux session on signal-derived exits", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-detached-leader-signal-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-signal-"));
     const fakeBin = join(cwd, "bin");
     const logPath = join(cwd, "leader.log");
 
@@ -1570,14 +1628,14 @@ exit 0
       await chmod(join(fakeBin, "tmux"), 0o755);
 
       const steps = buildDetachedSessionBootstrapSteps(
-        "omx-demo",
+        "omb-demo",
         cwd,
         buildTmuxPaneCommand(
           "codex",
           ["--dangerously-bypass-approvals-and-sandbox"],
           "/bin/sh",
         ),
-        "'node' '/tmp/omx.js' 'hud' '--watch'",
+        "'node' '/tmp/omb.js' 'hud' '--watch'",
         null,
       );
       const leaderCmd = steps[0]?.args.at(-1);
@@ -1600,14 +1658,14 @@ exit 0
       assert.match(log, /tmux:show-options -sv extended-keys/);
       assert.match(log, /tmux:set-option -sq extended-keys always/);
       assert.match(log, /tmux:set-option -sq extended-keys off/);
-      assert.doesNotMatch(log, /tmux:kill-session -t omx-demo/);
+      assert.doesNotMatch(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 
   it("withTmuxExtendedKeys enables tmux extended keys during codex launch and restores them afterwards", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-tmux-lease-wrapper-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-tmux-lease-wrapper-"));
     const calls: string[][] = [];
     const result = withTmuxExtendedKeys(
       cwd,
@@ -1634,7 +1692,7 @@ exit 0
   });
 
   it("overlapping tmux extended-keys leases restore only after the last holder exits", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-tmux-lease-overlap-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-tmux-lease-overlap-"));
     const calls: string[][] = [];
     const execStub = (_file: string, args: readonly string[]) => {
       calls.push([...args]);
@@ -1651,7 +1709,7 @@ exit 0
 
     releaseTmuxExtendedKeysLease(cwd, leaseA!, execStub);
 
-    const leaseDir = join(cwd, ".omx", "state", "tmux-extended-keys");
+    const leaseDir = join(cwd, ".omb", "state", "tmux-extended-keys");
     const leaseFilesAfterFirstRelease = await readFile(
       join(leaseDir, "tmp-tmux-test-sock.json"),
       "utf-8",
@@ -1676,7 +1734,7 @@ exit 0
   });
 
   it("withTmuxExtendedKeys degrades cleanly when tmux option probing fails", async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "omx-tmux-lease-fail-"));
+    const cwd = await mkdtemp(join(tmpdir(), "omb-tmux-lease-fail-"));
     const calls: string[][] = [];
     const result = withTmuxExtendedKeys(
       cwd,
@@ -1791,8 +1849,8 @@ exit 0
     const steps = buildDetachedSessionRollbackSteps(
       "omb-demo",
       "omb-demo:0",
-      "omx_resize_launch_demo_0_12",
-      "omx_attached_launch_demo_0_12",
+      "omb_resize_launch_demo_0_12",
+      "omb_attached_launch_demo_0_12",
     );
     assert.deepEqual(
       steps.map((step) => step.name),
@@ -1909,13 +1967,13 @@ describe("buildTmuxSessionName", () => {
   it("uses detached fallback quietly outside git repos", () => {
     const name = buildTmuxSessionName(
       "/tmp/My Repo",
-      "omx-1770992424158-abc123",
+      "omb-1770992424158-abc123",
     );
     assert.equal(name, "omb-my-repo-detached-1770992424158-abc123");
   });
 
   it("sanitizes invalid characters", () => {
-    const name = buildTmuxSessionName("/tmp/@#$", "omx-+++");
+    const name = buildTmuxSessionName("/tmp/@#$", "omb-+++");
     assert.match(
       name,
       /^omb-(unknown|[a-z0-9-]+)-[a-z0-9-]+-(unknown|[a-z0-9-]+)$/,
@@ -1927,7 +1985,7 @@ describe("buildTmuxSessionName", () => {
   it("includes repo name when cwd is inside .omb-worktrees", () => {
     const name = buildTmuxSessionName(
       "/home/user/my-repo.omb-worktrees/launch-feature-x",
-      "omx-123-abc",
+      "omb-123-abc",
     );
     assert.match(name, /^omb-my-repo-launch-feature-x-/);
   });
@@ -1935,7 +1993,7 @@ describe("buildTmuxSessionName", () => {
   it("includes repo name for detached worktree paths", () => {
     const name = buildTmuxSessionName(
       "/projects/cool-project.omb-worktrees/launch-detached",
-      "omx-456-def",
+      "omb-456-def",
     );
     assert.match(name, /^omb-cool-project-launch-detached-/);
   });
@@ -1943,19 +2001,19 @@ describe("buildTmuxSessionName", () => {
   it("includes repo name when cwd is inside .omb/worktrees", () => {
     const name = buildTmuxSessionName(
       "/home/user/my-repo/.omb/worktrees/autoresearch-demo",
-      "omx-789-ghi",
+      "omb-789-ghi",
     );
     assert.match(name, /^omb-my-repo-autoresearch-demo-/);
   });
 });
 
 describe("buildDetachedTmuxSessionName", () => {
-  it("reuses the OMX session id for the detached tmux session name", () => {
+  it("reuses the OMB session id for the detached tmux session name", () => {
     const sessionName = buildDetachedTmuxSessionName(
       "/tmp/My Repo",
-      "omx-1770992424158-abc123",
+      "omb-1770992424158-abc123",
     );
-    assert.equal(sessionName, "omx-my-repo-detached-1770992424158-abc123");
+    assert.equal(sessionName, "omb-my-repo-detached-1770992424158-abc123");
   });
 });
 

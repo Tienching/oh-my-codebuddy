@@ -16,12 +16,8 @@ export type {
 
 export const OMB_PROVIDER_CONTEXT_INJECTION_ENV =
   'OMB_PROVIDER_CONTEXT_INJECTION';
-export const OMX_PROVIDER_CONTEXT_INJECTION_ENV =
-  'OMX_PROVIDER_CONTEXT_INJECTION';
 export const OMB_EXPERIMENTAL_CONTEXT_INJECTOR_ENV =
   'OMB_EXPERIMENTAL_CONTEXT_INJECTOR';
-export const OMX_EXPERIMENTAL_CONTEXT_INJECTOR_ENV =
-  'OMX_EXPERIMENTAL_CONTEXT_INJECTOR';
 
 export interface ContextInjectionResult {
   enabled: boolean;
@@ -45,9 +41,8 @@ export function isExperimentalContextInjectorEnabled(
 ): boolean {
   return (
     isTruthyFlag(env[OMB_PROVIDER_CONTEXT_INJECTION_ENV]) ||
-    isTruthyFlag(env[OMX_PROVIDER_CONTEXT_INJECTION_ENV]) ||
     isTruthyFlag(env[OMB_EXPERIMENTAL_CONTEXT_INJECTOR_ENV]) ||
-    isTruthyFlag(env[OMX_EXPERIMENTAL_CONTEXT_INJECTOR_ENV])
+    isTruthyFlag(env[OMB_EXPERIMENTAL_CONTEXT_INJECTOR_ENV])
   );
 }
 

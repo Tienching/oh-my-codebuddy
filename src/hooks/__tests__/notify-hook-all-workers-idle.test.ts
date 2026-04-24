@@ -297,9 +297,9 @@ exit 0
 
   it('injects all-workers-idle notification even while the leader pane has an active task', async () => {
     await withTempWorkingDir(async (cwd) => {
-      const omxDir = join(cwd, '.omx');
-      const stateDir = join(omxDir, 'state');
-      const logsDir = join(omxDir, 'logs');
+      const ombDir = join(cwd, '.omb');
+      const stateDir = join(ombDir, 'state');
+      const logsDir = join(ombDir, 'logs');
       const teamName = 'busy-leader-all-idle';
       const teamDir = join(stateDir, 'team', teamName);
       const workersDir = join(teamDir, 'workers');
@@ -705,7 +705,7 @@ exit 0
       assert.ok(idleEvent.created_at, 'event should have a created_at timestamp');
 
       const tmuxLog = await readFile(tmuxLogPath, 'utf-8');
-      assert.doesNotMatch(tmuxLog, /\[OMX_INTENT:/);
+      assert.doesNotMatch(tmuxLog, /\[OMB_INTENT:/);
     });
   });
 

@@ -6,7 +6,7 @@
 
 ## Fixed
 
-- **Detached tmux startup no longer drops Codex stdin** — the detached leader wrapper now preserves stdin while backgrounding Codex, so interactive detached launches like `omx --madmax --high` no longer exit immediately on startup. (PR [#1631](https://github.com/Yeachan-Heo/oh-my-codex/pull/1631), issues [#1627](https://github.com/Yeachan-Heo/oh-my-codex/issues/1627), [#1628](https://github.com/Yeachan-Heo/oh-my-codex/issues/1628))
+- **Detached tmux startup no longer drops Codex stdin** — the detached leader wrapper now preserves stdin while backgrounding Codex, so interactive detached launches like `omb --madmax --high` no longer exit immediately on startup. (PR [#1631](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/1631), issues [#1627](https://github.com/Yeachan-Heo/oh-my-codebuddy/issues/1627), [#1628](https://github.com/Yeachan-Heo/oh-my-codebuddy/issues/1628))
 - **Detached-launch regression coverage** — CLI regression tests now assert that the detached leader command keeps stdin open for the Codex child while preserving leader cleanup semantics.
 
 ## Verification evidence

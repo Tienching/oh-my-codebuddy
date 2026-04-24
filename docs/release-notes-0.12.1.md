@@ -6,9 +6,9 @@
 
 ## Included fixes and changes
 
-- leader mailbox pruning no longer replays duplicate delivered-message bridge calls, so `omx team status --json` stays parseable
+- leader mailbox pruning no longer replays duplicate delivered-message bridge calls, so `omb team status --json` stays parseable
 - interactive team worker metadata now records the PID from the resolved pane id and persists it into config/identity state
-- orphaned OMX MCP cleanup now preserves the live launcher/session tree
+- orphaned OMB MCP cleanup now preserves the live launcher/session tree
 - fallback watcher once-mode logs rotate instead of growing silently
 - leader launches now default to direct mode outside tmux unless detached tmux is explicitly requested
 - release metadata and collateral are aligned to `0.12.1` across Node, Cargo, changelog, release body, and release-readiness docs

@@ -20,22 +20,22 @@ status, earliest removal version, and migration path.
 | Canonical | Legacy | Status | Earliest Removal | Migration |
 |-----------|--------|--------|-----------------|-----------|
 | `CODEBUDDY_HOME` | `CODEX_HOME` | active_compat | v2.0 | Set `CODEBUDDY_HOME` instead of `CODEX_HOME` |
-| `OMB_ENTRY_PATH` | `OMX_ENTRY_PATH` | active_compat | v2.0 | Set `OMB_ENTRY_PATH` instead of `OMX_ENTRY_PATH` |
-| `OMB_RUNTIME_BRIDGE` | `OMX_RUNTIME_BRIDGE` | active_compat | v2.0 | Set `OMB_RUNTIME_BRIDGE` instead of `OMX_RUNTIME_BRIDGE` |
-| `OMB_RUNTIME_BINARY` | `OMX_RUNTIME_BINARY` | active_compat | v2.0 | Set `OMB_RUNTIME_BINARY` instead of `OMX_RUNTIME_BINARY` |
+| `OMB_ENTRY_PATH` | `OMB_ENTRY_PATH` | active_compat | v2.0 | Set `OMB_ENTRY_PATH` instead of `OMB_ENTRY_PATH` |
+| `OMB_RUNTIME_BRIDGE` | `OMB_RUNTIME_BRIDGE` | active_compat | v2.0 | Set `OMB_RUNTIME_BRIDGE` instead of `OMB_RUNTIME_BRIDGE` |
+| `OMB_RUNTIME_BINARY` | `OMB_RUNTIME_BINARY` | active_compat | v2.0 | Set `OMB_RUNTIME_BINARY` instead of `OMB_RUNTIME_BINARY` |
 
 ### Directory Names
 
 | Canonical | Legacy | Status | Earliest Removal | Migration |
 |-----------|--------|--------|-----------------|-----------|
 | `~/.codebuddy` | `~/.codex` | read_only | v1.14 | Move contents to `~/.codebuddy`; symlink `~/.codex` → `~/.codebuddy` |
-| `.omb` | `.omx` | active_compat | v2.0 | Run `omb setup` to migrate; `.omx` is read as fallback |
+| `.omb` | `.omb` | active_compat | v2.0 | Run `omb setup` to migrate; `.omb` is read as fallback |
 
 ### Binary Names
 
 | Canonical | Legacy | Status | Earliest Removal | Migration |
 |-----------|--------|--------|-----------------|-----------|
-| `omb` | `omx` | active_compat | v2.0 | Use `omb` command; `omx` remains as symlink |
+| `omb` | `omb` | active_compat | v2.0 | Use `omb` command; `omb` remains as symlink |
 
 ### Setup Scope Migration
 
@@ -54,7 +54,7 @@ status, earliest removal version, and migration path.
 All alias pairs follow the same resolution priority:
 
 1. **Canonical name** (e.g. `CODEBUDDY_HOME`, `OMB_ENTRY_PATH`)
-2. **Legacy name** (e.g. `CODEX_HOME`, `OMX_ENTRY_PATH`)
+2. **Legacy name** (e.g. `CODEX_HOME`, `OMB_ENTRY_PATH`)
 3. **Default value** (e.g. `~/.codebuddy`, `null`)
 
 For directory reads, canonical path is tried first; legacy path is a
@@ -73,7 +73,7 @@ Legacy paths receive writes only when the corresponding alias has status
 - **v0.12** (current): All aliases at `active_compat` or `read_only`
 - **v1.0**: `.codex` directory transitions from `read_only` to `write_disabled`
 - **v1.14**: `.codex` directory becomes `removal_candidate`; symlink creation stops
-- **v2.0**: All legacy aliases removed; `omx` binary symlink removed
+- **v2.0**: All legacy aliases removed; `omb` binary symlink removed
 
 ## CHANGELOG Deprecation Format
 

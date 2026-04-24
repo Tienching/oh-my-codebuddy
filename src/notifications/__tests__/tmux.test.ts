@@ -13,7 +13,7 @@ import {
 
 describe('getCurrentTmuxSession', () => {
   const originalTmux = process.env.TMUX;
-  const originalPidFallback = process.env.OMX_TMUX_PID_FALLBACK;
+  const originalPidFallback = process.env.OMB_TMUX_PID_FALLBACK;
 
   afterEach(() => {
     if (originalTmux !== undefined) {
@@ -22,9 +22,9 @@ describe('getCurrentTmuxSession', () => {
       delete process.env.TMUX;
     }
     if (originalPidFallback !== undefined) {
-      process.env.OMX_TMUX_PID_FALLBACK = originalPidFallback;
+      process.env.OMB_TMUX_PID_FALLBACK = originalPidFallback;
     } else {
-      delete process.env.OMX_TMUX_PID_FALLBACK;
+      delete process.env.OMB_TMUX_PID_FALLBACK;
     }
   });
 
@@ -38,7 +38,7 @@ describe('getCurrentTmuxSession', () => {
     const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     delete process.env.TMUX;
-    process.env.OMX_TMUX_PID_FALLBACK = '1';
+    process.env.OMB_TMUX_PID_FALLBACK = '1';
     try {
       assert.equal(getCurrentTmuxSession(), null);
     } finally {
@@ -50,7 +50,7 @@ describe('getCurrentTmuxSession', () => {
 describe('getCurrentTmuxPaneId', () => {
   const originalTmux = process.env.TMUX;
   const originalPane = process.env.TMUX_PANE;
-  const originalPidFallback = process.env.OMX_TMUX_PID_FALLBACK;
+  const originalPidFallback = process.env.OMB_TMUX_PID_FALLBACK;
 
   afterEach(() => {
     if (originalTmux !== undefined) {
@@ -64,9 +64,9 @@ describe('getCurrentTmuxPaneId', () => {
       delete process.env.TMUX_PANE;
     }
     if (originalPidFallback !== undefined) {
-      process.env.OMX_TMUX_PID_FALLBACK = originalPidFallback;
+      process.env.OMB_TMUX_PID_FALLBACK = originalPidFallback;
     } else {
-      delete process.env.OMX_TMUX_PID_FALLBACK;
+      delete process.env.OMB_TMUX_PID_FALLBACK;
     }
   });
 
@@ -102,7 +102,7 @@ describe('getCurrentTmuxPaneId', () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     delete process.env.TMUX;
     delete process.env.TMUX_PANE;
-    process.env.OMX_TMUX_PID_FALLBACK = '1';
+    process.env.OMB_TMUX_PID_FALLBACK = '1';
     try {
       assert.equal(getCurrentTmuxPaneId(), null);
     } finally {

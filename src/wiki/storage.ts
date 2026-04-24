@@ -29,7 +29,7 @@ const RESERVED_FILES = new Set([INDEX_FILE, LOG_FILE, ENVIRONMENT_FILE]);
 
 function getManagedRoot(root: string): string {
   const canonical = join(root, '.omb', 'wiki');
-  const legacy = join(root, '.omx', 'wiki');
+  const legacy = join(root, '.omb', 'wiki');
   if (existsSync(canonical) || !existsSync(legacy)) {
     return canonical;
   }
@@ -38,7 +38,7 @@ function getManagedRoot(root: string): string {
 
 function getManagedStateRoot(root: string): string {
   const canonical = join(root, '.omb');
-  const legacy = join(root, '.omx');
+  const legacy = join(root, '.omb');
   if (existsSync(canonical) || !existsSync(legacy)) {
     return canonical;
   }

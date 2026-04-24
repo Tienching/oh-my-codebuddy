@@ -16,7 +16,7 @@ Agents now carry Sisyphus-style posture metadata that separates three dimensions
 - **Posture**: operating style (`frontier-orchestrator`, `deep-worker`, `fast-lane`)
 
 After `omb setup`, native agent configs in `~/.omb/agents/` include new sections:
-`## OMX Posture Overlay`, `## Model-Class Guidance`, and `## OMX Agent Metadata`.
+`## OMB Posture Overlay`, `## Model-Class Guidance`, and `## OMB Agent Metadata`.
 
 Representative routing:
 - `planner` / `architect` / `critic` -> `frontier-orchestrator`
@@ -29,7 +29,7 @@ PRs: [#588](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/588), [#592](htt
 
 ### Windows ESM import crash
 
-`bin/omx.js` failed on Windows with `ERR_UNSUPPORTED_ESM_URL_SCHEME` because `import()` received a bare absolute path (`C:\...`) instead of a `file://` URL.
+`bin/omb.js` failed on Windows with `ERR_UNSUPPORTED_ESM_URL_SCHEME` because `import()` received a bare absolute path (`C:\...`) instead of a `file://` URL.
 
 Fix: convert the resolved path to a `file://` URL via `url.pathToFileURL()` before dynamic import.
 

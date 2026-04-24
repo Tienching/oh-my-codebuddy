@@ -136,13 +136,13 @@ describe('isSessionStale', () => {
   it('returns false for a live Linux process when identity matches', () => {
     const state = makeState({
       pid_start_ticks: 111,
-      pid_cmdline: 'node omx',
+      pid_cmdline: 'node omb',
     });
 
     const stale = isSessionStale(state, {
       platform: 'linux',
       isPidAlive: () => true,
-      readLinuxIdentity: () => ({ startTicks: 111, cmdline: 'node omx' }),
+      readLinuxIdentity: () => ({ startTicks: 111, cmdline: 'node omb' }),
     });
 
     assert.equal(stale, false);
@@ -151,13 +151,13 @@ describe('isSessionStale', () => {
   it('returns true for PID reuse on Linux when start ticks mismatch', () => {
     const state = makeState({
       pid_start_ticks: 111,
-      pid_cmdline: 'node omx',
+      pid_cmdline: 'node omb',
     });
 
     const stale = isSessionStale(state, {
       platform: 'linux',
       isPidAlive: () => true,
-      readLinuxIdentity: () => ({ startTicks: 222, cmdline: 'node omx' }),
+      readLinuxIdentity: () => ({ startTicks: 222, cmdline: 'node omb' }),
     });
 
     assert.equal(stale, true);
@@ -169,7 +169,7 @@ describe('isSessionStale', () => {
     const stale = isSessionStale(state, {
       platform: 'linux',
       isPidAlive: () => true,
-      readLinuxIdentity: () => ({ startTicks: 111, cmdline: 'node omx' }),
+      readLinuxIdentity: () => ({ startTicks: 111, cmdline: 'node omb' }),
     });
 
     assert.equal(stale, true);

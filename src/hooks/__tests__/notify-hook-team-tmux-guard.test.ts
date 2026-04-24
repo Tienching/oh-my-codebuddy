@@ -138,7 +138,7 @@ describe('notify-hook team tmux guard bridge', () => {
   });
 
   it('reports pane_not_ready with capture context when the pane is not input-ready', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-team-tmux-guard-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-team-tmux-guard-'));
     const fakeBinDir = join(cwd, 'fake-bin');
     const tmuxLogPath = join(cwd, 'tmux.log');
 
@@ -192,7 +192,7 @@ exit 0
   });
 
   it('treats capture-pane failure as non-blocking for a live codex pane', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-team-tmux-guard-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-team-tmux-guard-'));
     const fakeBinDir = join(cwd, 'fake-bin');
     const tmuxLogPath = join(cwd, 'tmux.log');
 

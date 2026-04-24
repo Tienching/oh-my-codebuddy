@@ -59,14 +59,14 @@ describe('native asset helpers', () => {
   it('prefers musl cache paths before glibc and legacy Linux cache paths', () => {
     assert.deepEqual(
       resolveCachedNativeBinaryCandidatePaths('omb-sparkshell', '0.8.15', 'linux', 'x64', {
-        OMB_NATIVE_CACHE_DIR: '/tmp/omx-native-cache',
+        OMB_NATIVE_CACHE_DIR: '/tmp/omb-native-cache',
       }, {
         linuxLibcPreference: ['musl', 'glibc'],
       }),
       [
-        '/tmp/omx-native-cache/0.8.15/linux-x64-musl/omb-sparkshell/omb-sparkshell',
-        '/tmp/omx-native-cache/0.8.15/linux-x64-glibc/omb-sparkshell/omb-sparkshell',
-        '/tmp/omx-native-cache/0.8.15/linux-x64/omb-sparkshell/omb-sparkshell',
+        '/tmp/omb-native-cache/0.8.15/linux-x64-musl/omb-sparkshell/omb-sparkshell',
+        '/tmp/omb-native-cache/0.8.15/linux-x64-glibc/omb-sparkshell/omb-sparkshell',
+        '/tmp/omb-native-cache/0.8.15/linux-x64/omb-sparkshell/omb-sparkshell',
       ],
     );
   });

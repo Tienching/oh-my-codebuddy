@@ -8,11 +8,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, '..', '..');
 const nativeRoot = join(projectRoot, 'crates', 'omb-sparkshell');
-const manifestPath = process.env.OMX_SPARKSHELL_MANIFEST ?? process.env.OMB_SPARKSHELL_MANIFEST ?? join(nativeRoot, 'Cargo.toml');
+const manifestPath = process.env.OMB_SPARKSHELL_MANIFEST ?? process.env.OMB_SPARKSHELL_MANIFEST ?? join(nativeRoot, 'Cargo.toml');
 const builtBinaryName = platform() === 'win32' ? 'omb-sparkshell.exe' : 'omb-sparkshell';
-const packagedBinaryName = platform() === 'win32' ? 'omx-sparkshell.exe' : 'omx-sparkshell';
+const packagedBinaryName = builtBinaryName;
 const releaseBinaryPath = join(projectRoot, 'target', 'release', builtBinaryName);
-const stageDirOverride = process.env.OMX_SPARKSHELL_STAGE_DIR ?? process.env.OMB_SPARKSHELL_STAGE_DIR;
+const stageDirOverride = process.env.OMB_SPARKSHELL_STAGE_DIR ?? process.env.OMB_SPARKSHELL_STAGE_DIR;
 const stagedBinaryRoot = stageDirOverride
   ? join(stageDirOverride, `${platform()}-${arch()}`)
   : join(projectRoot, 'bin', 'native', `${platform()}-${arch()}`);
@@ -51,4 +51,4 @@ copyFileSync(releaseBinaryPath, packagedBinaryPath);
 if (platform() !== 'win32') {
   chmodSync(packagedBinaryPath, 0o755);
 }
-console.log(`omx sparkshell build: staged native binary at ${packagedBinaryPath}`);
+console.log(`omb sparkshell build: staged native binary at ${packagedBinaryPath}`);

@@ -243,7 +243,6 @@ export class RecoveryLedger {
 
 const OVERLAY_MARKERS = [
   { start: "<!-- OMB:RUNTIME:START -->", end: "<!-- OMB:RUNTIME:END -->" },
-  { start: "<!-- OMX:TEAM:WORKER:START -->", end: "<!-- OMX:TEAM:WORKER:END -->" },
   { start: "<!-- OMB:TEAM:WORKER:START -->", end: "<!-- OMB:TEAM:WORKER:END -->" },
 ];
 

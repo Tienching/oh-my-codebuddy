@@ -29,7 +29,7 @@ import {
   resolveCommandPathForPlatform,
   spawnPlatformCommandSync,
 } from '../utils/platform-command.js';
-import { resolveOmxCliEntryPath } from '../utils/paths.js';
+import { resolveOmbCliEntryPath } from '../utils/paths.js';
 
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
@@ -49,27 +49,20 @@ export interface TeamSession {
   resizeHookTarget: string | null;
 }
 
-const INJECTION_MARKERS = ['[OMB_TMUX_INJECT]', '[OMX_TMUX_INJECT]'] as const;
+const INJECTION_MARKERS = ['[OMB_TMUX_INJECT]', '[OMB_TMUX_INJECT]'] as const;
 const MODEL_INSTRUCTIONS_FILE_KEY = 'model_instructions_file';
 const REASONING_KEY = 'model_reasoning_effort';
 const OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = 'OMB_BYPASS_DEFAULT_SYSTEM_PROMPT';
-const OMX_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = 'OMX_BYPASS_DEFAULT_SYSTEM_PROMPT';
-const OMX_MODEL_INSTRUCTIONS_FILE_ENV = 'OMX_MODEL_INSTRUCTIONS_FILE';
 const OMB_MODEL_INSTRUCTIONS_FILE_ENV = 'OMB_MODEL_INSTRUCTIONS_FILE';
-const OMX_TEAM_WORKER_CLI_ENV = 'OMX_TEAM_WORKER_CLI';
 const OMB_TEAM_WORKER_CLI_ENV = 'OMB_TEAM_WORKER_CLI';
-const OMX_TEAM_WORKER_CLI_MAP_ENV = 'OMX_TEAM_WORKER_CLI_MAP';
 const OMB_TEAM_WORKER_CLI_MAP_ENV = 'OMB_TEAM_WORKER_CLI_MAP';
-const OMX_TEAM_WORKER_LAUNCH_MODE_ENV = 'OMX_TEAM_WORKER_LAUNCH_MODE';
 const OMB_TEAM_WORKER_LAUNCH_MODE_ENV = 'OMB_TEAM_WORKER_LAUNCH_MODE';
-const OMX_TEAM_AUTO_INTERRUPT_RETRY_ENV = 'OMX_TEAM_AUTO_INTERRUPT_RETRY';
+const OMB_TEAM_AUTO_INTERRUPT_RETRY_ENV = 'OMB_TEAM_AUTO_INTERRUPT_RETRY';
 const CLAUDE_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 const GEMINI_PROMPT_INTERACTIVE_FLAG = '-i';
 const GEMINI_APPROVAL_MODE_FLAG = '--approval-mode';
 const GEMINI_APPROVAL_MODE_YOLO = 'yolo';
-const OMX_LEADER_NODE_PATH_ENV = 'OMX_LEADER_NODE_PATH';
 const OMB_LEADER_NODE_PATH_ENV = 'OMB_LEADER_NODE_PATH';
-const OMX_LEADER_CLI_PATH_ENV = 'OMX_LEADER_CLI_PATH';
 const OMB_LEADER_CLI_PATH_ENV = 'OMB_LEADER_CLI_PATH';
 
 export type TeamWorkerCli = 'codex' | 'claude' | 'gemini' | 'codebuddy';
@@ -187,7 +180,7 @@ export function listPaneIds(target: string): string[] {
 
 function isHudWatchPane(pane: TmuxPaneInfo): boolean {
   const start = pane.startCommand || '';
-  return /\b(?:omb|omx)\b.*\bhud\b.*--watch/i.test(start);
+  return /\b(?:omb|omb)\b.*\bhud\b.*--watch/i.test(start);
 }
 
 export function chooseTeamLeaderPaneId(panes: TmuxPaneInfo[], preferredPaneId: string): string {
@@ -324,7 +317,7 @@ export function buildResizeHookName(
   hudPaneId: string,
 ): string {
   return [
-    'omx_resize',
+    'omb_resize',
     normalizeTmuxHookToken(teamName),
     normalizeTmuxHookToken(sessionName),
     normalizeTmuxHookToken(windowIndex),
@@ -413,7 +406,7 @@ export function buildClientAttachedReconcileHookName(
   hudPaneId: string,
 ): string {
   return [
-    'omx_attached',
+    'omb_attached',
     normalizeTmuxHookToken(teamName),
     normalizeTmuxHookToken(sessionName),
     normalizeTmuxHookToken(windowIndex),
@@ -523,7 +516,7 @@ function hasModelInstructionsOverride(args: string[]): boolean {
   return false;
 }
 
-function normalizeTeamWorkerCliMode(raw: string | undefined, sourceEnv: string = OMX_TEAM_WORKER_CLI_ENV): TeamWorkerCliMode {
+function normalizeTeamWorkerCliMode(raw: string | undefined, sourceEnv: string = OMB_TEAM_WORKER_CLI_ENV): TeamWorkerCliMode {
   const normalized = String(raw ?? 'auto').trim().toLowerCase();
   if (normalized === '' || normalized === 'auto') return 'auto';
   if (normalized === 'codex' || normalized === 'claude' || normalized === 'gemini' || normalized === 'codebuddy') return normalized as TeamWorkerCli;
@@ -533,8 +526,8 @@ function normalizeTeamWorkerCliMode(raw: string | undefined, sourceEnv: string =
 export function resolveTeamWorkerLaunchMode(
   env: NodeJS.ProcessEnv = process.env,
 ): TeamWorkerLaunchMode {
-  const launchModeEnvUsed = env[OMB_TEAM_WORKER_LAUNCH_MODE_ENV] ? OMB_TEAM_WORKER_LAUNCH_MODE_ENV : OMX_TEAM_WORKER_LAUNCH_MODE_ENV;
-  const launchModeValueUsed = env[OMB_TEAM_WORKER_LAUNCH_MODE_ENV] ?? env[OMX_TEAM_WORKER_LAUNCH_MODE_ENV];
+  const launchModeEnvUsed = env[OMB_TEAM_WORKER_LAUNCH_MODE_ENV] ? OMB_TEAM_WORKER_LAUNCH_MODE_ENV : OMB_TEAM_WORKER_LAUNCH_MODE_ENV;
+  const launchModeValueUsed = env[OMB_TEAM_WORKER_LAUNCH_MODE_ENV] ?? env[OMB_TEAM_WORKER_LAUNCH_MODE_ENV];
   const raw = String(launchModeValueUsed ?? 'interactive').trim().toLowerCase();
   if (raw === '' || raw === 'interactive') return 'interactive';
   if (raw === 'prompt') return 'prompt';
@@ -562,7 +555,7 @@ function extractModelOverride(args: string[]): string | null {
 }
 
 export function resolveTeamWorkerCli(launchArgs: string[] = [], env: NodeJS.ProcessEnv = process.env): TeamWorkerCli {
-  const mode = normalizeTeamWorkerCliMode(env[OMB_TEAM_WORKER_CLI_ENV] ?? env[OMX_TEAM_WORKER_CLI_ENV]);
+  const mode = normalizeTeamWorkerCliMode(env[OMB_TEAM_WORKER_CLI_ENV] ?? env[OMB_TEAM_WORKER_CLI_ENV]);
   if (mode !== 'auto') return mode;
   return resolveTeamWorkerCliFromLaunchArgs(launchArgs);
 }
@@ -583,7 +576,7 @@ export function resolveTeamWorkerCliPlan(
     throw new Error(`workerCount must be >= 1 (got ${workerCount})`);
   }
 
-  const rawMap = String(env[OMB_TEAM_WORKER_CLI_MAP_ENV] ?? env[OMX_TEAM_WORKER_CLI_MAP_ENV] ?? '').trim();
+  const rawMap = String(env[OMB_TEAM_WORKER_CLI_MAP_ENV] ?? env[OMB_TEAM_WORKER_CLI_MAP_ENV] ?? '').trim();
   const fallback = (): TeamWorkerCli => resolveTeamWorkerCli(launchArgs, env);
   const fallbackAutoFromArgs = (): TeamWorkerCli => resolveTeamWorkerCliFromLaunchArgs(launchArgs);
 
@@ -596,8 +589,8 @@ export function resolveTeamWorkerCliPlan(
     .split(',')
     .map((part) => part.trim());
 
-  const mapEnvUsed = env[OMB_TEAM_WORKER_CLI_MAP_ENV] ? OMB_TEAM_WORKER_CLI_MAP_ENV : OMX_TEAM_WORKER_CLI_MAP_ENV;
-  const mapValueUsed = env[OMB_TEAM_WORKER_CLI_MAP_ENV] ? env[OMB_TEAM_WORKER_CLI_MAP_ENV] : env[OMX_TEAM_WORKER_CLI_MAP_ENV];
+  const mapEnvUsed = env[OMB_TEAM_WORKER_CLI_MAP_ENV] ? OMB_TEAM_WORKER_CLI_MAP_ENV : OMB_TEAM_WORKER_CLI_MAP_ENV;
+  const mapValueUsed = env[OMB_TEAM_WORKER_CLI_MAP_ENV] ? env[OMB_TEAM_WORKER_CLI_MAP_ENV] : env[OMB_TEAM_WORKER_CLI_MAP_ENV];
   if (entries.length === 0 || entries.every((part) => part.length === 0)) {
     throw new Error(
       `Invalid ${mapEnvUsed} value "${mapValueUsed}". `
@@ -852,7 +845,7 @@ function resolveAbsoluteBinaryPath(binary: string): string {
  */
 let _leaderPaths: { node: string; } | null = null;
 function resolveLeaderNodePath(): string {
-  const envOverride = process.env[OMB_LEADER_NODE_PATH_ENV] ?? process.env[OMX_LEADER_NODE_PATH_ENV];
+  const envOverride = process.env[OMB_LEADER_NODE_PATH_ENV] ?? process.env[OMB_LEADER_NODE_PATH_ENV];
   if (typeof envOverride === 'string' && envOverride.trim() !== '') {
     return envOverride.trim();
   }
@@ -870,7 +863,7 @@ export function assertTeamWorkerCliBinaryAvailable(
   throw new Error(
     `Selected team worker CLI "${workerCli}" is not available on PATH. `
       + `Install "${workerCli}" or set ${OMB_TEAM_WORKER_CLI_ENV}=codebuddy|codex|claude|gemini `
-      + `(compat: ${OMX_TEAM_WORKER_CLI_ENV}).`,
+      + `(compat: ${OMB_TEAM_WORKER_CLI_ENV}).`,
   );
 }
 
@@ -879,12 +872,12 @@ function shouldBypassDefaultSystemPrompt(env: NodeJS.ProcessEnv): boolean {
   if (typeof ombValue === 'string' && ombValue.trim() !== '') {
     return ombValue !== '0';
   }
-  return env[OMX_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV] !== '0';
+  return env[OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV] !== '0';
 }
 
 function buildModelInstructionsOverride(cwd: string, env: NodeJS.ProcessEnv): string {
   const filePath = translatePathForMsys(
-    env[OMB_MODEL_INSTRUCTIONS_FILE_ENV] || env[OMX_MODEL_INSTRUCTIONS_FILE_ENV] || join(cwd, 'AGENTS.md'),
+    env[OMB_MODEL_INSTRUCTIONS_FILE_ENV] || env[OMB_MODEL_INSTRUCTIONS_FILE_ENV] || join(cwd, 'AGENTS.md'),
   );
   return `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(filePath)}"`;
 }
@@ -996,11 +989,8 @@ export function buildWorkerProcessLaunchSpec(
     : { command: resolvedCliPath, args: effectiveCliLaunchArgs };
   const workerEnv: Record<string, string> = {
     OMB_TEAM_WORKER: `${teamName}/worker-${workerIndex}`,
-    OMX_TEAM_WORKER: `${teamName}/worker-${workerIndex}`,
     [OMB_LEADER_NODE_PATH_ENV]: resolveLeaderNodePath(),
-    [OMX_LEADER_NODE_PATH_ENV]: resolveLeaderNodePath(),
     [OMB_LEADER_CLI_PATH_ENV]: resolvedCliPath,
-    [OMX_LEADER_CLI_PATH_ENV]: resolvedCliPath,
     ...((workerCli === 'codex' || workerCli === 'codebuddy')
       ? readActiveProviderEnvOverrides(
           effectiveEnv,
@@ -1056,7 +1046,7 @@ export function isWsl2(): boolean {
 
 /**
  * Detect whether the process is running on native Windows (not WSL2).
- * OMX requires tmux, which is unavailable on native Windows.
+ * OMB requires tmux, which is unavailable on native Windows.
  */
 export function isNativeWindows(): boolean {
   return process.platform === 'win32' && !isWsl2() && !isMsysOrGitBash();
@@ -1198,9 +1188,9 @@ export function createTeamSession(
     let hudPaneId: string | null = null;
     let resizeHookName: string | null = null;
     let resizeHookTarget: string | null = null;
-    const omxEntry = resolveOmxCliEntryPath();
-    if (omxEntry && omxEntry.trim() !== '') {
-      const hudCmd = `node ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
+    const ombEntry = resolveOmbCliEntryPath();
+    if (ombEntry && ombEntry.trim() !== '') {
+      const hudCmd = `node ${shellQuoteSingle(translatePathForMsys(ombEntry))} hud --watch`;
       const hudCwd = translatePathForMsys(cwd);
       const hudResult = runTmux([
         'split-window', '-v', '-f', '-l', String(HUD_TMUX_TEAM_HEIGHT_LINES), '-t', teamTarget, '-d', '-P', '-F', '#{pane_id}', '-c', hudCwd, hudCmd,
@@ -1262,8 +1252,8 @@ export function createTeamSession(
     // Enable mouse scrolling so agent output panes can be scrolled with the
     // mouse wheel without conflicting with keyboard up/down arrow-key input
     // history navigation in the Codex CLI input field. (issue #103)
-    // Opt-out: set OMX_TEAM_MOUSE=0 in the environment.
-    if (process.env.OMX_TEAM_MOUSE !== '0') {
+    // Opt-out: set OMB_TEAM_MOUSE=0 in the environment.
+    if (process.env.OMB_TEAM_MOUSE !== '0') {
       enableMouseScrolling(sessionName);
     }
 
@@ -1303,10 +1293,10 @@ export function restoreStandaloneHudPane(
   const normalizedLeaderPaneId = normalizePaneTarget(leaderPaneId);
   if (!normalizedLeaderPaneId) return null;
 
-  const omxEntry = resolveOmxCliEntryPath();
-  if (!omxEntry || omxEntry.trim() === '') return null;
+  const ombEntry = resolveOmbCliEntryPath();
+  if (!ombEntry || ombEntry.trim() === '') return null;
 
-  const hudCmd = `${shellQuoteSingle(translatePathForMsys(resolveLeaderNodePath()))} ${shellQuoteSingle(translatePathForMsys(omxEntry))} hud --watch`;
+  const hudCmd = `${shellQuoteSingle(translatePathForMsys(resolveLeaderNodePath()))} ${shellQuoteSingle(translatePathForMsys(ombEntry))} hud --watch`;
   const hudCwd = translatePathForMsys(cwd);
   const hudResult = runTmux([
     'split-window',
@@ -1342,7 +1332,7 @@ export function restoreStandaloneHudPane(
  * Enable tmux mouse mode for a session so users can scroll pane content
  * (e.g. long agent output) with the mouse wheel instead of arrow keys.
  *
- * This helper is intentionally limited to session-scoped options so OMX
+ * This helper is intentionally limited to session-scoped options so OMB
  * does not overwrite server-global tmux bindings/options owned by users,
  * oh-my-tmux, or other sessions. Returns true if the session mouse option
  * was set successfully, false otherwise.
@@ -1400,7 +1390,7 @@ function acceptClaudeBypassPermissionsPrompt(target: string): void {
 }
 
 function dismissClaudeBypassPermissionsPromptIfPresent(target: string, captured: string): boolean {
-  if ((process.env.OMB_TEAM_AUTO_ACCEPT_BYPASS ?? process.env.OMX_TEAM_AUTO_ACCEPT_BYPASS) === '0') return false;
+  if ((process.env.OMB_TEAM_AUTO_ACCEPT_BYPASS) === '0') return false;
   if (!paneHasClaudeBypassPermissionsPrompt(captured)) return false;
   acceptClaudeBypassPermissionsPrompt(target);
   return true;
@@ -1409,7 +1399,7 @@ function dismissClaudeBypassPermissionsPromptIfPresent(target: string, captured:
 export const paneHasActiveTask = sharedPaneHasActiveTask;
 
 function resolveSendStrategyFromEnv(): 'auto' | 'queue' | 'interrupt' {
-  const raw = String(process.env.OMX_TEAM_SEND_STRATEGY || '')
+  const raw = String(process.env.OMB_TEAM_SEND_STRATEGY || '')
     .trim()
     .toLowerCase();
   if (raw === 'interrupt' || raw === 'queue' || raw === 'auto') {
@@ -1423,14 +1413,14 @@ function resolveWorkerCliFromMapForSend(
   launchArgs: string[] = [],
   env: NodeJS.ProcessEnv = process.env,
 ): TeamWorkerCli | null {
-  const rawMap = String(env[OMB_TEAM_WORKER_CLI_MAP_ENV] ?? env[OMX_TEAM_WORKER_CLI_MAP_ENV] ?? '').trim();
+  const rawMap = String(env[OMB_TEAM_WORKER_CLI_MAP_ENV] ?? env[OMB_TEAM_WORKER_CLI_MAP_ENV] ?? '').trim();
   if (rawMap === '') return null;
   const entries = rawMap.split(',').map((entry) => entry.trim());
   if (entries.length === 0 || entries.some((entry) => entry.length === 0)) return null;
   const selectedRaw = entries.length === 1 ? entries[0] : entries[workerIndex - 1];
   if (!selectedRaw) return null;
   try {
-    const mode = normalizeTeamWorkerCliMode(selectedRaw, OMX_TEAM_WORKER_CLI_MAP_ENV);
+    const mode = normalizeTeamWorkerCliMode(selectedRaw, OMB_TEAM_WORKER_CLI_MAP_ENV);
     return mode === 'auto' ? resolveTeamWorkerCliFromLaunchArgs(launchArgs) : mode;
   } catch {
     return null;
@@ -1440,8 +1430,8 @@ function resolveWorkerCliFromMapForSend(
 /**
  * Worker CLI resolution contract for submit routing:
  * 1) explicit workerCli param from caller
- * 2) per-worker OMX_TEAM_WORKER_CLI_MAP entry (worker index aware)
- * 3) global/default OMX_TEAM_WORKER_CLI behavior
+ * 2) per-worker OMB_TEAM_WORKER_CLI_MAP entry (worker index aware)
+ * 3) global/default OMB_TEAM_WORKER_CLI behavior
  */
 export function resolveWorkerCliForSend(
   workerIndex: number,
@@ -1583,8 +1573,8 @@ export function waitForWorkerReady(
     }
     if (paneHasTrustPrompt(result.stdout)) {
       // Default-on for team workers: they are spawned explicitly by the leader in the same cwd.
-      // Opt-out by setting OMB_TEAM_AUTO_TRUST=0 (compat: OMX_TEAM_AUTO_TRUST=0).
-      if ((process.env.OMB_TEAM_AUTO_TRUST ?? process.env.OMX_TEAM_AUTO_TRUST) !== '0') {
+      // Opt-out by setting OMB_TEAM_AUTO_TRUST=0 (compat: OMB_TEAM_AUTO_TRUST=0).
+      if ((process.env.OMB_TEAM_AUTO_TRUST) !== '0') {
         sendRobustEnter();
         promptDismissed = true;
         return false;
@@ -1625,14 +1615,14 @@ export function waitForWorkerReady(
 /**
  * Detect and auto-dismiss a Codex "Trust this directory?" prompt in a worker pane.
  * Returns true if a trust prompt was found and dismissed, false otherwise.
- * Opt-out: set OMB_TEAM_AUTO_TRUST=0 to disable auto-dismissal (compat: OMX_TEAM_AUTO_TRUST=0).
+ * Opt-out: set OMB_TEAM_AUTO_TRUST=0 to disable auto-dismissal (compat: OMB_TEAM_AUTO_TRUST=0).
  */
 export function dismissTrustPromptIfPresent(
   sessionName: string,
   workerIndex: number,
   workerPaneId?: string,
 ): boolean {
-  if ((process.env.OMB_TEAM_AUTO_TRUST ?? process.env.OMX_TEAM_AUTO_TRUST) === '0') return false;
+  if ((process.env.OMB_TEAM_AUTO_TRUST) === '0') return false;
   if (!isTmuxAvailable()) return false;
   const target = paneTarget(sessionName, workerIndex, workerPaneId);
   const result = runTmux(sharedBuildVisibleCapturePaneArgv(target));
@@ -1705,7 +1695,7 @@ export async function sendToWorker(
   // Allow the input buffer to settle before sending C-m
   await sleep(150);
 
-  const allowAutoInterruptRetry = process.env[OMX_TEAM_AUTO_INTERRUPT_RETRY_ENV] !== '0';
+  const allowAutoInterruptRetry = process.env[OMB_TEAM_AUTO_INTERRUPT_RETRY_ENV] !== '0';
   const submitPlan = buildWorkerSubmitPlan(strategy, resolvedWorkerCli, paneBusy, allowAutoInterruptRetry);
   if (submitPlan.shouldInterrupt) {
     // Explicit interrupt mode: abort current turn first, then submit the new command.
@@ -1737,8 +1727,8 @@ export async function sendToWorker(
   }
 
   // Fail-open by default: Codex may keep the last submitted line visible even after executing it.
-  // If you need strictness for debugging, set OMX_TEAM_STRICT_SUBMIT=1.
-  const strict = process.env.OMX_TEAM_STRICT_SUBMIT === '1';
+  // If you need strictness for debugging, set OMB_TEAM_STRICT_SUBMIT=1.
+  const strict = process.env.OMB_TEAM_STRICT_SUBMIT === '1';
   if (strict) {
     throw new Error('sendToWorker: submit_failed (trigger text still visible after retries)');
   }
@@ -1971,7 +1961,7 @@ export function destroyTeamSession(sessionName: string): void {
   }
 }
 
-// List all tmux sessions matching omx-team-* pattern
+// List all tmux sessions matching omb-team-* pattern
 export function listTeamSessions(): string[] {
   const result = runTmux(['list-sessions', '-F', '#{session_name}']);
   if (!result.ok) return [];
@@ -1987,7 +1977,7 @@ export function listTeamSessions(): string[] {
  * Notify the leader through durable mailbox state only.
  *
  * Team leaders are a coordination endpoint, not a direct tmux control target:
- * workers and runtime paths may message `leader-fixed` via `omx team api`
+ * workers and runtime paths may message `leader-fixed` via `omb team api`
  * / mailbox persistence, but team code must not inject text or control keys
  * into the leader pane. This is the async mailbox-based replacement for
  * `notifyLeaderStatus()`.

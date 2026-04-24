@@ -1,8 +1,5 @@
-import { basename } from 'node:path';
-import { resolveOmxEntryPath } from '../utils/paths.js';
-
 export interface CliBrand {
-  command: 'omx' | 'omb';
+  command: 'omb';
   product: 'CodeBuddy';
   project: 'oh-my-codebuddy';
   acronym: 'OMB';
@@ -15,17 +12,9 @@ const OMB_BRAND: CliBrand = {
   acronym: 'OMB',
 };
 
-const OMX_BRAND: CliBrand = {
-  command: 'omx',
-  product: 'CodeBuddy',
-  project: 'oh-my-codebuddy',
-  acronym: 'OMB',
-};
 
 export function resolveCliBrand(): CliBrand {
-  const entry = resolveOmxEntryPath();
-  const base = basename(entry || '').toLowerCase();
-  return base === 'omx.js' ? OMX_BRAND : OMB_BRAND;
+  return OMB_BRAND;
 }
 
 export function formatCliText(template: string, brand = resolveCliBrand()): string {

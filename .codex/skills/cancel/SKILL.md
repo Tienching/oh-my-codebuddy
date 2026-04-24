@@ -91,7 +91,7 @@ Steps under the hood:
 1. `state_list_active` enumerates `.omb/state/sessions/{sessionId}/…` to find every known session.
 2. `state_clear` runs once per session to drop that session’s files.
 3. A global `state_clear` without `session_id` removes legacy files under `.omb/state/*.json`, `.omb/state/swarm*.db`, and compatibility artifacts (see list).
-4. Team artifacts (`.omb/state/team/*/`, tmux sessions matching `omx-team-*`) are best-effort cleared as part of the legacy fallback.
+4. Team artifacts (`.omb/state/team/*/`, tmux sessions matching `omb-team-*`) are best-effort cleared as part of the legacy fallback.
 
 Every `state_clear` command honors the `session_id` argument, so even force mode still uses the session-aware paths first before deleting legacy files.
 
@@ -179,7 +179,7 @@ After graceful pass:
      a. Send C-c via tmux send-keys
      b. Wait 2 seconds
      c. Kill the tmux window if still alive
-  2. Destroy the tmux session: tmux kill-session -t omx-team-{name}
+  2. Destroy the tmux session: tmux kill-session -t omb-team-{name}
 ```
 
 **Cleanup:**
@@ -205,7 +205,7 @@ Team "{team_name}" cancelled:
 2. For each worker in config.workers, write shutdown inbox and send trigger
 3. Wait briefly for workers to exit (15s timeout)
 4. Force kill remaining workers via tmux
-5. Destroy tmux session: `tmux kill-session -t omx-team-{name}`
+5. Destroy tmux session: `tmux kill-session -t omb-team-{name}`
 6. Strip AGENTS.md overlay
 7. Remove state: `rm -rf .omb/state/team/{name}/`
 8. `state_clear(mode="team")`
@@ -337,7 +337,7 @@ The cancel skill runs as follows:
 2. Use `state_list_active` to enumerate known session ids and `state_get_status` to learn the active mode (`autopilot`, `ralph`, `ultrawork`, etc.) for each session.
 3. When operating in default mode, call `state_clear` with that session_id to remove only the session’s files, then run mode-specific cleanup (autopilot → ralph → …) based on the state tool signals.
 4. In force mode, iterate every active session, call `state_clear` per session, then run a global `state_clear` without `session_id` to drop legacy files (`.omb/state/*.json`, compatibility artifacts) and report success. Swarm remains a shared SQLite/marker mode outside session scoping.
-5. Team artifacts (`.omb/state/team/*/`, tmux sessions matching `omx-team-*`) remain best-effort cleanup items invoked during the legacy/global pass.
+5. Team artifacts (`.omb/state/team/*/`, tmux sessions matching `omb-team-*`) remain best-effort cleanup items invoked during the legacy/global pass.
 
 State tools always honor the `session_id` argument, so even force mode still clears the session-scoped paths before deleting compatibility-only legacy state.
 
@@ -385,7 +385,7 @@ Mode-specific subsections below describe what extra cleanup each handler perform
 
 When cancelling team mode, the cancel skill should:
 
-1. **Kill all team tmux sessions**: `tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^omx-team-'` and kill each
+1. **Kill all team tmux sessions**: `tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^omb-team-'` and kill each
 2. **Remove team state directories**: `rm -rf .omb/state/team/*/`
 3. **Strip AGENTS.md overlay**: Remove content between `<!-- OMB:TEAM:WORKER:START -->` and `<!-- OMB:TEAM:WORKER:END -->`
 
@@ -394,6 +394,6 @@ When cancelling team mode, the cancel skill should:
 When `--force` is used, also clean up:
 ```bash
 rm -rf .omb/state/team/                  # All team state
-# Kill all omx-team-* tmux sessions
-tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^omx-team-' | while read s; do tmux kill-session -t "$s" 2>/dev/null; done
+# Kill all omb-team-* tmux sessions
+tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^omb-team-' | while read s; do tmux kill-session -t "$s" 2>/dev/null; done
 ```

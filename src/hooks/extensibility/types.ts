@@ -76,7 +76,7 @@ export interface HookPluginTmuxSendKeysResult {
 export type HookPluginSendKeysOptions = HookPluginTmuxSendKeysOptions;
 export type HookPluginSendKeysResult = HookPluginTmuxSendKeysResult;
 
-export interface HookPluginOmxSessionState {
+export interface HookPluginOmbSessionState {
   session_id: string;
   started_at?: string;
   cwd?: string;
@@ -87,14 +87,14 @@ export interface HookPluginOmxSessionState {
   [key: string]: unknown;
 }
 
-export interface HookPluginOmxHudState {
+export interface HookPluginOmbHudState {
   last_turn_at?: string;
   turn_count?: number;
   last_agent_output?: string;
   [key: string]: unknown;
 }
 
-export interface HookPluginOmxNotifyFallbackState {
+export interface HookPluginOmbNotifyFallbackState {
   pid?: number;
   parent_pid?: number;
   started_at?: string;
@@ -111,7 +111,7 @@ export interface HookPluginOmxNotifyFallbackState {
   [key: string]: unknown;
 }
 
-export interface HookPluginOmxUpdateCheckState {
+export interface HookPluginOmbUpdateCheckState {
   last_checked_at?: string;
   last_seen_latest?: string;
   [key: string]: unknown;
@@ -119,16 +119,16 @@ export interface HookPluginOmxUpdateCheckState {
 
 export interface HookPluginOmbSdk {
   session: {
-    read: () => Promise<HookPluginOmxSessionState | null>;
+    read: () => Promise<HookPluginOmbSessionState | null>;
   };
   hud: {
-    read: () => Promise<HookPluginOmxHudState | null>;
+    read: () => Promise<HookPluginOmbHudState | null>;
   };
   notifyFallback: {
-    read: () => Promise<HookPluginOmxNotifyFallbackState | null>;
+    read: () => Promise<HookPluginOmbNotifyFallbackState | null>;
   };
   updateCheck: {
-    read: () => Promise<HookPluginOmxUpdateCheckState | null>;
+    read: () => Promise<HookPluginOmbUpdateCheckState | null>;
   };
 }
 

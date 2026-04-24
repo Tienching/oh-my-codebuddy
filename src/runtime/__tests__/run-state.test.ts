@@ -24,7 +24,7 @@ describe('run state sync', () => {
   });
 
   it('writes canonical askuserQuestion lifecycle to run-state.json during sync', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-run-state-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-run-state-'));
     try {
       const synced = await syncRunStateFromModeState(
         {

@@ -24,7 +24,7 @@ Examples:
 - `.omb/state/sessions/<session_id>/ralph-state.json`
 - `.omb/state/team-state.json`
 
-Legacy `.omx/state/...` files remain compatibility read-through surfaces where needed, but new canonical writes should target `.omb/state/...`.
+Legacy `.omb/state/...` files remain compatibility read-through surfaces where needed, but new canonical writes should target `.omb/state/...`.
 
 These files determine whether a workflow mode is active, completed, cancelled, or failed. Those mode phases are not always identical to the user-facing terminal lifecycle vocabulary; see the explicit terminal lifecycle section below for that compatibility boundary.
 

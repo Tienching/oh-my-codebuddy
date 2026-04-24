@@ -22,7 +22,7 @@ import { writeTeamLeaderAttention } from '../../team/state.js';
 const LEADER_PANE_MISSING_NO_INJECTION_REASON = 'leader_pane_missing_no_injection';
 const LEADER_PANE_SHELL_NO_INJECTION_REASON = 'leader_pane_shell_no_injection';
 const LEADER_NOTIFICATION_DEFERRED_TYPE = 'leader_notification_deferred';
-const LEADER_NUDGE_INJECT_MARKER = '[OMX_TMUX_INJECT]';
+const LEADER_NUDGE_INJECT_MARKER = '[OMB_TMUX_INJECT]';
 const ACK_WITHOUT_START_EVIDENCE_REASON = 'ack_without_start_evidence';
 const ACK_LIKE_PATTERNS = [
   /^ack(?::\s*[a-z0-9-]+(?:\s+initialized)?)?[.!]*$/i,
@@ -31,7 +31,7 @@ const ACK_LIKE_PATTERNS = [
 ];
 
 export function resolveLeaderNudgeIntervalMs() {
-  const raw = safeString(process.env.OMX_TEAM_LEADER_NUDGE_MS || '');
+  const raw = safeString(process.env.OMB_TEAM_LEADER_NUDGE_MS || '');
   const parsed = asNumber(raw);
   // Default: 30 seconds for stale-leader follow-up. Guard against spam.
   if (parsed !== null && parsed >= 10_000 && parsed <= 30 * 60_000) return parsed;
@@ -39,7 +39,7 @@ export function resolveLeaderNudgeIntervalMs() {
 }
 
 export function resolveLeaderAllIdleNudgeCooldownMs() {
-  const raw = safeString(process.env.OMX_TEAM_LEADER_ALL_IDLE_COOLDOWN_MS || '');
+  const raw = safeString(process.env.OMB_TEAM_LEADER_ALL_IDLE_COOLDOWN_MS || '');
   const parsed = asNumber(raw);
   // Default: 30 seconds.
   if (parsed !== null && parsed >= 5_000 && parsed <= 10 * 60_000) return parsed;
@@ -47,7 +47,7 @@ export function resolveLeaderAllIdleNudgeCooldownMs() {
 }
 
 export function resolveLeaderStalenessThresholdMs() {
-  const raw = safeString(process.env.OMX_TEAM_LEADER_STALE_MS || '');
+  const raw = safeString(process.env.OMB_TEAM_LEADER_STALE_MS || '');
   const parsed = asNumber(raw);
   // Default: 3 minutes. Guard against unreasonable values.
   if (parsed !== null && parsed >= 10_000 && parsed <= 30 * 60_000) return parsed;
@@ -55,7 +55,7 @@ export function resolveLeaderStalenessThresholdMs() {
 }
 
 export function resolveFallbackProgressStallThresholdMs() {
-  const raw = safeString(process.env.OMX_TEAM_PROGRESS_STALL_MS || '');
+  const raw = safeString(process.env.OMB_TEAM_PROGRESS_STALL_MS || '');
   const parsed = asNumber(raw);
   // Fallback-only threshold used when worker turn-count signals are unavailable.
   // Default: 2 minutes. Guard against unreasonable values.
@@ -64,7 +64,7 @@ export function resolveFallbackProgressStallThresholdMs() {
 }
 
 export function resolveWorkerTurnStallThresholdMs() {
-  const raw = safeString(process.env.OMX_TEAM_WORKER_TURN_STALL_MS || '');
+  const raw = safeString(process.env.OMB_TEAM_WORKER_TURN_STALL_MS || '');
   const parsed = asNumber(raw);
   // Default: 30 seconds. Guard against unreasonable values.
   if (parsed !== null && parsed >= 10_000 && parsed <= 10 * 60_000) return parsed;
@@ -242,7 +242,7 @@ async function syncScopedTeamStateFromPhase(teamStatePath, teamName, phaseSnapsh
 
 async function resolveCurrentSessionId(stateDir) {
   const fromEnv = safeString(
-    process.env.OMX_SESSION_ID
+    process.env.OMB_SESSION_ID
     || process.env.CODEX_SESSION_ID
     || process.env.SESSION_ID
     || '',
@@ -499,7 +499,7 @@ async function getAckWithoutStartEvidence(stateDir, teamName, msg) {
 }
 
 export async function emitTeamNudgeEvent(cwd, teamName, reason, orchestrationIntent, nowIso) {
-  const eventsDir = join(cwd, '.omx', 'state', 'team', teamName, 'events');
+  const eventsDir = join(cwd, '.omb', 'state', 'team', teamName, 'events');
   const eventsPath = join(eventsDir, 'events.ndjson');
   try {
     await mkdir(eventsDir, { recursive: true });
@@ -519,7 +519,7 @@ export async function emitTeamNudgeEvent(cwd, teamName, reason, orchestrationInt
 }
 
 async function emitLeaderNudgeDeferredEvent(cwd, teamName, reason, orchestrationIntent, nowIso, { tmuxSession = '', leaderPaneId = '', paneCurrentCommand = '', sourceType = 'leader_nudge' } = {}) {
-  const eventsDir = join(cwd, '.omx', 'state', 'team', teamName, 'events');
+  const eventsDir = join(cwd, '.omb', 'state', 'team', teamName, 'events');
   const eventsPath = join(eventsDir, 'events.ndjson');
   try {
     await mkdir(eventsDir, { recursive: true });
@@ -558,7 +558,7 @@ export async function maybeNudgeTeamLeader({
   const workerTurnStallThresholdMs = resolveWorkerTurnStallThresholdMs();
   const nowMs = Date.now();
   const nowIso = new Date().toISOString();
-  const omxDir = join(cwd, '.omx');
+  const ombDir = join(cwd, '.omb');
   const nudgeStatePath = join(stateDir, 'team-leader-nudge.json');
 
   let nudgeState = await readJsonIfExists(nudgeStatePath, null);
@@ -610,8 +610,8 @@ export async function maybeNudgeTeamLeader({
     let ownerSessionId = '';
     let workers = [];
     try {
-      const manifestPath = join(omxDir, 'state', 'team', teamName, 'manifest.v2.json');
-      const configPath = join(omxDir, 'state', 'team', teamName, 'config.json');
+      const manifestPath = join(ombDir, 'state', 'team', teamName, 'manifest.v2.json');
+      const configPath = join(ombDir, 'state', 'team', teamName, 'config.json');
       const srcPath = existsSync(manifestPath) ? manifestPath : configPath;
       if (existsSync(srcPath)) {
         const raw = JSON.parse(await readFile(srcPath, 'utf-8'));
@@ -626,7 +626,7 @@ export async function maybeNudgeTeamLeader({
     if (currentSessionId && ownerSessionId && ownerSessionId !== currentSessionId) continue;
     let mailbox = null;
     try {
-      const mailboxPath = join(omxDir, 'state', 'team', teamName, 'mailbox', 'leader-fixed.json');
+      const mailboxPath = join(ombDir, 'state', 'team', teamName, 'mailbox', 'leader-fixed.json');
       mailbox = await readJsonIfExists(mailboxPath, null);
     } catch {
       mailbox = null;

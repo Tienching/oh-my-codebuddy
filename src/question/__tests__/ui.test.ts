@@ -43,7 +43,7 @@ class FakeTtyOutput {
 
 function makeRecord(overrides: Partial<QuestionRecord> = {}): QuestionRecord {
   return {
-    kind: 'omx.question/v1',
+    kind: 'omb.question/v1',
     question_id: 'question-1',
     created_at: '2026-04-19T00:00:00.000Z',
     updated_at: '2026-04-19T00:00:00.000Z',
@@ -63,7 +63,7 @@ function makeRecord(overrides: Partial<QuestionRecord> = {}): QuestionRecord {
 
 describe('question ui injection metadata', () => {
   it('persists return-target metadata for answered questions', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-question-ui-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-question-ui-'));
     try {
       const { recordPath } = await createQuestionRecord(cwd, {
         question: 'Pick one',
@@ -93,7 +93,7 @@ describe('question ui injection metadata', () => {
           selected_values: ['hello can you hear me'],
           other_text: 'hello can you hear me',
         }),
-        '[omx question answered] hello can you hear me',
+        '[omb question answered] hello can you hear me',
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -172,7 +172,7 @@ describe('question ui arrow navigation', () => {
   });
 
   it('writes answered state from arrow-key interaction', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-question-ui-run-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-question-ui-run-'));
     try {
       const { recordPath } = await createQuestionRecord(
         cwd,

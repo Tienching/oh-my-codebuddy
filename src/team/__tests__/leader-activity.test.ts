@@ -163,10 +163,10 @@ describe('leader runtime activity', () => {
   });
 
   it('treats worktree .git file pointers as recent branch activity on Windows', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-leader-activity-worktree-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-leader-activity-worktree-'));
     try {
       const { gitDir, commonDir } = await createWorktreePointerFixture(cwd);
-      const stateDir = join(cwd, '.omx', 'state');
+      const stateDir = join(cwd, '.omb', 'state');
       await mkdir(stateDir, { recursive: true });
       await writeFile(join(stateDir, 'hud-state.json'), JSON.stringify({
         last_turn_at: '2026-03-21T04:00:00.000Z',
@@ -193,7 +193,7 @@ describe('leader runtime activity', () => {
   });
 
   it('uses absolute git-path results for real worktree reflogs', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-leader-activity-worktree-real-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-leader-activity-worktree-real-'));
     const worktreePath = `${cwd}-wt`;
     try {
       execFileSync('git', ['init'], { cwd, stdio: 'ignore' });
@@ -212,7 +212,7 @@ describe('leader runtime activity', () => {
       });
       execFileSync('git', ['worktree', 'add', '-b', 'feature', worktreePath], { cwd, stdio: 'ignore' });
 
-      const stateDir = join(worktreePath, '.omx', 'state');
+      const stateDir = join(worktreePath, '.omb', 'state');
       await mkdir(stateDir, { recursive: true });
       await writeFile(join(stateDir, 'hud-state.json'), JSON.stringify({
         last_turn_at: '2026-03-21T04:00:00.000Z',

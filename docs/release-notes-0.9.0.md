@@ -11,7 +11,7 @@ Contributors: Yeachan-Heo, Bellman, 2233admin, Seunghwan Eom, hoky1227.
 
 ### Spark Initiative: `omb explore` and `omb sparkshell`
 
-OMX now has a stronger native fast path for repository discovery and shell-native inspection.
+OMB now has a stronger native fast path for repository discovery and shell-native inspection.
 
 This release:
 - introduces `omb explore` as the default read-only exploration entrypoint
@@ -31,7 +31,7 @@ Representative changes:
 
 For `0.9.0`, the important distribution contract is:
 
-- users can install OMX normally with `npm install -g oh-my-codebuddy`
+- users can install OMB normally with `npm install -g oh-my-codebuddy`
 - the npm package intentionally does **not** bundle all native binaries directly
 - tagged releases publish cross-platform native archives for:
   - `omb-explore-harness`
@@ -46,7 +46,7 @@ This keeps npm installs simple for users while still shipping verified cross-pla
 
 ### Native release assets are now first-class
 
-`0.9.0` also upgrades OMX's release shape so the new native surfaces are publishable and consumable across platforms.
+`0.9.0` also upgrades OMB's release shape so the new native surfaces are publishable and consumable across platforms.
 
 This release:
 - unifies cross-platform native publishing for `omb-explore-harness` and `omb-sparkshell`
@@ -90,7 +90,7 @@ Alongside the spark-focused work, `dev` also picked up supporting improvements t
 
 ## Upgrade notes
 
-- If you use project-scoped OMX installs, rerun:
+- If you use project-scoped OMB installs, rerun:
 
 ```bash
 omb setup --force --scope project
@@ -110,7 +110,7 @@ omb setup --force --scope project
 - [#784](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/784) — cross-platform native publishing and release-pipeline follow-through
 - [#785](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/785) — team runtime lifecycle and cleanup hardening
 - [#786](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/786) — nested help routing cleanup
-- [#787](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/787) — centralized OMX default model resolution
+- [#787](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/787) — centralized OMB default model resolution
 - [#788](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/788) — HUD branch/config loading hardening
 - [#789](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/789) — distribute generated aspect tasks across workers
 - [#793](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/793) — Windows Codex command shim probing fix

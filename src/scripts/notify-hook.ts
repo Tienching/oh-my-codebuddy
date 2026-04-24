@@ -39,7 +39,7 @@ import { isLeaderStale, resolveLeaderStalenessThresholdMs, maybeNudgeTeamLeader 
 import { drainPendingTeamDispatch } from './notify-hook/team-dispatch.js';
 import { handleTmuxInjection } from './notify-hook/tmux-injection.js';
 import { maybeAutoNudge, resolveNudgePaneTarget, isDeepInterviewStateActive } from './notify-hook/auto-nudge.js';
-import { isManagedOmxSession } from './notify-hook/managed-tmux.js';
+import { isManagedOmbSession } from './notify-hook/managed-tmux.js';
 import { logNotifyHookEvent } from './notify-hook/log.js';
 import { reconcileRalphSessionResume } from './notify-hook/ralph-session-resume.js';
 import { sendPaneInput } from './notify-hook/team-tmux-guard.js';
@@ -163,33 +163,31 @@ function resolveLogsDir(cwd: string, stateDir: string, isTeamWorker: boolean): s
     if (stateDir.endsWith('/.omb/state') || stateDir.includes('/.omb/state/')) {
       return join(cwd, '.omb', 'logs');
     }
-    return join(cwd, '.omx', 'logs');
+    return join(cwd, '.omb', 'logs');
   }
   if (stateDir.endsWith('/.omb/state') || stateDir.includes('/.omb/state/')) {
     return join(cwd, '.omb', 'logs');
   }
-  return join(cwd, '.omx', 'logs');
+  return join(cwd, '.omb', 'logs');
 }
 
-function resolveOmxDir(cwd: string, stateDir: string, isTeamWorker: boolean): string {
+function resolveOmbDir(cwd: string, stateDir: string, isTeamWorker: boolean): string {
   if (!isTeamWorker) {
     if (stateDir.endsWith('/.omb/state') || stateDir.includes('/.omb/state/')) {
       return join(cwd, '.omb');
     }
-    return join(cwd, '.omx');
+    return join(cwd, '.omb');
   }
   if (stateDir.endsWith('/.omb/state') || stateDir.includes('/.omb/state/')) {
     return join(cwd, '.omb');
   }
-  return join(cwd, '.omx');
+  return join(cwd, '.omb');
 }
 
 function resolveLeaderStateDir(cwd: string): string {
-  const omxStateDir = join(cwd, '.omx', 'state');
-  if (existsSync(omxStateDir)) return omxStateDir;
   const ombStateDir = join(cwd, '.omb', 'state');
   if (existsSync(ombStateDir)) return ombStateDir;
-  return omxStateDir;
+  return ombStateDir;
 }
 
 async function main() {
@@ -213,7 +211,7 @@ async function main() {
   const isTurnComplete = isTurnCompletePayload(payload);
 
   // Team worker detection via environment variable
-  const teamWorkerEnv = envValue('OMX_TEAM_WORKER', 'OMB_TEAM_WORKER'); // e.g., "fix-ts/worker-1"
+  const teamWorkerEnv = envValue('OMB_TEAM_WORKER'); // e.g., "fix-ts/worker-1"
   const parsedTeamWorker = parseTeamWorkerEnv(teamWorkerEnv);
   const isTeamWorker = !!parsedTeamWorker;
 
@@ -221,8 +219,8 @@ async function main() {
     ? await resolveTeamStateDirForWorker(cwd, parsedTeamWorker)
     : resolveLeaderStateDir(cwd);
   const logsDir = resolveLogsDir(cwd, stateDir, isTeamWorker);
-  const omxDir = resolveOmxDir(cwd, stateDir, isTeamWorker);
-  let currentOmxSessionId = '';
+  const ombDir = resolveOmbDir(cwd, stateDir, isTeamWorker);
+  let currentOmbSessionId = '';
 
   // Ensure directories exist
   await mkdir(logsDir, { recursive: true }).catch(() => {});
@@ -300,13 +298,13 @@ async function main() {
         payloadSessionId,
         payloadThreadId,
       });
-      currentOmxSessionId = resumeResult.currentOmxSessionId;
+      currentOmbSessionId = resumeResult.currentOmbSessionId;
       if (resumeResult.resumed || resumeResult.updatedCurrentOwner) {
         await logNotifyHookEvent(logsDir, {
           timestamp: new Date().toISOString(),
           type: 'ralph_session_resume',
           reason: resumeResult.reason,
-          current_omx_session_id: resumeResult.currentOmxSessionId || null,
+          current_omb_session_id: resumeResult.currentOmbSessionId || null,
           payload_codex_session_id: payloadSessionId || null,
           source_path: resumeResult.sourcePath || null,
           target_path: resumeResult.targetPath || null,
@@ -386,7 +384,7 @@ async function main() {
 
   // 3. Track subagent metrics (lead session only)
   if (!isTeamWorker) {
-    const metricsPath = join(omxDir, 'metrics.json');
+    const metricsPath = join(ombDir, 'metrics.json');
     try {
       let metrics = {
         total_turns: 0,
@@ -457,7 +455,7 @@ async function main() {
     }
   }
 
-  // 4. Write HUD state summary for `omb hud` (legacy omx alias still works; lead session only)
+  // 4. Write HUD state summary for `omb hud` (legacy omb alias still works; lead session only)
   if (!isTeamWorker) {
     const hudStatePath = join(stateDir, 'hud-state.json');
     try {
@@ -692,7 +690,7 @@ async function main() {
         payload,
         stateDir,
         logsDir,
-        sessionId: currentOmxSessionId || payloadSessionId,
+        sessionId: currentOmbSessionId || payloadSessionId,
         turnId: safeString(payload['turn-id'] || payload.turn_id || ''),
       });
     } catch (err) {
@@ -711,13 +709,13 @@ async function main() {
   }
 
   // 10. Code simplifier: delegate recently modified files for simplification.
-  //     Opt-in via ~/.omx/config.json: { "codeSimplifier": { "enabled": true } }
+  //     Opt-in via ~/.omb/config.json: { "codeSimplifier": { "enabled": true } }
   if (!isTeamWorker) {
     try {
       const { processCodeSimplifier } = await import('../hooks/code-simplifier/index.js');
       const csResult = processCodeSimplifier(cwd, stateDir);
       if (csResult.triggered) {
-        const managedSession = await isManagedOmxSession(cwd, payload, { allowTeamWorker: false });
+        const managedSession = await isManagedOmbSession(cwd, payload, { allowTeamWorker: false });
         if (!managedSession) {
           const { logTmuxHookEvent } = await import('./notify-hook/log.js');
           await logTmuxHookEvent(logsDir, {

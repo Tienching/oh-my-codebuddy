@@ -335,7 +335,7 @@ export async function scaleUp(
         ? workerTaskRoles[0]
         : agentType;
       if (uniqueTaskRoles.size > 1) {
-        console.log(`[omx:scaling] ${workerName}: mixed task roles [${[...uniqueTaskRoles].join(', ')}], falling back to ${agentType}`);
+        console.log(`[omb:scaling] ${workerName}: mixed task roles [${[...uniqueTaskRoles].join(', ')}], falling back to ${agentType}`);
       }
 
       const worktreeMode = resolveScaleUpWorktreeMode(config);
@@ -456,7 +456,7 @@ export async function scaleUp(
       if (!skipReadyWait) {
         const ready = waitForWorkerReady(sessionName, workerIndex, readyTimeoutMs, paneId);
         if (!ready) {
-          console.log(`[omx:scaling] Warning: worker ${workerName} did not become ready within timeout`);
+          console.log(`[omb:scaling] Warning: worker ${workerName} did not become ready within timeout`);
         }
       }
 
@@ -817,7 +817,7 @@ function resolveWorkerLaunchArgsForScaling(
   const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEBUDDY_HOME ?? env.CODEX_HOME);
 
   return resolveTeamWorkerLaunchArgs({
-    existingRaw: env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMX_TEAM_WORKER_LAUNCH_ARGS,
+    existingRaw: env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMB_TEAM_WORKER_LAUNCH_ARGS,
     inheritedArgs,
     fallbackModel,
     preferredReasoning,

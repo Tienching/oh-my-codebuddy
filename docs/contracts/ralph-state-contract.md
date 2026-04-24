@@ -12,7 +12,7 @@ Ralph runtime state is stored at `.omb/state/{scope}/ralph-state.json` and MUST 
 - `completed_at?: ISO8601 string`
 - Optional linkage fields: `linked_ultrawork`, `linked_ecomode`, `linked_mode`
 - Optional ownership fields:
-  - `owner_omx_session_id`
+  - `owner_omb_session_id`
   - `owner_codex_session_id`
   - `owner_codex_thread_id` (legacy compatibility only)
 - Optional tmux anchor fields:

@@ -18,7 +18,7 @@ import {
   writeTeamLeaderAttention,
   writeTeamPhase,
 } from "../team/state.js";
-import { ombStateDir, omxNotepadPath, omxProjectMemoryPath, omxStateDir } from "../utils/paths.js";
+import { ombStateDir, ombNotepadPath, ombProjectMemoryPath } from "../utils/paths.js";
 import {
   detectPrimaryKeyword,
   recordSkillActivation,
@@ -60,7 +60,7 @@ interface NativeHookDispatchOptions {
 
 export interface NativeHookDispatchResult {
   hookEventName: CodexHookEventName | null;
-  omxEventName: string | null;
+  ombEventName: string | null;
   skillState: SkillActiveState | null;
   outputJson: Record<string, unknown> | null;
 }
@@ -80,7 +80,7 @@ function safeObject(value: unknown): Record<string, unknown> {
 }
 
 function formatInitializedStatePath(path: string): string {
-  return safeString(path).replace(/^\.omb\/state\b/, ".omx/state");
+  return safeString(path).replace(/^\.omb\/state\b/, ".omb/state");
 }
 
 function safePositiveInteger(value: unknown): number | null {
@@ -111,7 +111,7 @@ function readHookEventName(payload: CodexHookPayload): CodexHookEventName | null
   return null;
 }
 
-export function mapCodexHookEventToOmxEvent(
+export function mapCodexHookEventToOmbEvent(
   hookEventName: CodexHookEventName | null,
 ): string | null {
   switch (hookEventName) {
@@ -197,10 +197,10 @@ async function readActiveAutoresearchState(
 
 async function readActiveRalphState(stateDir: string): Promise<Record<string, unknown> | null> {
   const sessionInfo = await readJsonIfExists(join(stateDir, "session.json"));
-  const currentOmxSessionId = safeString(sessionInfo?.session_id).trim();
-  if (currentOmxSessionId) {
+  const currentOmbSessionId = safeString(sessionInfo?.session_id).trim();
+  if (currentOmbSessionId) {
     const sessionScoped = await readJsonIfExists(
-      join(stateDir, "sessions", currentOmxSessionId, "ralph-state.json"),
+      join(stateDir, "sessions", currentOmbSessionId, "ralph-state.json"),
     );
     if (
       sessionScoped?.active === true
@@ -217,7 +217,7 @@ async function readActiveRalphState(stateDir: string): Promise<Record<string, un
     return direct;
   }
 
-  if (currentOmxSessionId) return null;
+  if (currentOmbSessionId) return null;
 
   const sessionsRoot = join(stateDir, "sessions");
   if (!existsSync(sessionsRoot)) return null;
@@ -336,7 +336,7 @@ function resolveSessionOwnerPid(payload: CodexHookPayload): number {
   return process.pid;
 }
 
-async function ensureOmxGitignoreEntry(cwd: string): Promise<{ changed: boolean; gitignorePath?: string }> {
+async function ensureOmbGitignoreEntry(cwd: string): Promise<{ changed: boolean; gitignorePath?: string }> {
   let repoRoot = "";
   try {
     repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
@@ -355,11 +355,11 @@ async function ensureOmxGitignoreEntry(cwd: string): Promise<{ changed: boolean;
     ? await readFile(gitignorePath, "utf-8")
     : "";
   const lines = existing.split(/\r?\n/).map((line) => line.trim());
-  if (lines.includes(".omx/")) {
+  if (lines.includes(".omb/")) {
     return { changed: false, gitignorePath };
   }
 
-  const next = `${existing}${existing.endsWith("\n") || existing.length === 0 ? "" : "\n"}.omx/\n`;
+  const next = `${existing}${existing.endsWith("\n") || existing.length === 0 ? "" : "\n"}.omb/\n`;
   await writeFile(gitignorePath, next);
   return { changed: true, gitignorePath };
 }
@@ -372,9 +372,9 @@ async function buildSessionStartContext(
     "OMB native SessionStart detected. Load workspace conventions from AGENTS.md, restore relevant .omb runtime/project memory context, and continue from existing mode state before making changes.",
   ];
 
-  const gitignoreResult = await ensureOmxGitignoreEntry(cwd);
+  const gitignoreResult = await ensureOmbGitignoreEntry(cwd);
   if (gitignoreResult.changed) {
-    sections.push(`Added .omx/ to ${gitignoreResult.gitignorePath} to keep local OMB state out of source control.`);
+    sections.push(`Added .omb/ to ${gitignoreResult.gitignorePath} to keep local OMB state out of source control.`);
   }
 
   const modeSummaries: string[] = [];
@@ -398,7 +398,7 @@ async function buildSessionStartContext(
     sections.push(["[Active OMB modes]", ...modeSummaries].join("\n"));
   }
 
-  const projectMemory = await readJsonIfExists(omxProjectMemoryPath(cwd));
+  const projectMemory = await readJsonIfExists(ombProjectMemoryPath(cwd));
   if (projectMemory) {
     const directives = Array.isArray(projectMemory.directives) ? projectMemory.directives : [];
     const notes = Array.isArray(projectMemory.notes) ? projectMemory.notes : [];
@@ -424,9 +424,9 @@ async function buildSessionStartContext(
     }
   }
 
-  if (existsSync(omxNotepadPath(cwd))) {
+  if (existsSync(ombNotepadPath(cwd))) {
     try {
-      const notepad = await readFile(omxNotepadPath(cwd), "utf-8");
+      const notepad = await readFile(ombNotepadPath(cwd), "utf-8");
       const compact = notepad.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 3).join(" ");
       if (compact) {
         sections.push(`[Notepad]\n- ${compact.slice(0, 220)}`);
@@ -455,12 +455,12 @@ function buildAdditionalContextMessage(
 
   if (match.skill === "team") {
     const initializedStateMessage = skillState?.initialized_mode && skillState.initialized_state_path
-      ? `skill: ${skillState.initialized_mode} activated and initial state initialized at ${formatInitializedStatePath(skillState.initialized_state_path)}; write subsequent updates via omx_state MCP.`
+      ? `skill: ${skillState.initialized_mode} activated and initial state initialized at ${formatInitializedStatePath(skillState.initialized_state_path)}; write subsequent updates via omb_state MCP.`
       : null;
     return [
       `OMB native UserPromptSubmit detected workflow keyword "${match.keyword}" -> ${match.skill}.`,
       initializedStateMessage,
-      "Use the durable OMB team runtime via `omb team ...` for coordinated execution; legacy `omx team` still works, but do not replace it with in-process fanout.",
+      "Use the durable OMB team runtime via `omb team ...` for coordinated execution; legacy `omb team` still works, but do not replace it with in-process fanout.",
       "If you need help, run `omb team --help`.",
       "Follow AGENTS.md routing and preserve ralplan/ralph execution gates.",
     ].filter(Boolean).join(" ");
@@ -469,7 +469,7 @@ function buildAdditionalContextMessage(
   if (skillState?.initialized_mode && skillState.initialized_state_path) {
     return [
       `OMB native UserPromptSubmit detected workflow keyword "${match.keyword}" -> ${match.skill}.`,
-      `skill: ${skillState.initialized_mode} activated and initial state initialized at ${formatInitializedStatePath(skillState.initialized_state_path)}; write subsequent updates via omx_state MCP.`,
+      `skill: ${skillState.initialized_mode} activated and initial state initialized at ${formatInitializedStatePath(skillState.initialized_state_path)}; write subsequent updates via omb_state MCP.`,
       "Follow AGENTS.md routing and preserve ralplan/ralph execution gates.",
     ].join(" ");
   }
@@ -496,15 +496,14 @@ async function resolveTeamStateDirForWorkerContext(
   cwd: string,
   workerContext: { teamName: string; workerName: string },
 ): Promise<string> {
-  const explicitStateRoot = safeString(process.env.OMX_TEAM_STATE_ROOT || process.env.OMB_TEAM_STATE_ROOT).trim();
+  const explicitStateRoot = safeString(process.env.OMB_TEAM_STATE_ROOT).trim();
   if (explicitStateRoot) {
     return resolve(cwd, explicitStateRoot);
   }
 
-  const leaderCwd = safeString(process.env.OMX_TEAM_LEADER_CWD || process.env.OMB_TEAM_LEADER_CWD).trim();
+  const leaderCwd = safeString(process.env.OMB_TEAM_LEADER_CWD).trim();
   const candidateStateDirs = [
-    ...(leaderCwd ? [omxStateDir(resolve(leaderCwd)), ombStateDir(resolve(leaderCwd))] : []),
-    omxStateDir(cwd),
+    ...(leaderCwd ? [ombStateDir(resolve(leaderCwd)), ombStateDir(resolve(leaderCwd))] : []),
     ombStateDir(cwd),
   ];
 
@@ -526,13 +525,13 @@ async function resolveTeamStateDirForWorkerContext(
     return candidateStateDir;
   }
 
-  return omxStateDir(cwd);
+  return ombStateDir(cwd);
 }
 
 async function buildTeamWorkerStopOutput(
   cwd: string,
 ): Promise<Record<string, unknown> | null> {
-  const workerContext = parseTeamWorkerEnv(safeString(process.env.OMX_TEAM_WORKER || process.env.OMB_TEAM_WORKER));
+  const workerContext = parseTeamWorkerEnv(safeString(process.env.OMB_TEAM_WORKER));
   if (!workerContext) return null;
 
   const stateDir = await resolveTeamStateDirForWorkerContext(cwd, workerContext);
@@ -571,7 +570,7 @@ async function buildTeamWorkerStopOutput(
 }
 
 function hasTeamWorkerContext(): boolean {
-  return parseTeamWorkerEnv(safeString(process.env.OMX_TEAM_WORKER || process.env.OMB_TEAM_WORKER)) !== null;
+  return parseTeamWorkerEnv(safeString(process.env.OMB_TEAM_WORKER)) !== null;
 }
 
 function isStopExempt(payload: CodexHookPayload): boolean {
@@ -681,7 +680,7 @@ async function readStopSessionPinnedState(
   cwd: string,
   sessionId: string,
 ): Promise<Record<string, unknown> | null> {
-  const stateDir = omxStateDir(cwd);
+  const stateDir = ombStateDir(cwd);
   const statePath = sessionId
     ? join(stateDir, "sessions", sessionId, fileName)
     : join(stateDir, fileName);
@@ -1120,10 +1119,10 @@ export async function dispatchCodexNativeHook(
 ): Promise<NativeHookDispatchResult> {
   const hookEventName = readHookEventName(payload);
   const cwd = options.cwd ?? (safeString(payload.cwd).trim() || process.cwd());
-  const stateDir = omxStateDir(cwd);
+  const stateDir = ombStateDir(cwd);
   await mkdir(stateDir, { recursive: true });
 
-  const omxEventName = mapCodexHookEventToOmxEvent(hookEventName);
+  const ombEventName = mapCodexHookEventToOmbEvent(hookEventName);
   let skillState: SkillActiveState | null = null;
   let triageAdditionalContext: string | null = null;
 
@@ -1175,9 +1174,9 @@ export async function dispatchCodexNativeHook(
     await reconcileHudForPromptSubmit(cwd).catch(() => {});
   }
 
-  if (omxEventName) {
+  if (ombEventName) {
     const event: HookEventEnvelope = buildNativeHookEvent(
-      omxEventName,
+      ombEventName,
       buildBaseContext(cwd, payload, hookEventName!),
       {
         session_id: sessionId || undefined,
@@ -1215,7 +1214,7 @@ export async function dispatchCodexNativeHook(
 
   return {
     hookEventName,
-    omxEventName,
+    ombEventName,
     skillState,
     outputJson,
   };

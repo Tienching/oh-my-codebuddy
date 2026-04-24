@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
@@ -51,7 +51,7 @@ describe('omb agents', () => {
         'name = "reviewer"\ndescription = "User reviewer"\ndeveloper_instructions = """review"""\n',
       );
 
-      const result = runOmx(wd, ['agents', 'list'], {
+      const result = runOmb(wd, ['agents', 'list'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
       });
@@ -72,7 +72,7 @@ describe('omb agents', () => {
     try {
       await mkdir(home, { recursive: true });
 
-      const result = runOmx(wd, ['agents', 'add', 'my-helper', '--scope', 'project'], {
+      const result = runOmb(wd, ['agents', 'add', 'my-helper', '--scope', 'project'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
       });
@@ -113,7 +113,7 @@ describe('omb agents', () => {
       );
       await chmod(editorScript, 0o755);
 
-      const editResult = runOmx(wd, ['agents', 'edit', 'editor-test', '--scope', 'project'], {
+      const editResult = runOmb(wd, ['agents', 'edit', 'editor-test', '--scope', 'project'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
         EDITOR: editorScript,
@@ -123,7 +123,7 @@ describe('omb agents', () => {
       assert.equal(editResult.status, 0, editResult.stderr || editResult.stdout);
       assert.match(await readFile(agentPath, 'utf-8'), /^model = "gpt-5\.4"$/m);
 
-      const removeResult = runOmx(wd, ['agents', 'remove', 'editor-test', '--scope', 'project', '--force'], {
+      const removeResult = runOmb(wd, ['agents', 'remove', 'editor-test', '--scope', 'project', '--force'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
       });
@@ -149,7 +149,7 @@ describe('omb agents', () => {
         'name = "non-interactive"\ndescription = "Remove me"\ndeveloper_instructions = """noop"""\n',
       );
 
-      const result = runOmx(wd, ['agents', 'remove', 'non-interactive', '--scope', 'project'], {
+      const result = runOmb(wd, ['agents', 'remove', 'non-interactive', '--scope', 'project'], {
         HOME: home,
         CODEBUDDY_HOME: join(home, '.codebuddy'),
       });

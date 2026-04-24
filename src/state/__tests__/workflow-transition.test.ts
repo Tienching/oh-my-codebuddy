@@ -42,7 +42,7 @@ describe('workflow transition rules', () => {
     assert.match(error, /Current state is unchanged\./);
     assert.match(error, /Clear incompatible workflow state yourself via/);
     assert.match(error, /`omb state clear --mode <mode>`/);
-    assert.match(error, /legacy alias `omx state clear --mode <mode>` also works/);
+    assert.match(error, /legacy alias `omb state clear --mode <mode>` also works/);
     assert.match(error, /`state_\*` MCP tools/);
   });
 

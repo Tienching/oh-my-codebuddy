@@ -43,7 +43,7 @@ export function classifyCliError(error: unknown): ClassifiedError {
     if (
       message.includes("executable not found") ||
       message.includes("tmux was not found") ||
-      message.includes("Unable to resolve OMX launcher")
+      message.includes("Unable to resolve OMB launcher")
     ) {
       return { kind: "environment", message, exitCode: 1 };
     }

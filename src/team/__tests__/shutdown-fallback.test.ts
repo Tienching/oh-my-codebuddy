@@ -92,8 +92,8 @@ process.on('SIGTERM', () => process.exit(0));
       assert.doesNotMatch(report, /synthetic_commit: none/);
       assert.match(report, /worker-note\.txt/);
 
-      const commitHygieneJsonPath = join(repo, '.omx', 'reports', 'team-commit-hygiene', 'team-shutdown-fallback-report.context.json');
-      const commitHygieneMarkdownPath = join(repo, '.omx', 'reports', 'team-commit-hygiene', 'team-shutdown-fallback-report.md');
+      const commitHygieneJsonPath = join(repo, '.omb', 'reports', 'team-commit-hygiene', 'team-shutdown-fallback-report.context.json');
+      const commitHygieneMarkdownPath = join(repo, '.omb', 'reports', 'team-commit-hygiene', 'team-shutdown-fallback-report.md');
       assert.equal(existsSync(commitHygieneJsonPath), true, 'shutdown should preserve a structured commit hygiene context artifact');
       assert.equal(existsSync(commitHygieneMarkdownPath), true, 'shutdown should preserve a human-readable commit hygiene guide');
 

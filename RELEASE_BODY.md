@@ -1,4 +1,4 @@
-# oh-my-codex v0.12.4
+# oh-my-codebuddy v0.12.4
 
 **MCP-CLI parity, HUD recovery hardening, native-hook and team-runtime stability fixes**
 
@@ -6,7 +6,7 @@
 
 ## Highlights
 
-- **MCP-CLI parity** — `omx state`, `omx notepad`, `omx project-memory`, `omx trace`, and `omx code-intel` expose MCP server tools through the CLI without transport overhead.
+- **MCP-CLI parity** — `omb state`, `omb notepad`, `omb project-memory`, `omb trace`, and `omb code-intel` expose MCP server tools through the CLI without transport overhead.
 - **HUD self-healing** — new reconciliation module and shared tmux helpers keep HUD panes alive across session boundaries.
 - **Native-hook hardening** — stale Ralph state, unknown `$tokens`, stale stop-hook blockers, and MCP transport death are all resolved.
 - **State operations module** — clean read/write/clear/list/status API backing both MCP and CLI.
@@ -14,13 +14,13 @@
 ## What's Changed
 
 ### Added
-- MCP-CLI parity surface: `omx state`, `omx notepad`, `omx project-memory`, `omx trace`, `omx code-intel`
+- MCP-CLI parity surface: `omb state`, `omb notepad`, `omb project-memory`, `omb trace`, `omb code-intel`
 - HUD reconciliation module and shared tmux helpers
 - State operations module (`src/state/operations.ts`)
 - Path traversal safety utilities
 
 ### Fixes
-- HUD recovery via OMX CLI entry during prompt-submit recovery (PRs #1413, #1414)
+- HUD recovery via OMB CLI entry during prompt-submit recovery (PRs #1413, #1414)
 - User-owned Codex hooks preserved during setup refresh
 - HUD prompt-submit layout churn stopped
 - Duplicate native-hook continuations from stale Ralph state and unknown `$tokens`
@@ -33,7 +33,7 @@
 - CI hang prevention and reduced teardown dead-time (PR #1405)
 
 ### Changed
-- State CLI routed consistently through `omx state`
+- State CLI routed consistently through `omb state`
 - Tmux session name truncation preserves session token
 - Release metadata synced to `0.12.4`
 
@@ -55,4 +55,4 @@
 - [@HaD0Yun](https://github.com/HaD0Yun)
 - [@dyl-joseph](https://github.com/dyl-joseph)
 
-**Full Changelog**: [`v0.12.3...v0.12.4`](https://github.com/Yeachan-Heo/oh-my-codex/compare/v0.12.3...v0.12.4)
+**Full Changelog**: [`v0.12.3...v0.12.4`](https://github.com/Yeachan-Heo/oh-my-codebuddy/compare/v0.12.3...v0.12.4)

@@ -44,6 +44,9 @@ import {
   CODEBUDDY_LEGACY_BYPASS_FLAG,
   HIGH_REASONING_FLAG,
   XHIGH_REASONING_FLAG,
+  DEPRECATED_HIGH_REASONING_MSG,
+  DEPRECATED_XHIGH_REASONING_MSG,
+  EFFORT_FLAG,
   SPARK_FLAG,
   MADMAX_SPARK_FLAG,
   CONFIG_FLAG,
@@ -55,7 +58,7 @@ import { listModeStateFilesWithScopePreference } from "../mcp/state-paths.js";
 import { expandCommandPrompt } from "../commands/index.js";
 import { isNativeWindows } from "../team/tmux-session.js";
 import { getPackageRoot } from "../utils/package.js";
-import { codexConfigPath, rememberOmxLaunchContext } from "../utils/paths.js";
+import { codexConfigPath, rememberOmbLaunchContext } from "../utils/paths.js";
 import { formatCliText } from "./brand.js";
 
 // ── Re-exports from runtime modules ────────────────────────────────────────
@@ -130,15 +133,15 @@ import { commandOwnsLocalHelp } from "./command-registry.js";
 
 // ── Module-level initialization ────────────────────────────────────────────
 
-rememberOmxLaunchContext();
+rememberOmbLaunchContext();
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const REASONING_KEY = "model_reasoning_effort";
-const TEAM_WORKER_LAUNCH_ARGS_ENV = "OMX_TEAM_WORKER_LAUNCH_ARGS";
-const TEAM_INHERIT_LEADER_FLAGS_ENV = "OMX_TEAM_INHERIT_LEADER_FLAGS";
-const OMX_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMX_RALPH_APPEND_INSTRUCTIONS_FILE";
-const OMX_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV = "OMX_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE";
+const TEAM_WORKER_LAUNCH_ARGS_ENV = "OMB_TEAM_WORKER_LAUNCH_ARGS";
+const TEAM_INHERIT_LEADER_FLAGS_ENV = "OMB_TEAM_INHERIT_LEADER_FLAGS";
+const OMB_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_RALPH_APPEND_INSTRUCTIONS_FILE";
+const OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE";
 const REASONING_MODES = ["low", "medium", "high", "xhigh"] as const;
 type ReasoningMode = (typeof REASONING_MODES)[number];
 const REASONING_MODE_SET = new Set<string>(REASONING_MODES);
@@ -240,10 +243,10 @@ Usage:
 
 Options:
   --yolo        Launch {product} in yolo mode (shorthand for: {cmd} launch --yolo)
-  --high        Launch {product} with high reasoning effort
-                (shorthand for: --effort high)
-  --xhigh       Launch {product} with xhigh reasoning effort
-                (shorthand for: --effort xhigh)
+  --model <id>  Pass through to {product} to choose the exact model directly
+  --high        [DEPRECATED] Use --effort high instead
+  --xhigh       [DEPRECATED] Use --effort xhigh instead
+  --effort <l>  Set reasoning effort: low | medium | high | xhigh
   --madmax      DANGEROUS: bypass {product} approvals and sandbox
                 (alias for --dangerously-skip-permissions)
   --spark       Use the {product} spark model (~1.3x faster) for team workers only

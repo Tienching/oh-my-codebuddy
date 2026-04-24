@@ -37,7 +37,7 @@ describe('magic-keywords', () => {
 
   it('reads the experimental router flag from env aliases', () => {
     assert.equal(isExperimentalMagicKeywordRouterEnabled({ OMB_MAGIC_KEYWORD_ROUTER: '1' } as NodeJS.ProcessEnv), true);
-    assert.equal(isExperimentalMagicKeywordRouterEnabled({ OMX_MAGIC_KEYWORD_ROUTER: 'true' } as NodeJS.ProcessEnv), true);
+    assert.equal(isExperimentalMagicKeywordRouterEnabled({ OMB_MAGIC_KEYWORD_ROUTER: 'true' } as NodeJS.ProcessEnv), true);
     assert.equal(isExperimentalMagicKeywordRouterEnabled({} as NodeJS.ProcessEnv), false);
   });
 });

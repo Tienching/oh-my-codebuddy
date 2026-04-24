@@ -9,15 +9,15 @@ import { HUD_TMUX_HEIGHT_LINES } from '../../hud/constants.js';
 
 const CLI_SPAWN_TIMEOUT_MS = 15_000;
 
-function runOmx(
+function runOmb(
   cwd: string,
   argv: string[],
   envOverrides: Record<string, string> = {},
 ): { status: number | null; stdout: string; stderr: string; error: string } {
   const testDir = dirname(fileURLToPath(import.meta.url));
   const repoRoot = join(testDir, '..', '..', '..');
-  const omxBin = join(repoRoot, 'dist', 'cli', 'omx.js');
-  const result = spawnSync(process.execPath, [omxBin, ...argv], {
+  const ombBin = join(repoRoot, 'dist', 'cli', 'omb.js');
+  const result = spawnSync(process.execPath, [ombBin, ...argv], {
     cwd,
     encoding: 'utf-8',
     timeout: CLI_SPAWN_TIMEOUT_MS,
@@ -39,9 +39,9 @@ function shouldSkipForSpawnPermissions(err: string): boolean {
   return typeof err === 'string' && /(EPERM|EACCES)/i.test(err);
 }
 
-describe('omx launch fallback when tmux is unavailable', () => {
+describe('omb launch fallback when tmux is unavailable', () => {
   it('launches codebuddy directly without tmux ENOENT noise', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-launch-fallback-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-launch-fallback-'));
     try {
       const home = join(wd, 'home');
       const fakeBin = join(wd, 'bin');
@@ -58,15 +58,15 @@ describe('omx launch fallback when tmux is unavailable', () => {
       await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
       await chmod(fakePsPath, 0o755);
 
-      const result = runOmx(
+      const result = runOmb(
         wd,
         ['--xhigh', '--madmax'],
         {
           HOME: home,
           PATH: `${fakeBin}:/usr/bin:/bin`,
-          OMX_AUTO_UPDATE: '0',
-          OMX_NOTIFY_FALLBACK: '0',
-          OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMB_AUTO_UPDATE: '0',
+          OMB_NOTIFY_FALLBACK: '0',
+          OMB_HOOK_DERIVED_SIGNALS: '0',
         },
       );
 
@@ -82,9 +82,9 @@ describe('omx launch fallback when tmux is unavailable', () => {
   });
 });
 
-describe('omx launcher when tmux is available', () => {
+describe('omb launcher when tmux is available', () => {
   it('launches --madmax through explicitly requested detached tmux so HUD bootstrap can run', async () => {
-    const wd = await mkdtemp(join(tmpdir(), 'omx-launch-tmux-'));
+    const wd = await mkdtemp(join(tmpdir(), 'omb-launch-tmux-'));
     try {
       const home = join(wd, 'home');
       const fakeBin = join(wd, 'bin');
@@ -140,15 +140,15 @@ exit 0
       );
       await chmod(fakeTmuxPath, 0o755);
 
-      const result = runOmx(
+      const result = runOmb(
         wd,
         ['--madmax', '--tmux'],
         {
           HOME: home,
           PATH: `${fakeBin}:/usr/bin:/bin`,
-          OMX_AUTO_UPDATE: '0',
-          OMX_NOTIFY_FALLBACK: '0',
-          OMX_HOOK_DERIVED_SIGNALS: '0',
+          OMB_AUTO_UPDATE: '0',
+          OMB_NOTIFY_FALLBACK: '0',
+          OMB_HOOK_DERIVED_SIGNALS: '0',
           TMUX: '',
           TMUX_PANE: '',
         },

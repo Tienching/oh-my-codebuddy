@@ -1,7 +1,6 @@
 import {
   isExperimentalMagicKeywordRouterEnabled,
   OMB_MAGIC_KEYWORD_ROUTER_ENV,
-  OMX_MAGIC_KEYWORD_ROUTER_ENV,
 } from './magic-keywords.js';
 import type { TaskDecompositionPlan } from './task-decomposer/types.js';
 
@@ -30,7 +29,6 @@ const DELEGATION_DISABLE_PATTERNS = [
 
 export {
   OMB_MAGIC_KEYWORD_ROUTER_ENV,
-  OMX_MAGIC_KEYWORD_ROUTER_ENV,
   isExperimentalMagicKeywordRouterEnabled,
 };
 
@@ -52,7 +50,7 @@ export function evaluateDelegationEnforcement(
     return {
       allowed: false,
       code: 'feature_flag_disabled',
-      reason: `delegation routing is disabled until ${OMB_MAGIC_KEYWORD_ROUTER_ENV}=1 (or ${OMX_MAGIC_KEYWORD_ROUTER_ENV}=1)`,
+      reason: `delegation routing is disabled until ${OMB_MAGIC_KEYWORD_ROUTER_ENV}=1 (or ${OMB_MAGIC_KEYWORD_ROUTER_ENV}=1)`,
     };
   }
 

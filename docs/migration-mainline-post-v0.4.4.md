@@ -31,7 +31,7 @@ You are affected if you:
 ### Removed skills
 
 - `deepinit`
-- `learn-about-omx`
+- `learn-about-omb`
 - `learner`
 - `pipeline`
 - `project-session-manager`
@@ -53,7 +53,7 @@ Use these replacements in docs, scripts, and personal shortcuts.
 | `$psm` / `$project-session-manager` | No in-repo replacement | Remove from automation or maintain out-of-tree tooling. |
 | `$release` | No in-repo replacement | Use your project release process directly. |
 | `$deepinit` | `omb agents-init [path]` | Lightweight CLI successor for AGENTS.md bootstrap only; immediate child directories only, unmanaged files preserved unless `--force`. |
-| `$learn-about-omx` / `$learner` / `$writer-memory` | No in-repo replacement | Remove stale references from workflows/docs. |
+| `$learn-about-omb` / `$learner` / `$writer-memory` | No in-repo replacement | Remove stale references from workflows/docs. |
 
 ## Verification checklist after upgrade
 
@@ -61,7 +61,7 @@ Run this checklist after pulling latest mainline:
 
 - [ ] Confirm removed references are gone from local notes/scripts:
   ```bash
-  rg -n "deep-executor|scientist|pipeline|project-session-manager|\bpsm\b|ultrapilot|learn-about-omx|writer-memory|learner|deepinit|\brelease\b" README.md docs scripts .omb -S
+  rg -n "deep-executor|scientist|pipeline|project-session-manager|\bpsm\b|ultrapilot|learn-about-omb|writer-memory|learner|deepinit|\brelease\b" README.md docs scripts .omb -S
   ```
 - [ ] Confirm current prompt catalog no longer contains removed prompts:
   ```bash

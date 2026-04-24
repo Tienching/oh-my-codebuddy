@@ -19,7 +19,6 @@ import type { UnifiedMcpRegistryServer } from "./mcp-registry.js";
 import { OMB_EXPLORE_CMD_ENV } from "../hooks/explore-routing.js";
 import {
   OMB_EXPERIMENTAL_COMMAND_TEMPLATES,
-  OMX_EXPERIMENTAL_COMMAND_TEMPLATES,
 } from "../commands/index.js";
 
 interface MergeOptions {
@@ -35,11 +34,11 @@ function escapeTomlString(value: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Top-level OMX keys (must live before any [table] header)
+// Top-level OMB keys (must live before any [table] header)
 // ---------------------------------------------------------------------------
 
 /** Keys we own at the TOML root level. Used for upsert + strip. */
-const OMX_TOP_LEVEL_KEYS = [
+const OMB_TOP_LEVEL_KEYS = [
   "notify",
   "model_reasoning_effort",
   "developer_instructions",
@@ -49,20 +48,19 @@ const DEFAULT_SETUP_MODEL = DEFAULT_FRONTIER_MODEL;
 const DEFAULT_SETUP_MODEL_CONTEXT_WINDOW = 1000000;
 const DEFAULT_SETUP_MODEL_AUTO_COMPACT_TOKEN_LIMIT = 900000;
 const SHARED_MCP_REGISTRY_MARKER = "oh-my-codebuddy (OMB) Shared MCP Registry Sync";
-const LEGACY_SHARED_MCP_REGISTRY_MARKER = "oh-my-codex (OMX) Shared MCP Registry Sync";
+const LEGACY_SHARED_MCP_REGISTRY_MARKER = "oh-my-codebuddy (OMB) Shared MCP Registry Sync";
 const SHARED_MCP_REGISTRY_END_MARKER =
   "# End oh-my-codebuddy shared MCP registry sync";
 const LEGACY_SHARED_MCP_REGISTRY_END_MARKER =
-  "# End oh-my-codex shared MCP registry sync";
-const OMX_AGENTS_MAX_THREADS = 6;
-const OMX_AGENTS_MAX_DEPTH = 2;
-const OMX_EXPLORE_ROUTING_DEFAULT = '1';
-const OMX_EXPLORE_CMD_ENV = 'USE_OMX_EXPLORE_CMD';
-const OMX_COMMAND_TEMPLATES_DEFAULT = '0';
-const OMX_TUI_STATUS_LINE =
+  "# End oh-my-codebuddy shared MCP registry sync";
+const OMB_AGENTS_MAX_THREADS = 6;
+const OMB_AGENTS_MAX_DEPTH = 2;
+const OMB_EXPLORE_ROUTING_DEFAULT = '1';
+const OMB_COMMAND_TEMPLATES_DEFAULT = '0';
+const OMB_TUI_STATUS_LINE =
   'status_line = ["model-with-reasoning", "git-branch", "context-remaining", "total-input-tokens", "total-output-tokens", "five-hour-limit", "weekly-limit"]';
-const LEGACY_OMX_TEAM_RUN_TABLE_PATTERN =
-  /^\s*\[mcp_servers\.(?:"omx_team_run"|omx_team_run)\]\s*$/m;
+const LEGACY_OMB_TEAM_RUN_TABLE_PATTERN =
+  /^\s*\[mcp_servers\.(?:"omb_team_run"|omb_team_run)\]\s*$/m;
 
 function unwrapTomlString(value: string | undefined): string | undefined {
   return value?.match(/^"(.*)"$/)?.[1];
@@ -84,7 +82,7 @@ function parseRootKeyValues(config: string): Map<string, string> {
   return values;
 }
 
-function getOmxTopLevelLines(
+function getOmbTopLevelLines(
   pkgRoot: string,
   existingConfig = "",
   modelOverride?: string,
@@ -129,7 +127,7 @@ function stripRootLevelKeys(config: string, keys: readonly string[]): string {
 
   if (
     keys.some((key) =>
-      OMX_TOP_LEVEL_KEYS.includes(key as (typeof OMX_TOP_LEVEL_KEYS)[number]),
+      OMB_TOP_LEVEL_KEYS.includes(key as (typeof OMB_TOP_LEVEL_KEYS)[number]),
     )
   ) {
     lines = lines.filter(
@@ -169,11 +167,11 @@ function stripOrphanedManagedNotify(config: string): string {
 }
 
 /**
- * Remove any existing OMX-owned top-level keys so we can re-insert them
+ * Remove any existing OMB-owned top-level keys so we can re-insert them
  * cleanly. Also removes the comment line that precedes them.
  */
-export function stripOmxTopLevelKeys(config: string): string {
-  return stripRootLevelKeys(config, OMX_TOP_LEVEL_KEYS);
+export function stripOmbTopLevelKeys(config: string): string {
+  return stripRootLevelKeys(config, OMB_TOP_LEVEL_KEYS);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,9 +259,8 @@ function upsertEnvSettings(config: string): string {
     const base = config.trimEnd();
     const envBlock = [
       "[env]",
-      `${OMX_EXPLORE_CMD_ENV} = "${OMX_EXPLORE_ROUTING_DEFAULT}"`,
-      `${OMB_EXPLORE_CMD_ENV} = "${OMX_EXPLORE_ROUTING_DEFAULT}"`,
-      `${OMB_EXPERIMENTAL_COMMAND_TEMPLATES} = "${OMX_COMMAND_TEMPLATES_DEFAULT}"`,
+      `${OMB_EXPLORE_CMD_ENV} = "${OMB_EXPLORE_ROUTING_DEFAULT}"`,
+      `${OMB_EXPERIMENTAL_COMMAND_TEMPLATES} = "${OMB_COMMAND_TEMPLATES_DEFAULT}"`,
       "",
     ].join("\n");
     if (base.length === 0) return envBlock;
@@ -279,33 +276,21 @@ function upsertEnvSettings(config: string): string {
   }
 
   let exploreRoutingIdx = -1;
-  let exploreRoutingAliasIdx = -1;
   let templateRoutingIdx = -1;
-  let templateRoutingAliasIdx = -1;
   for (let i = envStart + 1; i < sectionEnd; i++) {
-    if (new RegExp(`^\\s*${OMX_EXPLORE_CMD_ENV}\\s*=`).test(lines[i])) {
-      exploreRoutingIdx = i;
-      continue;
-    }
     if (new RegExp(`^\\s*${OMB_EXPLORE_CMD_ENV}\\s*=`).test(lines[i])) {
-      exploreRoutingAliasIdx = i;
+      exploreRoutingIdx = i;
       continue;
     }
     if (new RegExp(`^\\s*${OMB_EXPERIMENTAL_COMMAND_TEMPLATES}\\s*=`).test(lines[i])) {
       templateRoutingIdx = i;
-      continue;
-    }
-    if (new RegExp(`^\\s*${OMX_EXPERIMENTAL_COMMAND_TEMPLATES}\\s*=`).test(lines[i])) {
-      templateRoutingAliasIdx = i;
     }
   }
 
   const resolvedExploreRoutingLine =
     exploreRoutingIdx >= 0
       ? lines[exploreRoutingIdx].trim()
-      : exploreRoutingAliasIdx >= 0
-        ? lines[exploreRoutingAliasIdx].replace(OMB_EXPLORE_CMD_ENV, OMX_EXPLORE_CMD_ENV).trim()
-        : `${OMX_EXPLORE_CMD_ENV} = "${OMX_EXPLORE_ROUTING_DEFAULT}"`;
+      : `${OMB_EXPLORE_CMD_ENV} = "${OMB_EXPLORE_ROUTING_DEFAULT}"`;
 
   if (exploreRoutingIdx >= 0) {
     lines[exploreRoutingIdx] = resolvedExploreRoutingLine;
@@ -317,21 +302,11 @@ function upsertEnvSettings(config: string): string {
     );
     sectionEnd += 1;
   }
-  const resolvedExploreRoutingAliasLine =
-    exploreRoutingAliasIdx >= 0
-      ? lines[exploreRoutingAliasIdx].trim()
-      : resolvedExploreRoutingLine.replace(OMX_EXPLORE_CMD_ENV, OMB_EXPLORE_CMD_ENV);
-  if (exploreRoutingAliasIdx >= 0) {
-    lines[exploreRoutingAliasIdx] = resolvedExploreRoutingAliasLine;
-  } else {
-    lines.splice(sectionEnd, 0, resolvedExploreRoutingAliasLine);
-    sectionEnd += 1;
-  }
-  if (templateRoutingIdx < 0 && templateRoutingAliasIdx < 0) {
+  if (templateRoutingIdx < 0) {
     lines.splice(
       sectionEnd,
       0,
-      `${OMB_EXPERIMENTAL_COMMAND_TEMPLATES} = "${OMX_COMMAND_TEMPLATES_DEFAULT}"`,
+      `${OMB_EXPERIMENTAL_COMMAND_TEMPLATES} = "${OMB_COMMAND_TEMPLATES_DEFAULT}"`,
     );
   }
 
@@ -348,8 +323,8 @@ function upsertAgentsSettings(config: string): string {
     const base = config.trimEnd();
     const agentsBlock = [
       "[agents]",
-      `max_threads = ${OMX_AGENTS_MAX_THREADS}`,
-      `max_depth = ${OMX_AGENTS_MAX_DEPTH}`,
+      `max_threads = ${OMB_AGENTS_MAX_THREADS}`,
+      `max_depth = ${OMB_AGENTS_MAX_DEPTH}`,
       "",
     ].join("\n");
     if (base.length === 0) return agentsBlock;
@@ -375,21 +350,21 @@ function upsertAgentsSettings(config: string): string {
   }
 
   if (maxThreadsIdx < 0) {
-    lines.splice(sectionEnd, 0, `max_threads = ${OMX_AGENTS_MAX_THREADS}`);
+    lines.splice(sectionEnd, 0, `max_threads = ${OMB_AGENTS_MAX_THREADS}`);
     sectionEnd += 1;
   }
   if (maxDepthIdx < 0) {
-    lines.splice(sectionEnd, 0, `max_depth = ${OMX_AGENTS_MAX_DEPTH}`);
+    lines.splice(sectionEnd, 0, `max_depth = ${OMB_AGENTS_MAX_DEPTH}`);
   }
 
   return lines.join("\n");
 }
 
 /**
- * Remove OMX-owned feature flags from the [features] section.
+ * Remove OMB-owned feature flags from the [features] section.
  * If the section becomes empty after removal, remove the section header too.
  */
-export function stripOmxFeatureFlags(config: string): string {
+export function stripOmbFeatureFlags(config: string): string {
   const lines = config.split(/\r?\n/);
   const featuresStart = lines.findIndex((line) =>
     /^\s*\[features\]\s*$/.test(line),
@@ -405,14 +380,14 @@ export function stripOmxFeatureFlags(config: string): string {
     }
   }
 
-  const omxFlags = ["multi_agent", "child_agents_md", "codex_hooks", "collab"];
+  const ombFlags = ["multi_agent", "child_agents_md", "codex_hooks", "collab"];
   const filtered: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (i > featuresStart && i < sectionEnd) {
-      const isOmxFlag = omxFlags.some((f) =>
+      const isOmbFlag = ombFlags.some((f) =>
         new RegExp(`^\\s*${f}\\s*=`).test(lines[i]),
       );
-      if (isOmxFlag) continue;
+      if (isOmbFlag) continue;
     }
     filtered.push(lines[i]);
   }
@@ -438,7 +413,7 @@ export function stripOmxFeatureFlags(config: string): string {
   return filtered.join("\n");
 }
 
-export function stripOmxEnvSettings(config: string): string {
+export function stripOmbEnvSettings(config: string): string {
   const lines = config.split(/\r?\n/);
   const envStart = lines.findIndex((line) => /^\s*\[env\]\s*$/.test(line));
 
@@ -455,19 +430,19 @@ export function stripOmxEnvSettings(config: string): string {
   const filtered: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (i > envStart && i < sectionEnd) {
-      const isOmxEnvKey = new RegExp(
+      const isOmbEnvKey = new RegExp(
         `^\\s*${OMB_EXPLORE_CMD_ENV}\\s*=`,
       ).test(lines[i]);
-      const isCanonicalOmxEnvKey = new RegExp(
-        `^\\s*${OMX_EXPLORE_CMD_ENV}\\s*=`,
+      const isCanonicalOmbEnvKey = new RegExp(
+        `^\\s*${OMB_EXPLORE_CMD_ENV}\\s*=`,
       ).test(lines[i]);
       const isCommandTemplateEnvKey = new RegExp(
         `^\\s*${OMB_EXPERIMENTAL_COMMAND_TEMPLATES}\\s*=`,
       ).test(lines[i]);
       const isCommandTemplateAliasEnvKey = new RegExp(
-        `^\\s*${OMX_EXPERIMENTAL_COMMAND_TEMPLATES}\\s*=`,
+        `^\\s*${OMB_EXPERIMENTAL_COMMAND_TEMPLATES}\\s*=`,
       ).test(lines[i]);
-      if (isOmxEnvKey || isCanonicalOmxEnvKey || isCommandTemplateEnvKey || isCommandTemplateAliasEnvKey) {
+      if (isOmbEnvKey || isCanonicalOmbEnvKey || isCommandTemplateEnvKey || isCommandTemplateAliasEnvKey) {
         continue;
       }
     }
@@ -493,14 +468,14 @@ export function stripOmxEnvSettings(config: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Orphaned OMX table sections (no marker block)
+// Orphaned OMB table sections (no marker block)
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether a TOML table name belongs to a legacy OMX-managed agent entry.
+ * Check whether a TOML table name belongs to a legacy OMB-managed agent entry.
  * Handles both `agents.name` and `agents."name"` forms.
  */
-function isLegacyOmxAgentSection(tableName: string): boolean {
+function isLegacyOmbAgentSection(tableName: string): boolean {
   const m = tableName.match(/^agents\.(?:"([^"]+)"|(\w[\w-]*))$/);
   if (!m) return false;
   const name = m[1] || m[2] || "";
@@ -508,13 +483,13 @@ function isLegacyOmxAgentSection(tableName: string): boolean {
 }
 
 /**
- * Strip OMX-owned table sections that exist outside the marker block.
+ * Strip OMB-owned table sections that exist outside the marker block.
  * This covers legacy configs that were written before markers were added,
  * or configs where the marker was accidentally removed.
  *
- * Targets: [mcp_servers.omx_*], legacy [agents.<name>] entries, [tui]
+ * Targets: [mcp_servers.omb_*], legacy [agents.<name>] entries, [tui]
  */
-function stripOrphanedOmxSections(config: string): string {
+function stripOrphanedOmbSections(config: string): string {
   const lines = config.split(/\r?\n/);
   const result: string[] = [];
 
@@ -526,14 +501,14 @@ function stripOrphanedOmxSections(config: string): string {
     if (tableMatch) {
       const tableName = tableMatch[1];
       // Note: [tui] is NOT stripped here because it could be user-owned.
-      // The marker-based stripExistingOmxBlocks already handles [tui]
-      // when it lives inside the OMX marker block.
-      const isOmxSection =
-        /^mcp_servers\.omx_/.test(tableName) ||
-        isLegacyOmxAgentSection(tableName);
+      // The marker-based stripExistingOmbBlocks already handles [tui]
+      // when it lives inside the OMB marker block.
+      const isOmbSection =
+        /^mcp_servers\.omb_/.test(tableName) ||
+        isLegacyOmbAgentSection(tableName);
 
-      if (isOmxSection) {
-        // Remove preceding OMX comment lines and blank lines
+      if (isOmbSection) {
+        // Remove preceding OMB comment lines and blank lines
         while (result.length > 0) {
           const last = result[result.length - 1];
           if (last.trim() === "" || /^#\s*(OM[XB]|oh-my-code(?:x|buddy))/i.test(last)) {
@@ -603,7 +578,7 @@ function upsertTuiStatusLine(config: string): {
     }
   }
 
-  const mergedSection = ["[tui]", ...preservedKeyLines, OMX_TUI_STATUS_LINE];
+  const mergedSection = ["[tui]", ...preservedKeyLines, OMB_TUI_STATUS_LINE];
   const firstStart = sections[0].start;
   const rebuilt: string[] = [];
 
@@ -631,17 +606,17 @@ function upsertTuiStatusLine(config: string): {
 }
 
 // ---------------------------------------------------------------------------
-// OMX [table] sections block (appended at end of file)
+// OMB [table] sections block (appended at end of file)
 // ---------------------------------------------------------------------------
 
-export function stripExistingOmxBlocks(config: string): {
+export function stripExistingOmbBlocks(config: string): {
   cleaned: string;
   removed: number;
 } {
   const marker = "oh-my-codebuddy (OMB) Configuration";
-  const legacyMarker = "oh-my-codex (OMX) Configuration";
+  const legacyMarker = "oh-my-codebuddy (OMB) Configuration";
   const endMarker = "# End oh-my-codebuddy";
-  const legacyEndMarker = "# End oh-my-codex";
+  const legacyEndMarker = "# End oh-my-codebuddy";
   let cleaned = config;
   let removed = 0;
 
@@ -751,7 +726,7 @@ function getSharedMcpRegistryBlock(
   const lines = [
     "# ============================================================",
     `# ${SHARED_MCP_REGISTRY_MARKER}`,
-    "# Managed by omx setup - edit the registry file instead",
+    "# Managed by omb setup - edit the registry file instead",
   ];
   if (sourcePath) {
     lines.push(`# Source: ${sourcePath}`);
@@ -783,10 +758,10 @@ function getSharedMcpRegistryBlock(
 }
 
 /**
- * OMX table-section block (MCP servers, TUI).
+ * OMB table-section block (MCP servers, TUI).
  * Contains ONLY [table] sections — no bare keys.
  */
-function getOmxTablesBlock(pkgRoot: string, includeTui = true): string {
+function getOmbTablesBlock(pkgRoot: string, includeTui = true): string {
   const stateServerPath = escapeTomlString(
     join(pkgRoot, "dist", "mcp", "state-server.js"),
   );
@@ -804,32 +779,32 @@ function getOmxTablesBlock(pkgRoot: string, includeTui = true): string {
     "",
     "# ============================================================",
     "# oh-my-codebuddy (OMB) Configuration",
-    "# Managed by omx setup - manual edits preserved on next setup",
+    "# Managed by omb setup - manual edits preserved on next setup",
     "# ============================================================",
     "",
-    "# OMX State Management MCP Server",
-    "[mcp_servers.omx_state]",
+    "# OMB State Management MCP Server",
+    "[mcp_servers.omb_state]",
     'command = "node"',
     `args = ["${stateServerPath}"]`,
     "enabled = true",
     "startup_timeout_sec = 5",
     "",
-    "# OMX Project Memory MCP Server",
-    "[mcp_servers.omx_memory]",
+    "# OMB Project Memory MCP Server",
+    "[mcp_servers.omb_memory]",
     'command = "node"',
     `args = ["${memoryServerPath}"]`,
     "enabled = true",
     "startup_timeout_sec = 5",
     "",
-    "# OMX Code Intelligence MCP Server (LSP diagnostics, AST search)",
-    "[mcp_servers.omx_code_intel]",
+    "# OMB Code Intelligence MCP Server (LSP diagnostics, AST search)",
+    "[mcp_servers.omb_code_intel]",
     'command = "node"',
     `args = ["${codeIntelServerPath}"]`,
     "enabled = true",
     "startup_timeout_sec = 10",
     "",
-    "# OMX Trace MCP Server (agent flow timeline & statistics)",
-    "[mcp_servers.omx_trace]",
+    "# OMB Trace MCP Server (agent flow timeline & statistics)",
+    "[mcp_servers.omb_trace]",
     'command = "node"',
     `args = ["${traceServerPath}"]`,
     "enabled = true",
@@ -837,9 +812,9 @@ function getOmxTablesBlock(pkgRoot: string, includeTui = true): string {
     ...(includeTui
       ? [
           "",
-          "# OMX TUI StatusLine (Codex CLI v0.101.0+)",
+          "# OMB TUI StatusLine (Codex CLI v0.101.0+)",
           "[tui]",
-          OMX_TUI_STATUS_LINE,
+          OMB_TUI_STATUS_LINE,
           "",
         ]
       : []),
@@ -854,15 +829,15 @@ function getOmxTablesBlock(pkgRoot: string, includeTui = true): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Merge OMX config into existing config.toml
- * Preserves existing user settings, appends OMX block if not present.
+ * Merge OMB config into existing config.toml
+ * Preserves existing user settings, appends OMB block if not present.
  *
  * Layout:
- *   1. OMX top-level keys (notify, model_reasoning_effort, developer_instructions)
+ *   1. OMB top-level keys (notify, model_reasoning_effort, developer_instructions)
  *   2. [features] with multi_agent + child_agents_md
  *   3. [env] with defaulted explore-routing opt-in
  *   4. … user sections …
- *   5. OMX [table] sections (mcp_servers, tui)
+ *   5. OMB [table] sections (mcp_servers, tui)
  */
 export function buildMergedConfig(
   existingConfig: string,
@@ -872,8 +847,8 @@ export function buildMergedConfig(
   let existing = existingConfig;
   const includeTui = options.includeTui !== false;
 
-  if (existing.includes("oh-my-codebuddy (OMB) Configuration") || existing.includes("oh-my-codex (OMX) Configuration")) {
-    const stripped = stripExistingOmxBlocks(existing);
+  if (existing.includes("oh-my-codebuddy (OMB) Configuration") || existing.includes("oh-my-codebuddy (OMB) Configuration")) {
+    const stripped = stripExistingOmbBlocks(existing);
     existing = stripped.cleaned;
   }
   if (existing.includes(SHARED_MCP_REGISTRY_MARKER) || existing.includes(LEGACY_SHARED_MCP_REGISTRY_MARKER)) {
@@ -881,12 +856,12 @@ export function buildMergedConfig(
     existing = stripped.cleaned;
   }
 
-  existing = stripOmxTopLevelKeys(existing);
+  existing = stripOmbTopLevelKeys(existing);
   existing = stripOrphanedManagedNotify(existing);
   if (options.modelOverride) {
     existing = stripRootLevelKeys(existing, ["model"]);
   }
-  existing = stripOrphanedOmxSections(existing);
+  existing = stripOrphanedOmbSections(existing);
   existing = upsertFeatureFlags(existing);
   existing = upsertEnvSettings(existing);
   existing = upsertAgentsSettings(existing);
@@ -895,12 +870,12 @@ export function buildMergedConfig(
     : { cleaned: existing, hadExistingTui: false };
   existing = tuiUpsert.cleaned;
 
-  const topLines = getOmxTopLevelLines(
+  const topLines = getOmbTopLevelLines(
     pkgRoot,
     existing,
     options.modelOverride,
   );
-  const tablesBlock = getOmxTablesBlock(
+  const tablesBlock = getOmbTablesBlock(
     pkgRoot,
     includeTui && !tuiUpsert.hadExistingTui,
   );
@@ -921,10 +896,10 @@ export function buildMergedConfig(
 /**
  * Detect and repair upgrade-era managed config incompatibilities in config.toml.
  *
- * After an omx version upgrade the OLD setup code (still loaded in memory)
+ * After an omb version upgrade the OLD setup code (still loaded in memory)
  * may leave a config with duplicate [tui] sections or the retired
- * [mcp_servers.omx_team_run] table. Codex rejects duplicate tables and newer
- * OMX builds no longer ship the team MCP entrypoint, so we repair both before
+ * [mcp_servers.omb_team_run] table. Codex rejects duplicate tables and newer
+ * OMB builds no longer ship the team MCP entrypoint, so we repair both before
  * the CLI is spawned.
  *
  * Returns `true` if a repair was performed.
@@ -938,7 +913,7 @@ export async function repairConfigIfNeeded(
 
   const content = await readFile(configPath, "utf-8");
   const tuiCount = (content.match(/^\s*\[tui\]\s*$/gm) || []).length;
-  const hasLegacyTeamRunTable = LEGACY_OMX_TEAM_RUN_TABLE_PATTERN.test(content);
+  const hasLegacyTeamRunTable = LEGACY_OMB_TEAM_RUN_TABLE_PATTERN.test(content);
   if (tuiCount <= 1 && !hasLegacyTeamRunTable) return false;
 
   // Managed config compatibility issue detected — run full merge to repair
@@ -959,8 +934,8 @@ export async function mergeConfig(
     existing = await readFile(configPath, "utf-8");
   }
 
-  if (existing.includes("oh-my-codebuddy (OMB) Configuration") || existing.includes("oh-my-codex (OMX) Configuration")) {
-    const stripped = stripExistingOmxBlocks(existing);
+  if (existing.includes("oh-my-codebuddy (OMB) Configuration") || existing.includes("oh-my-codebuddy (OMB) Configuration")) {
+    const stripped = stripExistingOmbBlocks(existing);
     if (options.verbose && stripped.removed > 0) {
       console.log("  Updating existing OMB config block.");
     }

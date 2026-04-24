@@ -1,10 +1,10 @@
 import { existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import type {
-  HookPluginOmxHudState,
-  HookPluginOmxNotifyFallbackState,
-  HookPluginOmxSessionState,
-  HookPluginOmxUpdateCheckState,
+  HookPluginOmbHudState,
+  HookPluginOmbNotifyFallbackState,
+  HookPluginOmbSessionState,
+  HookPluginOmbUpdateCheckState,
   HookPluginSdk,
 } from '../types.js';
 import { ombRootStateFilePath } from './paths.js';
@@ -13,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-async function readOmxStateFile<T extends Record<string, unknown>>(
+async function readOmbStateFile<T extends Record<string, unknown>>(
   path: string,
   normalize?: (value: Record<string, unknown>) => T | null,
 ): Promise<T | null> {
@@ -27,32 +27,32 @@ async function readOmxStateFile<T extends Record<string, unknown>>(
   }
 }
 
-function normalizeSessionState(value: Record<string, unknown>): HookPluginOmxSessionState | null {
+function normalizeSessionState(value: Record<string, unknown>): HookPluginOmbSessionState | null {
   return typeof value.session_id === 'string' && value.session_id.trim()
-    ? value as HookPluginOmxSessionState
+    ? value as HookPluginOmbSessionState
     : null;
 }
 
 export function createHookPluginOmbApi(cwd: string): HookPluginSdk['omb'] {
   return {
     session: {
-      read: () => readOmxStateFile<HookPluginOmxSessionState>(
+      read: () => readOmbStateFile<HookPluginOmbSessionState>(
         ombRootStateFilePath(cwd, 'session.json'),
         normalizeSessionState,
       ),
     },
     hud: {
-      read: () => readOmxStateFile<HookPluginOmxHudState>(
+      read: () => readOmbStateFile<HookPluginOmbHudState>(
         ombRootStateFilePath(cwd, 'hud-state.json'),
       ),
     },
     notifyFallback: {
-      read: () => readOmxStateFile<HookPluginOmxNotifyFallbackState>(
+      read: () => readOmbStateFile<HookPluginOmbNotifyFallbackState>(
         ombRootStateFilePath(cwd, 'notify-fallback-state.json'),
       ),
     },
     updateCheck: {
-      read: () => readOmxStateFile<HookPluginOmxUpdateCheckState>(
+      read: () => readOmbStateFile<HookPluginOmbUpdateCheckState>(
         ombRootStateFilePath(cwd, 'update-check.json'),
       ),
     },

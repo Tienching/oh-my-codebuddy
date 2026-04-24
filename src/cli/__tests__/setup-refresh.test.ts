@@ -46,7 +46,7 @@ async function runSetupWithCapturedLogs(
   }
 }
 
-describe("omx setup refresh summary and dry-run behavior", () => {
+describe("omb setup refresh summary and dry-run behavior", () => {
   async function runSetupInTempDir(
     wd: string,
     options: Parameters<typeof setup>[0],
@@ -61,7 +61,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   }
 
   it("prints per-category summary and verbose changed-file detail", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await runSetupInTempDir(wd, { scope: "project" });
@@ -86,7 +86,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("does not overwrite or create backups during dry-run", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await runSetupInTempDir(wd, { scope: "project" });
@@ -109,7 +109,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("logs degraded tmux runtime details in verbose setup when tmux is unavailable", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     const originalPath = process.env.PATH;
     const originalTmux = process.env.TMUX;
     const originalTmuxPane = process.env.TMUX_PANE;
@@ -163,8 +163,8 @@ describe("omx setup refresh summary and dry-run behavior", () => {
     }
   });
 
-  it("creates .gitignore with OMX project ignore rules during project-scoped setup", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+  it("creates .gitignore with OMB project ignore rules during project-scoped setup", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await runSetupInTempDir(wd, { scope: "project" });
 
@@ -178,12 +178,11 @@ describe("omx setup refresh summary and dry-run behavior", () => {
     }
   });
 
-  it("appends missing OMX project ignore rules to an existing project .gitignore without duplicating them", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+  it("appends missing OMB project ignore rules to an existing project .gitignore without duplicating them", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await writeFile(join(wd, ".gitignore"), "node_modules/\n");
 
-      await runSetupInTempDir(wd, { scope: "project" });
       await runSetupInTempDir(wd, { scope: "project" });
 
       const gitignore = await readFile(join(wd, ".gitignore"), "utf-8");
@@ -196,7 +195,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("ignores project-local config while keeping .codebuddy agents, skills, and prompts trackable", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       const initResult = spawnSync("git", ["init", "-q"], { cwd: wd });
       assert.equal(initResult.status, 0);
@@ -236,7 +235,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("replaces legacy .codebuddy/.codex ignores so the project allowlist can take effect", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await writeFile(join(wd, ".gitignore"), ".omb/\n.codebuddy/\n.codex/\n");
 
@@ -252,7 +251,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("creates backup files under the scope-specific setup backup root when refreshing modified managed files", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await runSetupInTempDir(wd, { scope: "project" });
@@ -282,7 +281,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("offers an upgrade from gpt-5.3-codex to gpt-5.4 when accepted", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await mkdir(join(wd, ".codebuddy"), { recursive: true });
@@ -314,7 +313,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("preserves gpt-5.3-codex when the upgrade prompt is declined", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await mkdir(join(wd, ".codebuddy"), { recursive: true });
@@ -339,7 +338,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("preserves gpt-5.3-codex in non-interactive runs without prompting", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await mkdir(join(wd, ".codebuddy"), { recursive: true });
@@ -361,7 +360,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("skips OMB-managed [tui] writes for Codex CLI >= 0.107.0 and preserves an existing [tui] table", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await mkdir(join(wd, ".codebuddy"), { recursive: true });
@@ -389,7 +388,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("keeps OMB-managed [tui] writes for older Codex CLI versions", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
 
@@ -407,7 +406,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("syncs shared MCP registry entries into config.toml during setup", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       const registryPath = join(wd, "mcp-registry.json");
@@ -433,7 +432,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
     }
   });
   it("syncs shared MCP registry entries into ~/.claude/settings.json for user scope", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     const previousHome = process.env.HOME;
     const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
     try {
@@ -500,7 +499,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("does not write ~/.claude/settings.json during project-scoped setup", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     const previousHome = process.env.HOME;
     const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
     try {
@@ -532,7 +531,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
   });
 
   it("ignores legacy ~/.omc/mcp-registry.json during setup unless candidates are passed explicitly", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omx-setup-refresh-"));
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     const previousHome = process.env.HOME;
     const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
     try {
@@ -556,7 +555,7 @@ describe("omx setup refresh summary and dry-run behavior", () => {
 
       const output = await runSetupWithCapturedLogs(wd, { scope: "project" });
       assert.match(output, /legacy shared MCP registry detected at .*\.omc\/mcp-registry\.json but ignored by default/i);
-      assert.match(output, /move it to .*\.omx\/mcp-registry\.json/i);
+      assert.match(output, /move it to .*\.omb\/mcp-registry\.json/i);
     } finally {
       if (typeof previousHome === "string") process.env.HOME = previousHome;
       else delete process.env.HOME;

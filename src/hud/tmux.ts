@@ -34,7 +34,7 @@ export function isHudWatchPane(pane: TmuxPaneSnapshot): boolean {
   return (
     /\bhud\b/.test(command)
     && /--watch\b/.test(command)
-    && (/\b(?:omx|omb)(?:\.js)?\b/.test(command) || /\bnode\b/.test(command))
+    && (/\b(?:omb|omb)(?:\.js)?\b/.test(command) || /\bnode\b/.test(command))
   );
 }
 
@@ -57,11 +57,11 @@ export function shellEscapeSingle(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function buildHudWatchCommand(omxBin: string, preset?: string): string {
+export function buildHudWatchCommand(ombBin: string, preset?: string): string {
   const safePreset = preset === 'minimal' || preset === 'focused' || preset === 'full'
     ? ` --preset=${preset}`
     : '';
-  return `node ${shellEscapeSingle(omxBin)} hud --watch${safePreset}`;
+  return `node ${shellEscapeSingle(ombBin)} hud --watch${safePreset}`;
 }
 
 export function listCurrentWindowPanes(

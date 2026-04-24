@@ -13,7 +13,7 @@ import {
   getReadScopedStateDirs,
   resolveStateScope,
 } from '../mcp/state-paths.js';
-import { omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 
 export interface ModeState {
   active: boolean;
@@ -78,18 +78,18 @@ function statePath(mode: string, projectRoot?: string, sessionId?: string): stri
   return join(dir, `${mode}-state.json`);
 }
 
-function omxModeStatePath(mode: string, projectRoot?: string, sessionId?: string): string {
-  const root = omxStateDir(projectRoot ?? process.cwd());
+function ombModeStatePath(mode: string, projectRoot?: string, sessionId?: string): string {
+  const root = ombStateDir(projectRoot ?? process.cwd());
   const dir = sessionId ? join(root, 'sessions', sessionId) : root;
   return join(dir, `${mode}-state.json`);
 }
 
 async function readModeStatePaths(mode: string, projectRoot?: string): Promise<string[]> {
   if (mode === 'team') {
-    const omxRoot = omxStateDir(projectRoot ?? process.cwd());
+    const ombRoot = ombStateDir(projectRoot ?? process.cwd());
     const scope = await resolveStateScope(projectRoot);
-    const sessionPath = scope.sessionId ? join(omxRoot, 'sessions', scope.sessionId, `${mode}-state.json`) : undefined;
-    const rootPath = join(omxRoot, `${mode}-state.json`);
+    const sessionPath = scope.sessionId ? join(ombRoot, 'sessions', scope.sessionId, `${mode}-state.json`) : undefined;
+    const rootPath = join(ombRoot, `${mode}-state.json`);
     return sessionPath ? [sessionPath, rootPath] : [rootPath];
   }
   const scope = await resolveStateScope(projectRoot);
@@ -154,7 +154,7 @@ export async function startMode(
     current_phase: 'starting',
     task_description: taskDescription,
     started_at: new Date().toISOString(),
-    ...(mode === 'ralph' && scope.sessionId ? { owner_omx_session_id: scope.sessionId } : {}),
+    ...(mode === 'ralph' && scope.sessionId ? { owner_omb_session_id: scope.sessionId } : {}),
   };
 
   const withContext = withModeRuntimeContext({}, stateBase) as ModeState;
@@ -164,9 +164,9 @@ export async function startMode(
   await mkdir(scope.sessionId ? join(stateDir(projectRoot), 'sessions', scope.sessionId) : stateDir(projectRoot), { recursive: true });
   await writeFile(statePath(mode, projectRoot, scope.sessionId), JSON.stringify(state, null, 2));
   if (mode === 'team') {
-    const omxPath = omxModeStatePath(mode, projectRoot, scope.sessionId);
-    await mkdir(dirname(omxPath), { recursive: true });
-    await writeFile(omxPath, JSON.stringify(state, null, 2));
+    const ombPath = ombModeStatePath(mode, projectRoot, scope.sessionId);
+    await mkdir(dirname(ombPath), { recursive: true });
+    await writeFile(ombPath, JSON.stringify(state, null, 2));
   }
   return state;
 }
@@ -201,8 +201,8 @@ export async function updateModeState(
   await mkdir(scope.stateDir, { recursive: true });
 
   const updatedBase = { ...current, ...updates };
-  if (mode === 'ralph' && scope.sessionId && typeof updatedBase.owner_omx_session_id !== 'string') {
-    updatedBase.owner_omx_session_id = scope.sessionId;
+  if (mode === 'ralph' && scope.sessionId && typeof updatedBase.owner_omb_session_id !== 'string') {
+    updatedBase.owner_omb_session_id = scope.sessionId;
   }
   const normalizedBase = mode === 'ralph'
     ? normalizeRalphModeStateOrThrow(updatedBase as ModeState)
@@ -211,9 +211,9 @@ export async function updateModeState(
   await mkdir(scope.sessionId ? join(stateDir(projectRoot), 'sessions', scope.sessionId) : stateDir(projectRoot), { recursive: true });
   await writeFile(statePath(mode, projectRoot, scope.sessionId), JSON.stringify(updated, null, 2));
   if (mode === 'team') {
-    const omxPath = omxModeStatePath(mode, projectRoot, scope.sessionId);
-    await mkdir(dirname(omxPath), { recursive: true });
-    await writeFile(omxPath, JSON.stringify(updated, null, 2));
+    const ombPath = ombModeStatePath(mode, projectRoot, scope.sessionId);
+    await mkdir(dirname(ombPath), { recursive: true });
+    await writeFile(ombPath, JSON.stringify(updated, null, 2));
   }
   return updated;
 }

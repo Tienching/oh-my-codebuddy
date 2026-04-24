@@ -17,7 +17,7 @@ function makeEvent(event = 'session-start'): HookEventEnvelope {
   };
 }
 
-async function writeOmxStateFile(cwd: string, fileName: string, value: unknown): Promise<void> {
+async function writeOmbStateFile(cwd: string, fileName: string, value: unknown): Promise<void> {
   const stateDir = join(cwd, '.omb', 'state');
   await mkdir(stateDir, { recursive: true });
   await writeFile(join(stateDir, fileName), JSON.stringify(value, null, 2));
@@ -294,8 +294,8 @@ exit 1
     });
   });
 
-  describe('omx', () => {
-    it('exposes only the explicit read-only omx readers', async () => {
+  describe('omb', () => {
+    it('exposes only the explicit read-only omb readers', async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omb-sdk-'));
       try {
         const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });
@@ -325,7 +325,7 @@ exit 1
     it('reads session state from .omb/state/session.json', async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omb-sdk-'));
       try {
-        await writeOmxStateFile(cwd, 'session.json', {
+        await writeOmbStateFile(cwd, 'session.json', {
           session_id: 'session-123',
           cwd,
           started_at: '2026-01-01T00:00:00.000Z',
@@ -346,7 +346,7 @@ exit 1
     it('returns null for invalid session state without session_id', async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omb-sdk-'));
       try {
-        await writeOmxStateFile(cwd, 'session.json', {
+        await writeOmbStateFile(cwd, 'session.json', {
           started_at: '2026-01-01T00:00:00.000Z',
         });
 
@@ -357,19 +357,19 @@ exit 1
       }
     });
 
-    it('reads hud, notifyFallback, and updateCheck state from root-scoped omx files', async () => {
+    it('reads hud, notifyFallback, and updateCheck state from root-scoped omb files', async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omb-sdk-'));
       try {
-        await writeOmxStateFile(cwd, 'hud-state.json', {
+        await writeOmbStateFile(cwd, 'hud-state.json', {
           last_turn_at: '2026-01-01T00:00:00.000Z',
           turn_count: 3,
         });
-        await writeOmxStateFile(cwd, 'notify-fallback-state.json', {
+        await writeOmbStateFile(cwd, 'notify-fallback-state.json', {
           pid: 1234,
           stopping: false,
           tracked_files: 2,
         });
-        await writeOmxStateFile(cwd, 'update-check.json', {
+        await writeOmbStateFile(cwd, 'update-check.json', {
           last_checked_at: '2026-01-01T00:00:00.000Z',
           last_seen_latest: '0.11.0',
         });
@@ -393,7 +393,7 @@ exit 1
       }
     });
 
-    it('returns null for missing omx reader files', async () => {
+    it('returns null for missing omb reader files', async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omb-sdk-'));
       try {
         const sdk = createHookPluginSdk({ cwd, pluginName: 'test', event: makeEvent() });

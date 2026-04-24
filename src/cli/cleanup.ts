@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const HELP = [
-  'Usage: omb cleanup [--dry-run] (legacy alias: omx cleanup)',
+  'Usage: omb cleanup [--dry-run] (legacy alias: omb cleanup)',
   '',
   'Kill orphaned OMB MCP server processes and remove stale OMB /tmp directories left behind by previous CodeBuddy CLI sessions.',
   '',
@@ -16,10 +16,10 @@ const HELP = [
 const PROCESS_EXIT_POLL_MS = 100;
 const SIGTERM_GRACE_MS = 5_000;
 const STALE_TMP_MAX_AGE_MS = 60 * 60 * 1000;
-const OMX_MCP_SERVER_PATTERN = /(?:^|[\\/])dist[\\/]mcp[\\/](?:state|memory|code-intel|trace)-server\.(?:[cm]?js|ts)\b/i;
+const OMB_MCP_SERVER_PATTERN = /(?:^|[\\/])dist[\\/]mcp[\\/](?:state|memory|code-intel|trace)-server\.(?:[cm]?js|ts)\b/i;
 const CODEX_PROCESS_PATTERN = /(?:^|[\\/\s])codex(?:\.js)?(?:\s|$)|@openai[\\/]codex/i;
-const OMX_LAUNCH_PROCESS_PATTERN = /(?:^|[\\/\s])(?:omx|omb)(?:\.js)?(?:\s|$)|(?:^|[\\/])(?:bin|dist[\\/]cli)[\\/](?:omx|omb)\.js(?:\s|$)|(?:oh-my-codex|oh-my-codebuddy)[\\/]dist[\\/]cli[\\/](?:omx|omb)\.js/i;
-const OMX_TMP_DIRECTORY_PATTERN = /^(omc|omx|omb|oh-my-codex|oh-my-codebuddy)-/;
+const OMB_LAUNCH_PROCESS_PATTERN = /(?:^|[\\/\s])(?:omb|omb)(?:\.js)?(?:\s|$)|(?:^|[\\/])(?:bin|dist[\\/]cli)[\\/](?:omb|omb)\.js(?:\s|$)|(?:oh-my-codebuddy|oh-my-codebuddy)[\\/]dist[\\/]cli[\\/](?:omb|omb)\.js/i;
+const OMB_TMP_DIRECTORY_PATTERN = /^(omc|omb|omb|oh-my-codebuddy|oh-my-codebuddy)-/;
 
 export interface ProcessEntry {
   pid: number;
@@ -80,9 +80,9 @@ function formatPlural(count: number, singular: string, plural = `${singular}s`):
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-export function isOmxMcpProcess(command: string): boolean {
+export function isOmbMcpProcess(command: string): boolean {
   const normalized = normalizeCommand(command);
-  return OMX_MCP_SERVER_PATTERN.test(normalized);
+  return OMB_MCP_SERVER_PATTERN.test(normalized);
 }
 
 export function parsePsOutput(output: string): ProcessEntry[] {
@@ -104,7 +104,7 @@ export function parsePsOutput(output: string): ProcessEntry[] {
     .filter((entry): entry is ProcessEntry => entry !== null);
 }
 
-export function listOmxProcesses(): ProcessEntry[] {
+export function listOmbProcesses(): ProcessEntry[] {
   if (process.platform === 'win32') return [];
   const output = execFileSync('ps', ['axww', '-o', 'pid=,ppid=,command='], {
     encoding: 'utf-8',
@@ -117,8 +117,8 @@ function isCodexSessionProcess(command: string): boolean {
   return CODEX_PROCESS_PATTERN.test(normalizeCommand(command));
 }
 
-function isOmxLaunchProcess(command: string): boolean {
-  return OMX_LAUNCH_PROCESS_PATTERN.test(normalizeCommand(command));
+function isOmbLaunchProcess(command: string): boolean {
+  return OMB_LAUNCH_PROCESS_PATTERN.test(normalizeCommand(command));
 }
 
 function hasAncestorMatching(
@@ -200,7 +200,7 @@ export function findCleanupCandidates(
 
   return processes
     .filter((processEntry) => processEntry.pid !== currentPid)
-    .filter((processEntry) => isOmxMcpProcess(processEntry.command))
+    .filter((processEntry) => isOmbMcpProcess(processEntry.command))
     .filter((processEntry) => !protectedPids.has(processEntry.pid))
     .sort((left, right) => left.pid - right.pid)
     .map((processEntry) => ({
@@ -221,7 +221,7 @@ export function findLaunchSafeCleanupCandidates(
     if (candidate.ppid <= 1) return true;
     return (
       !hasAncestorMatching(processByPid, candidate.pid, isCodexSessionProcess) &&
-      !hasAncestorMatching(processByPid, candidate.pid, isOmxLaunchProcess)
+      !hasAncestorMatching(processByPid, candidate.pid, isOmbLaunchProcess)
     );
   });
 }
@@ -268,7 +268,7 @@ function formatCandidate(candidate: CleanupCandidate): string {
   return `PID ${candidate.pid} (PPID ${candidate.ppid}, ${candidate.reason}) ${candidate.command}`;
 }
 
-export async function cleanupOmxMcpProcesses(
+export async function cleanupOmbMcpProcesses(
   args: readonly string[],
   dependencies: CleanupDependencies = {},
 ): Promise<CleanupResult> {
@@ -286,7 +286,7 @@ export async function cleanupOmxMcpProcesses(
   const dryRun = args.includes('--dry-run');
   const writeLine = dependencies.writeLine ?? ((line: string) => console.log(line));
   const currentPid = dependencies.currentPid ?? process.pid;
-  const listProcessesImpl = dependencies.listProcesses ?? listOmxProcesses;
+  const listProcessesImpl = dependencies.listProcesses ?? listOmbProcesses;
   const selectCandidates = dependencies.selectCandidates ?? findCleanupCandidates;
   const isPidAlive = dependencies.isPidAlive ?? defaultIsPidAlive;
   const sendSignal = dependencies.sendSignal ?? ((pid: number, signal: NodeJS.Signals) => process.kill(pid, signal));
@@ -296,8 +296,8 @@ export async function cleanupOmxMcpProcesses(
   const candidates = selectCandidates(listProcessesImpl(), currentPid);
   if (candidates.length === 0) {
     writeLine(dryRun
-      ? 'Dry run: no orphaned OMX MCP server processes found.'
-      : 'No orphaned OMX MCP server processes found.');
+      ? 'Dry run: no orphaned OMB MCP server processes found.'
+      : 'No orphaned OMB MCP server processes found.');
     return {
       dryRun,
       candidates,
@@ -308,7 +308,7 @@ export async function cleanupOmxMcpProcesses(
   }
 
   if (dryRun) {
-    writeLine(`Dry run: would terminate ${candidates.length} orphaned OMX MCP server process(es):`);
+    writeLine(`Dry run: would terminate ${candidates.length} orphaned OMB MCP server process(es):`);
     for (const candidate of candidates) writeLine(`  ${formatCandidate(candidate)}`);
     return {
       dryRun: true,
@@ -319,7 +319,7 @@ export async function cleanupOmxMcpProcesses(
     };
   }
 
-  writeLine(`Found ${candidates.length} orphaned OMX MCP server process(es). Sending SIGTERM...`);
+  writeLine(`Found ${candidates.length} orphaned OMB MCP server process(es). Sending SIGTERM...`);
   for (const candidate of candidates) {
     try {
       sendSignal(candidate.pid, 'SIGTERM');
@@ -368,7 +368,7 @@ export async function cleanupOmxMcpProcesses(
     failedPids.push(...remainingAfterKill);
   }
 
-  writeLine(`Killed ${terminatedCount} orphaned OMX MCP server process(es)${forceKilledCount > 0 ? ` (${forceKilledCount} required SIGKILL)` : ''}.`);
+  writeLine(`Killed ${terminatedCount} orphaned OMB MCP server process(es)${forceKilledCount > 0 ? ` (${forceKilledCount} required SIGKILL)` : ''}.`);
   if (failedPids.length > 0) {
     writeLine(`Warning: ${failedPids.length} process(es) still appear alive: ${failedPids.join(', ')}`);
   }
@@ -396,7 +396,7 @@ export async function cleanupStaleTmpDirectories(
 
   const staleDirectories: string[] = [];
   for (const entry of await listTmpEntries(tmpRoot)) {
-    if (!entry.isDirectory() || !OMX_TMP_DIRECTORY_PATTERN.test(entry.name)) continue;
+    if (!entry.isDirectory() || !OMB_TMP_DIRECTORY_PATTERN.test(entry.name)) continue;
 
     const entryPath = join(tmpRoot, entry.name);
     let entryStat: { mtimeMs: number };
@@ -414,15 +414,15 @@ export async function cleanupStaleTmpDirectories(
 
   if (staleDirectories.length === 0) {
     writeLine(dryRun
-      ? 'Dry run: no stale OMX /tmp directories found.'
-      : 'No stale OMX /tmp directories found.');
+      ? 'Dry run: no stale OMB /tmp directories found.'
+      : 'No stale OMB /tmp directories found.');
     return 0;
   }
 
   const summaryTarget = formatPlural(
     staleDirectories.length,
-    'stale OMX /tmp directory',
-    'stale OMX /tmp directories',
+    'stale OMB /tmp directory',
+    'stale OMB /tmp directories',
   );
   if (dryRun) {
     writeLine(`Dry run: would remove ${summaryTarget}:`);
@@ -447,8 +447,8 @@ export async function cleanupStaleTmpDirectories(
   writeLine(
     `Removed ${formatPlural(
       removedCount,
-      'stale OMX /tmp directory',
-      'stale OMX /tmp directories',
+      'stale OMB /tmp directory',
+      'stale OMB /tmp directories',
     )}.`,
   );
   return removedCount;
@@ -458,7 +458,7 @@ export async function cleanupCommand(
   args: string[],
   dependencies: CleanupCommandDependencies = {},
 ): Promise<void> {
-  const cleanupProcesses = dependencies.cleanupProcesses ?? cleanupOmxMcpProcesses;
+  const cleanupProcesses = dependencies.cleanupProcesses ?? cleanupOmbMcpProcesses;
   const cleanupTmpDirectories = dependencies.cleanupTmpDirectories ?? cleanupStaleTmpDirectories;
 
   await cleanupProcesses(args);

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { ombPlansDir, omxPlansDir } from '../utils/paths.js';
+import { ombPlansDir } from '../utils/paths.js';
 
 const PRD_PATTERN = /^prd-.*\.md$/i;
 const TEST_SPEC_PATTERN = /^test-?spec-.*\.md$/i;
@@ -45,12 +45,10 @@ function readMatchingPaths(dir: string, pattern: RegExp): string[] {
 }
 
 export function readPlanningArtifacts(cwd: string): PlanningArtifacts {
-  const omxPlans = omxPlansDir(cwd);
   const ombPlans = ombPlansDir(cwd);
-  const plansDir = existsSync(omxPlans) || !existsSync(ombPlans) ? omxPlans : ombPlans;
-  const omxSpecs = join(cwd, '.omx', 'specs');
+  const plansDir = existsSync(ombPlans) || !existsSync(ombPlans) ? ombPlans : ombPlans;
   const ombSpecs = join(cwd, '.omb', 'specs');
-  const specsDir = existsSync(omxSpecs) || !existsSync(ombSpecs) ? omxSpecs : ombSpecs;
+  const specsDir = existsSync(ombSpecs) || !existsSync(ombSpecs) ? ombSpecs : ombSpecs;
 
   return {
     plansDir,
@@ -123,7 +121,7 @@ export function readApprovedExecutionLaunchHint(
   if (!approvedPlan) return null;
 
   if (mode === 'team') {
-    const teamPattern = /(?<command>(?:(?:omx|omb)\s+team|\$team)\s+(?<ralph>ralph\s+)?(?<count>\d+)(?::(?<role>[a-z][a-z0-9-]*))?\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
+    const teamPattern = /(?<command>(?:(?:omb|omb)\s+team|\$team)\s+(?<ralph>ralph\s+)?(?<count>\d+)(?::(?<role>[a-z][a-z0-9-]*))?\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
     const matches = [...approvedPlan.content.matchAll(teamPattern)];
     const last = matches.at(-1);
     if (!last?.groups) return null;
@@ -140,7 +138,7 @@ export function readApprovedExecutionLaunchHint(
     };
   }
 
-  const ralphPattern = /(?<command>(?:(?:omx|omb)\s+ralph|\$ralph)\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
+  const ralphPattern = /(?<command>(?:(?:omb|omb)\s+ralph|\$ralph)\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
   const matches = [...approvedPlan.content.matchAll(ralphPattern)];
   const last = matches.at(-1);
   if (!last?.groups) return null;

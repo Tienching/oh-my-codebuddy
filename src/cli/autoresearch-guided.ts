@@ -5,7 +5,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import { dirname, join, relative, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { type AutoresearchKeepPolicy, parseSandboxContract, slugifyMissionName } from '../autoresearch/contracts.js';
-import { resolveOmxEntryPath } from '../utils/paths.js';
+import { resolveOmbCliEntryPath } from '../utils/paths.js';
 import {
   buildMissionContent,
   buildSandboxContent,
@@ -90,10 +90,10 @@ export function buildAutoresearchDeepInterviewPrompt(
 
   return [
     '$deep-interview --autoresearch',
-    'Run the deep-interview skill in autoresearch mode for `omx autoresearch`.',
+    'Run the deep-interview skill in autoresearch mode for `omb autoresearch`.',
     'Guide the user through research topic definition, evaluator readiness, keep policy, and slug/session naming.',
-    'Do not launch tmux or run `omx autoresearch` yourself.',
-    'When the user confirms launch and the evaluator is concrete, write/update these canonical artifacts under `.omx/specs/`:',
+    'Do not launch tmux or run `omb autoresearch` yourself.',
+    'When the user confirms launch and the evaluator is concrete, write/update these canonical artifacts under `.omb/specs/`:',
     '- `deep-interview-autoresearch-{slug}.md`',
     '- `autoresearch-{slug}/mission.md`',
     '- `autoresearch-{slug}/sandbox.md`',
@@ -200,7 +200,7 @@ export async function runAutoresearchNoviceBridge(
         throw new Error('Research topic is required.');
       }
 
-      const evaluatorIntent = await promptWithDefault(io, '\nHow should OMX judge success? Describe it in plain language', topic);
+      const evaluatorIntent = await promptWithDefault(io, '\nHow should OMB judge success? Describe it in plain language', topic);
       evaluatorCommand = await promptWithDefault(
         io,
         '\nEvaluator command (leave placeholder to refine further; must output {pass:boolean, score?:number} JSON before launch)',
@@ -253,7 +253,7 @@ export function spawnAutoresearchTmux(missionDir: string, slug: string): void {
     throw new Error('tmux is required for background autoresearch execution. Install tmux and try again.');
   }
 
-  const sessionName = `omx-autoresearch-${slug}`;
+  const sessionName = `omb-autoresearch-${slug}`;
   const hasSession = spawnSync('tmux', ['has-session', '-t', sessionName], { stdio: 'pipe',
       windowsHide: true,
     });
@@ -265,8 +265,8 @@ export function spawnAutoresearchTmux(missionDir: string, slug: string): void {
     );
   }
 
-  const omxPath = resolveOmxEntryPath() ?? resolve(join(__dirname, 'omx.js'));
-  const cmd = `${shellQuote(process.execPath)} ${shellQuote(omxPath)} autoresearch ${shellQuote(missionDir)}`;
+  const ombPath = resolveOmbCliEntryPath() ?? resolve(join(__dirname, 'omb.js'));
+  const cmd = `${shellQuote(process.execPath)} ${shellQuote(ombPath)} autoresearch ${shellQuote(missionDir)}`;
 
   execFileSync('tmux', ['new-session', '-d', '-s', sessionName, cmd], { stdio: 'ignore',
       windowsHide: true,

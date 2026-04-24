@@ -121,7 +121,7 @@ describe('dispatchHookEventRuntime', () => {
   });
 
   it('marks active leader-owned teams when a native stop event is dispatched without inventing leader attention', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'omx-runtime-stop-team-'));
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-runtime-stop-team-'));
     try {
       await initTeamState('stop-owned-team', 'stop test', 'executor', 1, cwd);
       const manifest = await readTeamManifestV2('stop-owned-team', cwd);

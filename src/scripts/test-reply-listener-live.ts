@@ -84,7 +84,7 @@ export async function runReplyListenerLiveSmoke(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        content: `[omx live smoke ${stamp}] reply-listener Discord connectivity probe`,
+        content: `[omb live smoke ${stamp}] reply-listener Discord connectivity probe`,
       }),
       signal: AbortSignal.timeout(10_000),
     },
@@ -121,7 +121,7 @@ export async function runReplyListenerLiveSmoke(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: config.telegramChatId,
-        text: `[omx live smoke ${stamp}] reply-listener Telegram connectivity probe`,
+        text: `[omb live smoke ${stamp}] reply-listener Telegram connectivity probe`,
       }),
       signal: AbortSignal.timeout(10_000),
     },

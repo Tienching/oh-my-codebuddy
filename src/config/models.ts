@@ -2,7 +2,7 @@
  * Model Configuration
  *
  * Reads per-mode model overrides and default-env overrides from .omb-config.json,
- * with legacy .omx-config.json compatibility.
+ * with legacy .omb-config.json compatibility.
  *
  * Config format:
  * {
@@ -29,12 +29,12 @@ export interface ModelsConfig {
   [mode: string]: string | undefined;
 }
 
-export interface OmxConfigEnv {
+export interface OmbConfigEnv {
   [key: string]: string | undefined;
 }
 
-interface OmxConfigFile {
-  env?: OmxConfigEnv;
+interface OmbConfigFile {
+  env?: OmbConfigEnv;
   models?: ModelsConfig;
 }
 
@@ -48,13 +48,8 @@ export const OMB_DEFAULT_STANDARD_MODEL_ENV = 'OMB_DEFAULT_STANDARD_MODEL';
 export const OMB_DEFAULT_SPARK_MODEL_ENV = 'OMB_DEFAULT_SPARK_MODEL';
 export const OMB_SPARK_MODEL_ENV = 'OMB_SPARK_MODEL';
 
-export const OMX_DEFAULT_FRONTIER_MODEL_ENV = 'OMX_DEFAULT_FRONTIER_MODEL';
-export const OMX_DEFAULT_STANDARD_MODEL_ENV = 'OMX_DEFAULT_STANDARD_MODEL';
-export const OMX_DEFAULT_SPARK_MODEL_ENV = 'OMX_DEFAULT_SPARK_MODEL';
-export const OMX_SPARK_MODEL_ENV = 'OMX_SPARK_MODEL';
-
 const PRIMARY_CONFIG_BASENAME = '.omb-config.json';
-const LEGACY_CONFIG_BASENAME = '.omx-config.json';
+const LEGACY_CONFIG_BASENAME = '.omb-config.json';
 
 function getManagedConfigCandidates(codebuddyHomeOverride?: string): string[] {
   const homeDir = codebuddyHomeOverride || codebuddyHome();
@@ -64,13 +59,13 @@ function getManagedConfigCandidates(codebuddyHomeOverride?: string): string[] {
   ];
 }
 
-function readOmxConfigFile(codebuddyHomeOverride?: string): OmxConfigFile | null {
+function readOmbConfigFile(codebuddyHomeOverride?: string): OmbConfigFile | null {
   for (const configPath of getManagedConfigCandidates(codebuddyHomeOverride)) {
     if (!existsSync(configPath)) continue;
     try {
       const raw = JSON.parse(readFileSync(configPath, 'utf-8'));
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-      return raw as OmxConfigFile;
+      return raw as OmbConfigFile;
     } catch {
       return null;
     }
@@ -93,7 +88,7 @@ function readCodexConfigFile(codebuddyHomeOverride?: string): CodexConfigFile | 
 }
 
 function readModelsBlock(codebuddyHomeOverride?: string): ModelsConfig | null {
-  const config = readOmxConfigFile(codebuddyHomeOverride);
+  const config = readOmbConfigFile(codebuddyHomeOverride);
   if (!config) return null;
   if (config.models && typeof config.models === 'object' && !Array.isArray(config.models)) {
     return config.models;
@@ -115,7 +110,7 @@ function readConfigEnvValue(
   keys: readonly string[],
   codebuddyHomeOverride?: string,
 ): string | undefined {
-  const config = readOmxConfigFile(codebuddyHomeOverride);
+  const config = readOmbConfigFile(codebuddyHomeOverride);
   if (!config || !config.env || typeof config.env !== 'object' || Array.isArray(config.env)) {
     return undefined;
   }
@@ -148,7 +143,7 @@ function readEnvValue(
 }
 
 export function readConfiguredEnvOverrides(codebuddyHomeOverride?: string): NodeJS.ProcessEnv {
-  const config = readOmxConfigFile(codebuddyHomeOverride);
+  const config = readOmbConfigFile(codebuddyHomeOverride);
   if (!config || !config.env || typeof config.env !== 'object' || Array.isArray(config.env)) {
     return {};
   }
@@ -161,15 +156,15 @@ export function readConfiguredEnvOverrides(codebuddyHomeOverride?: string): Node
   }
 
   const frontier = readConfigEnvValue(
-    [OMB_DEFAULT_FRONTIER_MODEL_ENV, OMX_DEFAULT_FRONTIER_MODEL_ENV],
+    [OMB_DEFAULT_FRONTIER_MODEL_ENV, OMB_DEFAULT_FRONTIER_MODEL_ENV],
     codebuddyHomeOverride,
   );
   const standard = readConfigEnvValue(
-    [OMB_DEFAULT_STANDARD_MODEL_ENV, OMX_DEFAULT_STANDARD_MODEL_ENV],
+    [OMB_DEFAULT_STANDARD_MODEL_ENV, OMB_DEFAULT_STANDARD_MODEL_ENV],
     codebuddyHomeOverride,
   );
   const spark = readConfigEnvValue(
-    [OMB_DEFAULT_SPARK_MODEL_ENV, OMB_SPARK_MODEL_ENV, OMX_DEFAULT_SPARK_MODEL_ENV, OMX_SPARK_MODEL_ENV],
+    [OMB_DEFAULT_SPARK_MODEL_ENV, OMB_SPARK_MODEL_ENV, OMB_DEFAULT_SPARK_MODEL_ENV, OMB_SPARK_MODEL_ENV],
     codebuddyHomeOverride,
   );
 
@@ -211,16 +206,16 @@ export function getEnvConfiguredMainDefaultModel(
   env: NodeJS.ProcessEnv = process.env,
   codebuddyHomeOverride?: string,
 ): string | undefined {
-  return readEnvValue(env, [OMB_DEFAULT_FRONTIER_MODEL_ENV, OMX_DEFAULT_FRONTIER_MODEL_ENV])
-    ?? readConfigEnvValue([OMB_DEFAULT_FRONTIER_MODEL_ENV, OMX_DEFAULT_FRONTIER_MODEL_ENV], codebuddyHomeOverride);
+  return readEnvValue(env, [OMB_DEFAULT_FRONTIER_MODEL_ENV, OMB_DEFAULT_FRONTIER_MODEL_ENV])
+    ?? readConfigEnvValue([OMB_DEFAULT_FRONTIER_MODEL_ENV, OMB_DEFAULT_FRONTIER_MODEL_ENV], codebuddyHomeOverride);
 }
 
 export function getEnvConfiguredStandardDefaultModel(
   env: NodeJS.ProcessEnv = process.env,
   codebuddyHomeOverride?: string,
 ): string | undefined {
-  return readEnvValue(env, [OMB_DEFAULT_STANDARD_MODEL_ENV, OMX_DEFAULT_STANDARD_MODEL_ENV])
-    ?? readConfigEnvValue([OMB_DEFAULT_STANDARD_MODEL_ENV, OMX_DEFAULT_STANDARD_MODEL_ENV], codebuddyHomeOverride);
+  return readEnvValue(env, [OMB_DEFAULT_STANDARD_MODEL_ENV, OMB_DEFAULT_STANDARD_MODEL_ENV])
+    ?? readConfigEnvValue([OMB_DEFAULT_STANDARD_MODEL_ENV, OMB_DEFAULT_STANDARD_MODEL_ENV], codebuddyHomeOverride);
 }
 
 export function getEnvConfiguredSparkDefaultModel(
@@ -230,19 +225,19 @@ export function getEnvConfiguredSparkDefaultModel(
   return readEnvValue(env, [
     OMB_DEFAULT_SPARK_MODEL_ENV,
     OMB_SPARK_MODEL_ENV,
-    OMX_DEFAULT_SPARK_MODEL_ENV,
-    OMX_SPARK_MODEL_ENV,
+    OMB_DEFAULT_SPARK_MODEL_ENV,
+    OMB_SPARK_MODEL_ENV,
   ]) ?? readConfigEnvValue([
     OMB_DEFAULT_SPARK_MODEL_ENV,
     OMB_SPARK_MODEL_ENV,
-    OMX_DEFAULT_SPARK_MODEL_ENV,
-    OMX_SPARK_MODEL_ENV,
+    OMB_DEFAULT_SPARK_MODEL_ENV,
+    OMB_SPARK_MODEL_ENV,
   ], codebuddyHomeOverride);
 }
 
 /**
  * Get the envvar-backed main/default model.
- * Resolution: OMB_DEFAULT_FRONTIER_MODEL > OMX_DEFAULT_FRONTIER_MODEL > DEFAULT_FRONTIER_MODEL
+ * Resolution: OMB_DEFAULT_FRONTIER_MODEL > OMB_DEFAULT_FRONTIER_MODEL > DEFAULT_FRONTIER_MODEL
  */
 export function getMainDefaultModel(codebuddyHomeOverride?: string): string {
   return getEnvConfiguredMainDefaultModel(process.env, codebuddyHomeOverride)
@@ -251,7 +246,7 @@ export function getMainDefaultModel(codebuddyHomeOverride?: string): string {
 
 /**
  * Get the envvar-backed standard/default subagent model.
- * Resolution: OMB_DEFAULT_STANDARD_MODEL > OMX_DEFAULT_STANDARD_MODEL > DEFAULT_STANDARD_MODEL
+ * Resolution: OMB_DEFAULT_STANDARD_MODEL > OMB_DEFAULT_STANDARD_MODEL > DEFAULT_STANDARD_MODEL
  */
 export function getStandardDefaultModel(codebuddyHomeOverride?: string): string {
   return getEnvConfiguredStandardDefaultModel(process.env, codebuddyHomeOverride)
@@ -281,7 +276,7 @@ const TEAM_LOW_COMPLEXITY_MODEL_KEYS = [
 
 /**
  * Get the envvar-backed spark/low-complexity default model.
- * Resolution: OMB_DEFAULT_SPARK_MODEL > OMB_SPARK_MODEL > OMX_DEFAULT_SPARK_MODEL > OMX_SPARK_MODEL > explicit low-complexity key(s) > DEFAULT_SPARK_MODEL
+ * Resolution: OMB_DEFAULT_SPARK_MODEL > OMB_SPARK_MODEL > OMB_DEFAULT_SPARK_MODEL > OMB_SPARK_MODEL > explicit low-complexity key(s) > DEFAULT_SPARK_MODEL
  */
 export function getSparkDefaultModel(codebuddyHomeOverride?: string): string {
   return getEnvConfiguredSparkDefaultModel(process.env, codebuddyHomeOverride)
@@ -291,7 +286,7 @@ export function getSparkDefaultModel(codebuddyHomeOverride?: string): string {
 
 /**
  * Get the low-complexity team worker model.
- * Resolution: explicit low-complexity key(s) > OMB_DEFAULT_SPARK_MODEL > OMB_SPARK_MODEL > OMX_DEFAULT_SPARK_MODEL > OMX_SPARK_MODEL > DEFAULT_SPARK_MODEL
+ * Resolution: explicit low-complexity key(s) > OMB_DEFAULT_SPARK_MODEL > OMB_SPARK_MODEL > OMB_DEFAULT_SPARK_MODEL > OMB_SPARK_MODEL > DEFAULT_SPARK_MODEL
  */
 export function getTeamLowComplexityModel(codebuddyHomeOverride?: string): string {
   return readTeamLowComplexityOverride(codebuddyHomeOverride) ?? getSparkDefaultModel(codebuddyHomeOverride);

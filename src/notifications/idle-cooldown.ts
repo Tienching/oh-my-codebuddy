@@ -5,7 +5,7 @@
  * minimum interval between dispatches. Ported from OMC persistent-mode hook.
  *
  * Config key : notifications.idleCooldownSeconds in ~/.codex/.omb-config.json
- * Env var    : OMB_IDLE_COOLDOWN_SECONDS / OMX_IDLE_COOLDOWN_SECONDS  (overrides config)
+ * Env var    : OMB_IDLE_COOLDOWN_SECONDS / OMB_IDLE_COOLDOWN_SECONDS  (overrides config)
  * State file : .omb/state/idle-notif-cooldown.json
  *              (session-scoped when sessionId is available)
  *
@@ -25,9 +25,9 @@ const SESSION_IDLE_HOOK_STATE_FILE = 'session-idle-hook-state.json';
 function readEnvCooldownOverride(): string | undefined {
   const legacy = process.env.OMB_IDLE_COOLDOWN_SECONDS;
   if (legacy !== undefined) return legacy;
-  const canonical = process.env.OMX_IDLE_COOLDOWN_SECONDS;
+  const canonical = process.env.OMB_IDLE_COOLDOWN_SECONDS;
   if (canonical !== undefined) {
-    delete process.env.OMX_IDLE_COOLDOWN_SECONDS;
+    delete process.env.OMB_IDLE_COOLDOWN_SECONDS;
     return canonical;
   }
   return undefined;
@@ -199,7 +199,7 @@ export function recordSessionIdleHookEventSent(stateDir: string, sessionId?: str
 }
 function resolveNotificationConfigPath(): string {
   const home = codebuddyHome();
-  const canonical = join(home, '.omx-config.json');
+  const canonical = join(home, '.omb-config.json');
   if (existsSync(canonical)) return canonical;
   return join(home, '.omb-config.json');
 }

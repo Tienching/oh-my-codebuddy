@@ -9,7 +9,7 @@ import type { SetupAction } from "../plan.js";
 import type { AssetInstaller, InstallerOptions } from "./types.js";
 import {
   addGeneratedAgentsMarker,
-  isOmxGeneratedAgentsMd,
+  isOmbGeneratedAgentsMd,
 } from "../../utils/agents-md.js";
 import {
   resolveAgentsModelTableContext,
@@ -75,7 +75,7 @@ export const agentsMdInstaller: AssetInstaller = {
       // Check if existing is OMB-generated managed content
       if (existsSync(action.destination)) {
         const existing = await readFile(action.destination, "utf-8");
-        if (isOmxGeneratedAgentsMd(existing)) {
+        if (isOmbGeneratedAgentsMd(existing)) {
           // Safe to update managed content
         }
       }

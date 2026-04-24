@@ -1,10 +1,10 @@
 # oh-my-codebuddy v0.9.0
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Yeachan-Heo/oh-my-codebuddy/v0.9.0/docs/shared/omx-character-spark-initiative.jpg" alt="OMX character sparked for the Spark Initiative" width="720">
+  <img src="https://raw.githubusercontent.com/Yeachan-Heo/oh-my-codebuddy/v0.9.0/docs/shared/omb-character-spark-initiative.jpg" alt="OMB character sparked for the Spark Initiative" width="720">
 </p>
 
-`0.9.0` is the Spark Initiative release: OMX now has a stronger native fast path for repository discovery, shell-native inspection, and cross-platform native distribution.
+`0.9.0` is the Spark Initiative release: OMB now has a stronger native fast path for repository discovery, shell-native inspection, and cross-platform native distribution.
 
 ## Highlights
 
@@ -49,7 +49,7 @@ omb sparkshell --tmux-pane %12 --tail-lines 400
 
 ## Important Spark Initiative notes
 
-- Users can install OMX normally with `npm install -g oh-my-codebuddy`.
+- Users can install OMB normally with `npm install -g oh-my-codebuddy`.
 - The npm tarball intentionally excludes staged cross-platform native binaries.
 - Tagged releases publish verified native archives for `omb-explore-harness` and `omb-sparkshell`.
 - Packaged installs hydrate the matching native binary through `native-release-manifest.json`.
@@ -57,7 +57,7 @@ omb sparkshell --tmux-pane %12 --tail-lines 400
 
 ## Upgrade note
 
-If you use project-scoped OMX installs, rerun:
+If you use project-scoped OMB installs, rerun:
 
 ```bash
 omb setup --force --scope project
@@ -77,8 +77,8 @@ Validated locally on `dev` before tagging:
 - `npm run build:full`
 - `npm run test:explore`
 - `npm run test:sparkshell`
-- `node bin/omx.js doctor`
-- `node bin/omx.js setup --dry-run`
+- `node bin/omb.js doctor`
+- `node bin/omb.js setup --dry-run`
 - `npm pack --dry-run`
 
 ## Notable PRs
@@ -87,7 +87,7 @@ Validated locally on `dev` before tagging:
 - [#784](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/784) — cross-platform native publishing and release-pipeline follow-through
 - [#785](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/785) — team runtime lifecycle and cleanup hardening
 - [#786](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/786) — nested help routing cleanup
-- [#787](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/787) — centralized OMX default model resolution
+- [#787](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/787) — centralized OMB default model resolution
 - [#788](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/788) — HUD branch/config loading hardening
 - [#789](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/789) — distribute generated aspect tasks across workers
 - [#793](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/793) — Windows Codex command shim probing fix

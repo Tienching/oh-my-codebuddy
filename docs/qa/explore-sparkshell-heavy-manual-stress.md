@@ -25,12 +25,12 @@ The following command forms were verified during this doc pass:
 
 | Command | Result |
 |---|---|
-| `node bin/omx.js explore --help` | PASS |
-| `node bin/omx.js sparkshell --help` | PASS |
-| `node bin/omx.js sparkshell git --version` | PASS |
-| `node bin/omx.js version` | PASS |
-| `for i in $(seq 1 20); do node bin/omx.js sparkshell git --version; done` | PASS (bounded sample verified locally) |
-| `seq 1 5 | xargs -I{} -P5 node bin/omx.js sparkshell git --version` | PASS (bounded sample verified locally) |
+| `node bin/omb.js explore --help` | PASS |
+| `node bin/omb.js sparkshell --help` | PASS |
+| `node bin/omb.js sparkshell git --version` | PASS |
+| `node bin/omb.js version` | PASS |
+| `for i in $(seq 1 20); do node bin/omb.js sparkshell git --version; done` | PASS (bounded sample verified locally) |
+| `seq 1 5 | xargs -I{} -P5 node bin/omb.js sparkshell git --version` | PASS (bounded sample verified locally) |
 
 Environment limitation during this doc pass:
 - `tmux -V` worked, but detached tmux socket access failed with `error connecting to /tmp/tmux-1000/default (Operation not permitted)`, so the `--tmux-pane` examples below are **documented but not end-to-end verified in this session**.
@@ -116,19 +116,19 @@ omb sparkshell --tmux-pane <pane-id> --tail-lines 400
 Verified direct-command example:
 
 ```bash
-node bin/omx.js sparkshell git --version
+node bin/omb.js sparkshell git --version
 ```
 
 Suggested repeated-run shape:
 
 ```bash
-for i in $(seq 1 20); do node bin/omx.js sparkshell git --version; done
+for i in $(seq 1 20); do node bin/omb.js sparkshell git --version; done
 ```
 
 Suggested concurrent-run shape:
 
 ```bash
-seq 1 5 | xargs -I{} -P5 node bin/omx.js sparkshell git --version
+seq 1 5 | xargs -I{} -P5 node bin/omb.js sparkshell git --version
 ```
 
 **Evidence to capture**
@@ -193,8 +193,8 @@ Suggested corpus dimensions:
 Useful direct-command baseline:
 
 ```bash
-node bin/omx.js sparkshell --help
-node bin/omx.js explore --help
+node bin/omb.js sparkshell --help
+node bin/omb.js explore --help
 ```
 
 **Evidence to capture**

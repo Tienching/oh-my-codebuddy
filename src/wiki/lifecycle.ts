@@ -4,7 +4,7 @@
 
 import { existsSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
-import { codebuddyHome, ombProjectMemoryPath, omxProjectMemoryPath } from '../utils/paths.js';
+import { codebuddyHome, ombProjectMemoryPath } from '../utils/paths.js';
 import {
   appendLogUnsafe,
   getWikiDir,
@@ -19,7 +19,7 @@ import {
 import { DEFAULT_WIKI_CONFIG, type WikiConfig, WIKI_SCHEMA_VERSION } from './types.js';
 
 function loadWikiConfig(root: string): WikiConfig {
-  const candidates = [join(root, '.omb-config.json'), join(root, '.omx-config.json'), join(codebuddyHome(), '.omb-config.json'), join(codebuddyHome(), '.omx-config.json')];
+  const candidates = [join(root, '.omb-config.json'), join(root, '.omb-config.json'), join(codebuddyHome(), '.omb-config.json'), join(codebuddyHome(), '.omb-config.json')];
 
   for (const path of candidates) {
     try {
@@ -158,7 +158,7 @@ export function onPreCompact(data: { cwd?: string }): { additionalContext?: stri
 function feedProjectMemory(root: string): void {
   try {
     const canonicalProjectMemoryPath = ombProjectMemoryPath(root);
-    const projectMemoryPath = existsSync(canonicalProjectMemoryPath) ? canonicalProjectMemoryPath : omxProjectMemoryPath(root);
+    const projectMemoryPath = existsSync(canonicalProjectMemoryPath) ? canonicalProjectMemoryPath : ombProjectMemoryPath(root);
     if (!existsSync(projectMemoryPath)) return;
 
     const parsed = JSON.parse(readFileSync(projectMemoryPath, 'utf8')) as Record<string, unknown>;

@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { dirname, join, sep } from 'path';
 
 function mirrorLockDir(lockDir: string): string | null {
-  const canonicalSegment = `${sep}.omx${sep}state${sep}`;
+  const canonicalSegment = `${sep}.omb${sep}state${sep}`;
   const legacySegment = `${sep}.omb${sep}state${sep}`;
   if (lockDir.includes(canonicalSegment)) {
     return lockDir.replace(canonicalSegment, legacySegment);
@@ -168,13 +168,11 @@ export async function withTaskClaimLock<T>(
   }
 
   try {
-    try {
-      await writeFile(ownerPath, ownerToken, 'utf8');
-    } catch (error) {
-      await rm(lockDir, { recursive: true, force: true });
-      throw error;
-    }
+    await writeFile(ownerPath, ownerToken, 'utf8');
     return { ok: true, value: await fn() };
+  } catch (error) {
+    await rm(lockDir, { recursive: true, force: true });
+    throw error;
   } finally {
     try {
       const currentOwner = await readFile(ownerPath, 'utf8');

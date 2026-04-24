@@ -30,7 +30,7 @@ Expected at time of writing:
 3. **Config compatibility**
    - `collab` -> `multi_agent` migration in generated config + tests/docs.
 4. **Lifecycle/process handling**
-   - `bin/omx.js` now awaits `main(...)` and exits explicitly.
+   - `bin/omb.js` now awaits `main(...)` and exits explicitly.
 
 ## 3) Automated QA
 
@@ -73,7 +73,7 @@ Pass criteria:
 - Verify deprecated `collab` key is not reintroduced.
 
 ### E. `/exit` process termination
-- Launch `omx` and invoke `/exit`.
+- Launch `omb` and invoke `/exit`.
 - Verify process exits cleanly without hanging.
 
 ## 5) Release Gate

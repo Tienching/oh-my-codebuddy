@@ -1,7 +1,7 @@
 /**
  * OMB HUD - State file readers
  *
- * Reads .omb/state/ files to build HUD render context, with legacy .omx fallback.
+ * Reads .omb/state/ files to build HUD render context, with legacy .omb fallback.
  */
 
 import { readFile } from 'fs/promises';
@@ -9,7 +9,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
-import { ombStateDir, omxStateDir } from '../utils/paths.js';
+import { ombStateDir } from '../utils/paths.js';
 import { findGitLayout, readGitLayoutFile } from '../utils/git-layout.js';
 import { getDefaultBridge, isBridgeEnabled } from '../runtime/bridge.js';
 import type { RuntimeSnapshot } from '../runtime/bridge.js';
@@ -44,7 +44,7 @@ async function readJsonFile<T>(path: string): Promise<T | null> {
 }
 
 function getLegacyModeStatePaths(cwd: string, mode: string, sessionId?: string): string[] {
-  const baseDir = join(cwd, '.omx', 'state');
+  const baseDir = join(cwd, '.omb', 'state');
   const filename = `${mode}-state.json`;
   if (sessionId) {
     return [join(baseDir, 'sessions', sessionId, filename), join(baseDir, filename)];
@@ -185,26 +185,26 @@ export async function readTeamState(cwd: string): Promise<TeamStateForHud | null
 export async function readMetrics(cwd: string): Promise<HudMetrics | null> {
   return (
     await readJsonFile<HudMetrics>(join(cwd, '.omb', 'metrics.json'))
-  ) ?? readJsonFile<HudMetrics>(join(cwd, '.omx', 'metrics.json'));
+  ) ?? readJsonFile<HudMetrics>(join(cwd, '.omb', 'metrics.json'));
 }
 
 export async function readHudNotifyState(cwd: string): Promise<HudNotifyState | null> {
   return (
     await readJsonFile<HudNotifyState>(join(ombStateDir(cwd), 'hud-state.json'))
-  ) ?? readJsonFile<HudNotifyState>(join(omxStateDir(cwd), 'hud-state.json'));
+  ) ?? readJsonFile<HudNotifyState>(join(ombStateDir(cwd), 'hud-state.json'));
 }
 
 export async function readSessionState(cwd: string): Promise<SessionStateForHud | null> {
   const state = (
     await readJsonFile<SessionStateForHud>(join(ombStateDir(cwd), 'session.json'))
-  ) ?? await readJsonFile<SessionStateForHud>(join(omxStateDir(cwd), 'session.json'));
+  ) ?? await readJsonFile<SessionStateForHud>(join(ombStateDir(cwd), 'session.json'));
   return state?.session_id ? state : null;
 }
 
 export async function readHudConfig(cwd: string): Promise<ResolvedHudConfig> {
   const config = (
     await readJsonFile<HudConfig>(join(cwd, '.omb', 'hud-config.json'))
-  ) ?? await readJsonFile<HudConfig>(join(cwd, '.omx', 'hud-config.json'));
+  ) ?? await readJsonFile<HudConfig>(join(cwd, '.omb', 'hud-config.json'));
   return normalizeHudConfig(config);
 }
 
@@ -226,7 +226,7 @@ export type GitRunner = (cwd: string, args: string[]) => string | null;
  * spawning console windows (conhost.exe flicker).  Falls back to execSync
  * for non-Windows platforms or unrecognised arguments.
  *
- * See: https://github.com/Yeachan-Heo/oh-my-codex/issues/1100
+ * See: https://github.com/Yeachan-Heo/oh-my-codebuddy/issues/1100
  */
 function runGit(cwd: string, args: string[]): string | null {
   if (process.platform === 'win32') {
@@ -452,7 +452,7 @@ export async function readAllState(cwd: string, config: ResolvedHudConfig = DEFA
   // for authority/backlog/readiness display over JS-inferred state.
   let runtimeSnapshot: RuntimeSnapshot | null = null;
   if (isBridgeEnabled()) {
-    const stateDir = omxStateDir(cwd);
+    const stateDir = ombStateDir(cwd);
     const bridge = getDefaultBridge(stateDir);
     runtimeSnapshot = bridge.readCompatFile<RuntimeSnapshot>('snapshot.json');
   }

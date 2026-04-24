@@ -28,7 +28,7 @@ async function loadModule(rel: string) {
 }
 
 async function withTempWorkingDir(run: (cwd: string) => Promise<void>): Promise<void> {
-  const cwd = await mkdtemp(join(tmpdir(), 'omx-regression-205-'));
+  const cwd = await mkdtemp(join(tmpdir(), 'omb-regression-205-'));
   try {
     await run(cwd);
   } finally {
@@ -71,7 +71,7 @@ if [[ "$cmd" == "display-message" ]]; then
     exit 0
   fi
   if [[ "$format" == "#S" ]]; then
-    echo "\${OMX_TEST_TMUX_SESSION_NAME:-devsess}"
+    echo "\${OMB_TEST_TMUX_SESSION_NAME:-devsess}"
     exit 0
   fi
   exit 0
@@ -120,13 +120,13 @@ function runNotifyHook(
       ...process.env,
       PATH: `${fakeBinDir}:${process.env.PATH || ''}`,
       CODEX_HOME: codexHome,
-      OMX_SESSION_ID: 'sess-managed-regression',
-      OMX_TEST_TMUX_SESSION_NAME: buildTmuxSessionName(cwd, 'sess-managed-regression'),
+      OMB_SESSION_ID: 'sess-managed-regression',
+      OMB_TEST_TMUX_SESSION_NAME: buildTmuxSessionName(cwd, 'sess-managed-regression'),
       TMUX_PANE: '%99',
       TMUX: '1',
-      OMX_TEAM_WORKER: '',
-      OMX_TEAM_LEADER_NUDGE_MS: '9999999',
-      OMX_TEAM_LEADER_STALE_MS: '9999999',
+      OMB_TEAM_WORKER: '',
+      OMB_TEAM_LEADER_NUDGE_MS: '9999999',
+      OMB_TEAM_LEADER_STALE_MS: '9999999',
     },
   });
 }
@@ -170,10 +170,10 @@ describe('regression-205: detectStallPattern matches "if you want"', () => {
     );
   });
 
-  it('ignores OMX injection-marker lines when matching patterns', async () => {
+  it('ignores OMB injection-marker lines when matching patterns', async () => {
     const { detectStallPattern, DEFAULT_STALL_PATTERNS } = await loadModule('notify-hook/auto-nudge.js');
     assert.equal(
-      detectStallPattern('keep going [OMX_TMUX_INJECT]', DEFAULT_STALL_PATTERNS),
+      detectStallPattern('keep going [OMB_TMUX_INJECT]', DEFAULT_STALL_PATTERNS),
       false,
     );
   });
@@ -196,23 +196,23 @@ describe('regression-205: notify-hook records pending stall state on "if you wan
   let originalTeamStateRoot: string | undefined;
 
   before(() => {
-    originalTeamWorker = process.env.OMX_TEAM_WORKER;
-    originalTeamStateRoot = process.env.OMX_TEAM_STATE_ROOT;
-    delete process.env.OMX_TEAM_WORKER;
-    delete process.env.OMX_TEAM_STATE_ROOT;
+    originalTeamWorker = process.env.OMB_TEAM_WORKER;
+    originalTeamStateRoot = process.env.OMB_TEAM_STATE_ROOT;
+    delete process.env.OMB_TEAM_WORKER;
+    delete process.env.OMB_TEAM_STATE_ROOT;
   });
 
   after(() => {
-    if (originalTeamWorker === undefined) delete process.env.OMX_TEAM_WORKER;
-    else process.env.OMX_TEAM_WORKER = originalTeamWorker;
-    if (originalTeamStateRoot === undefined) delete process.env.OMX_TEAM_STATE_ROOT;
-    else process.env.OMX_TEAM_STATE_ROOT = originalTeamStateRoot;
+    if (originalTeamWorker === undefined) delete process.env.OMB_TEAM_WORKER;
+    else process.env.OMB_TEAM_WORKER = originalTeamWorker;
+    if (originalTeamStateRoot === undefined) delete process.env.OMB_TEAM_STATE_ROOT;
+    else process.env.OMB_TEAM_STATE_ROOT = originalTeamStateRoot;
   });
 
   it('records pending stall state instead of injecting immediately', async () => {
     await withTempWorkingDir(async (cwd) => {
-      const stateDir = join(cwd, '.omx', 'state');
-      const logsDir = join(cwd, '.omx', 'logs');
+      const stateDir = join(cwd, '.omb', 'state');
+      const logsDir = join(cwd, '.omb', 'logs');
       const codexHome = join(cwd, 'codex-home');
       const fakeBinDir = join(cwd, 'fake-bin');
       const tmuxLogPath = join(cwd, 'tmux.log');
@@ -222,7 +222,7 @@ describe('regression-205: notify-hook records pending stall state on "if you wan
       await mkdir(codexHome, { recursive: true });
       await mkdir(fakeBinDir, { recursive: true });
 
-      await writeJson(join(codexHome, '.omx-config.json'), {
+      await writeJson(join(codexHome, '.omb-config.json'), {
         autoNudge: { enabled: true, delaySec: 0 },
       });
       await writeSessionStart(cwd, 'sess-managed-regression');
@@ -239,7 +239,7 @@ describe('regression-205: notify-hook records pending stall state on "if you wan
       const tmuxLog = await readFile(tmuxLogPath, 'utf8');
       assert.doesNotMatch(
         tmuxLog,
-        /send-keys -t %99 -l yes, proceed \[OMX_TMUX_INJECT\]/,
+        /send-keys -t %99 -l yes, proceed \[OMB_TMUX_INJECT\]/,
         'default notify-hook path should not inject before the real stall window elapses',
       );
 
@@ -264,10 +264,10 @@ describe('regression-205: resolveTeamStateDirForWorker is exported from team-wor
     );
   });
 
-  it('uses OMX_TEAM_STATE_ROOT env var when set', async () => {
+  it('uses OMB_TEAM_STATE_ROOT env var when set', async () => {
     const { resolveTeamStateDirForWorker } = await loadModule('notify-hook/team-worker.js');
-    const saved = process.env.OMX_TEAM_STATE_ROOT;
-    process.env.OMX_TEAM_STATE_ROOT = '/custom/state/root';
+    const saved = process.env.OMB_TEAM_STATE_ROOT;
+    process.env.OMB_TEAM_STATE_ROOT = '/custom/state/root';
     try {
       const result = await resolveTeamStateDirForWorker(
         '/some/cwd',
@@ -276,36 +276,36 @@ describe('regression-205: resolveTeamStateDirForWorker is exported from team-wor
       assert.equal(result, '/custom/state/root');
     } finally {
       if (saved === undefined) {
-        delete process.env.OMX_TEAM_STATE_ROOT;
+        delete process.env.OMB_TEAM_STATE_ROOT;
       } else {
-        process.env.OMX_TEAM_STATE_ROOT = saved;
+        process.env.OMB_TEAM_STATE_ROOT = saved;
       }
     }
   });
 
-  it('falls back to {cwd}/.omx/state when no env var and no team dir exists', async () => {
+  it('falls back to {cwd}/.omb/state when no env var and no team dir exists', async () => {
     const { resolveTeamStateDirForWorker } = await loadModule('notify-hook/team-worker.js');
-    const savedRoot = process.env.OMX_TEAM_STATE_ROOT;
-    const savedLeader = process.env.OMX_TEAM_LEADER_CWD;
-    delete process.env.OMX_TEAM_STATE_ROOT;
-    delete process.env.OMX_TEAM_LEADER_CWD;
+    const savedRoot = process.env.OMB_TEAM_STATE_ROOT;
+    const savedLeader = process.env.OMB_TEAM_LEADER_CWD;
+    delete process.env.OMB_TEAM_STATE_ROOT;
+    delete process.env.OMB_TEAM_LEADER_CWD;
     try {
       const cwd = '/nonexistent/cwd-that-has-no-team-dir';
       const result = await resolveTeamStateDirForWorker(
         cwd,
         { teamName: 'fix-ts', workerName: 'worker-1' },
       );
-      assert.equal(result, join(cwd, '.omx', 'state'));
+      assert.equal(result, join(cwd, '.omb', 'state'));
     } finally {
       if (savedRoot === undefined) {
-        delete process.env.OMX_TEAM_STATE_ROOT;
+        delete process.env.OMB_TEAM_STATE_ROOT;
       } else {
-        process.env.OMX_TEAM_STATE_ROOT = savedRoot;
+        process.env.OMB_TEAM_STATE_ROOT = savedRoot;
       }
       if (savedLeader === undefined) {
-        delete process.env.OMX_TEAM_LEADER_CWD;
+        delete process.env.OMB_TEAM_LEADER_CWD;
       } else {
-        process.env.OMX_TEAM_LEADER_CWD = savedLeader;
+        process.env.OMB_TEAM_LEADER_CWD = savedLeader;
       }
     }
   });

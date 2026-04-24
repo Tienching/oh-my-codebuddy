@@ -5,7 +5,7 @@ Target version: **0.12.3**
 Comparison base: **`v0.12.2..HEAD`**
 Verdict: **GO** ✅
 
-`0.12.3` is a tight follow-up to `0.12.2` that ships PR [#1364](https://github.com/Yeachan-Heo/oh-my-codex/pull/1364) (`$team` prompt-routing correctness and duplicate team launch teardown), which was intended for `0.12.2` but finished its conflict resolution after the `0.12.2` cut, plus release-collateral alignment.
+`0.12.3` is a tight follow-up to `0.12.2` that ships PR [#1364](https://github.com/Yeachan-Heo/oh-my-codebuddy/pull/1364) (`$team` prompt-routing correctness and duplicate team launch teardown), which was intended for `0.12.2` but finished its conflict resolution after the `0.12.2` cut, plus release-collateral alignment.
 
 ## Scope reviewed
 

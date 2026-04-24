@@ -8,7 +8,7 @@ This is a **setup-flow patch release** focused on making `omb setup` refresh beh
 
 ## TL;DR
 
-- `omb setup` now refreshes managed OMX artifacts by default instead of leaving stale generated content behind.
+- `omb setup` now refreshes managed OMB artifacts by default instead of leaving stale generated content behind.
 - Managed refresh paths now preserve backups where applicable before overwriting files.
 - Setup prompts before upgrading managed Codex model references from `gpt-5.3-codex` to `gpt-5.4`.
 - Added deeper refresh/idempotency regression coverage for setup and config generation paths.
@@ -18,9 +18,9 @@ This is a **setup-flow patch release** focused on making `omb setup` refresh beh
 
 ## What changed
 
-### 1) Managed OMX artifacts refresh by default
+### 1) Managed OMB artifacts refresh by default
 
-Setup now treats managed OMX artifacts as refreshable outputs rather than one-time drops. Re-running `omb setup` updates shipped artifacts more consistently, helping existing installations stay aligned with current templates and generated assets.
+Setup now treats managed OMB artifacts as refreshable outputs rather than one-time drops. Re-running `omb setup` updates shipped artifacts more consistently, helping existing installations stay aligned with current templates and generated assets.
 
 **Why this matters:**
 - reduces stale generated files after upgrades
@@ -32,7 +32,7 @@ Setup now treats managed OMX artifacts as refreshable outputs rather than one-ti
 When setup replaces managed artifacts, it now does so with stronger backup behavior where applicable.
 
 **Why this matters:**
-- lowers risk when refreshing existing local OMX-managed files
+- lowers risk when refreshing existing local OMB-managed files
 - gives users a clearer recovery path if they need to inspect prior state
 - makes setup automation less destructive
 
@@ -58,7 +58,7 @@ This release adds/extends tests and validation hardening around:
 
 ## Included commits
 
-- `fed035b` — feat(setup): refresh managed OMX artifacts by default with backups
+- `fed035b` — feat(setup): refresh managed OMB artifacts by default with backups
 - `6aa577d` — feat(setup): prompt before upgrading gpt-5.3-codex to gpt-5.4
 
 ---

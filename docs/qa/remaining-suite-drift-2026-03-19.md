@@ -2,7 +2,7 @@
 
 Date: **2026-03-19**  
 Baseline commit: **`8106d67`**  
-Execution surface: active OMX team worker pane (`worker-3`) with local verification run from repository root after clearing `OMB_TEAM_*` env vars.
+Execution surface: active OMB team worker pane (`worker-3`) with local verification run from repository root after clearing `OMB_TEAM_*` env vars.
 
 ## Scope
 
@@ -39,7 +39,7 @@ Failing test:
 
 Observed mismatch:
 
-- expected `instructions-path: .../.omb/state/sessions/omx-*/AGENTS.md`
+- expected `instructions-path: .../.omb/state/sessions/omb-*/AGENTS.md`
 - actual `instructions-path: .../.omb/team/continue-from-clean-commit-810/worktrees/worker-3/AGENTS.md`
 
 Interpretation:
@@ -51,7 +51,7 @@ Interpretation:
 Evidence excerpt:
 
 ```text
-expected: /instructions-path:.*\/\.omb\/state\/sessions\/omx-.*\/AGENTS\.md/
+expected: /instructions-path:.*\/\.omb\/state\/sessions\/omb-.*\/AGENTS\.md/
 actual: fake-codex:exec --model gpt-5 say hi -c model_instructions_file="/home/.../.omb/team/continue-from-clean-commit-810/worktrees/worker-3/AGENTS.md"
 ```
 

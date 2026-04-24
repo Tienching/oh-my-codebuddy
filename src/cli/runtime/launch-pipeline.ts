@@ -21,6 +21,9 @@ import {
   CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG,
   HIGH_REASONING_FLAG,
   XHIGH_REASONING_FLAG,
+  DEPRECATED_HIGH_REASONING_MSG,
+  DEPRECATED_XHIGH_REASONING_MSG,
+  EFFORT_FLAG,
   SPARK_FLAG,
   MADMAX_SPARK_FLAG,
   CONFIG_FLAG,
@@ -63,7 +66,7 @@ import {
   isTmuxAvailable,
 } from "../../team/tmux-session.js";
 import { getPackageRoot } from "../../utils/package.js";
-import { codexConfigPath, rememberOmxLaunchContext, resolveOmxEntryPath } from "../../utils/paths.js";
+import { codexConfigPath, rememberOmbLaunchContext, resolveOmbCliEntryPath } from "../../utils/paths.js";
 import { repairConfigIfNeeded } from "../../config/generator.js";
 import { HUD_TMUX_HEIGHT_LINES } from "../../hud/constants.js";
 import {
@@ -111,14 +114,12 @@ export interface LaunchPipelineResult {
 
 const REASONING_KEY = "model_reasoning_effort";
 const MODEL_INSTRUCTIONS_FILE_KEY = "model_instructions_file";
-const TEAM_WORKER_LAUNCH_ARGS_ENV = "OMX_TEAM_WORKER_LAUNCH_ARGS";
-const TEAM_INHERIT_LEADER_FLAGS_ENV = "OMX_TEAM_INHERIT_LEADER_FLAGS";
+const TEAM_WORKER_LAUNCH_ARGS_ENV = "OMB_TEAM_WORKER_LAUNCH_ARGS";
+const TEAM_INHERIT_LEADER_FLAGS_ENV = "OMB_TEAM_INHERIT_LEADER_FLAGS";
 const OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = "OMB_BYPASS_DEFAULT_SYSTEM_PROMPT";
-const OMX_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = "OMX_BYPASS_DEFAULT_SYSTEM_PROMPT";
 const OMB_MODEL_INSTRUCTIONS_FILE_ENV = "OMB_MODEL_INSTRUCTIONS_FILE";
-const OMX_MODEL_INSTRUCTIONS_FILE_ENV = "OMX_MODEL_INSTRUCTIONS_FILE";
-const OMX_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMX_RALPH_APPEND_INSTRUCTIONS_FILE";
-const OMX_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV = "OMX_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE";
+const OMB_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_RALPH_APPEND_INSTRUCTIONS_FILE";
+const OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE";
 const REASONING_MODES = ["low", "medium", "high", "xhigh"] as const;
 type ReasoningMode = (typeof REASONING_MODES)[number];
 const REASONING_MODE_SET = new Set<string>(REASONING_MODES);
@@ -302,7 +303,7 @@ function hasModelInstructionsOverride(args: string[]): boolean {
 function shouldBypassDefaultSystemPrompt(env: NodeJS.ProcessEnv): boolean {
   const ombValue = env[OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV];
   if (typeof ombValue === "string" && ombValue.trim() !== "") return ombValue !== "0";
-  return env[OMX_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV] !== "0";
+  return env[OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV] !== "0";
 }
 
 function resolveModelInstructionsFilePath(
@@ -310,7 +311,7 @@ function resolveModelInstructionsFilePath(
   env: NodeJS.ProcessEnv,
   defaultFilePath?: string,
 ): string {
-  return env[OMB_MODEL_INSTRUCTIONS_FILE_ENV] || env[OMX_MODEL_INSTRUCTIONS_FILE_ENV] || defaultFilePath || join(cwd, "AGENTS.md");
+  return env[OMB_MODEL_INSTRUCTIONS_FILE_ENV] || env[OMB_MODEL_INSTRUCTIONS_FILE_ENV] || defaultFilePath || join(cwd, "AGENTS.md");
 }
 
 function parseLegacyConfigOverride(rawValue: string):
@@ -340,13 +341,24 @@ export function normalizeCodexLaunchArgs(args: string[]): string[] {
   let wantsBypass = false;
   let hasBypass = false;
   let reasoningMode: ReasoningMode | null = null;
+  const deprecationWarnings: string[] = [];
 
   for (let index = 0; index < launchPolicyParsed.remainingArgs.length; index++) {
     const arg = launchPolicyParsed.remainingArgs[index];
     if (arg === MADMAX_FLAG || arg === YOLO_FLAG || arg === CODEBUDDY_LEGACY_BYPASS_FLAG) { wantsBypass = true; continue; }
     if (arg === CODEBUDDY_BYPASS_FLAG) { wantsBypass = true; if (!hasBypass) { normalized.push(arg); hasBypass = true; } continue; }
-    if (arg === HIGH_REASONING_FLAG) { reasoningMode = "high"; continue; }
-    if (arg === XHIGH_REASONING_FLAG) { reasoningMode = "xhigh"; continue; }
+    // Deprecated --high/--xhigh → map to effort (with warning)
+    if (arg === HIGH_REASONING_FLAG) { reasoningMode = "high"; deprecationWarnings.push(DEPRECATED_HIGH_REASONING_MSG); continue; }
+    if (arg === XHIGH_REASONING_FLAG) { reasoningMode = "xhigh"; deprecationWarnings.push(DEPRECATED_XHIGH_REASONING_MSG); continue; }
+    // --effort <low|medium|high|xhigh> — explicit reasoning effort
+    if (arg === EFFORT_FLAG) {
+      const next = launchPolicyParsed.remainingArgs[index + 1];
+      if (next && REASONING_MODE_SET.has(next)) { reasoningMode = next as ReasoningMode; index += 1; continue; }
+      // Invalid or missing value — pass through as-is, CodeBuddy will handle the error
+      normalized.push(arg);
+      if (next) { normalized.push(next); index += 1; }
+      continue;
+    }
     if (arg === CONFIG_FLAG || arg === LONG_CONFIG_FLAG) {
       const next = launchPolicyParsed.remainingArgs[index + 1];
       if (typeof next === "string") {
@@ -369,6 +381,10 @@ export function normalizeCodexLaunchArgs(args: string[]): string[] {
   }
   if (wantsBypass && !hasBypass && !hasExplicitBypassPermissionMode(normalized)) normalized.push(CODEBUDDY_BYPASS_FLAG);
   if (reasoningMode) normalized.push(CODEBUDDY_EFFORT_FLAG, reasoningMode);
+  // Emit deprecation warnings to stderr
+  for (const warning of deprecationWarnings) {
+    process.stderr.write(`[omb] ${warning}\n`);
+  }
   return normalized;
 }
 
@@ -421,9 +437,8 @@ export function buildNotifyFallbackWatcherEnv(
   return {
     ...nextEnv,
     ...(options.codexHomeOverride ? { CODEBUDDY_HOME: options.codexHomeOverride, CODEX_HOME: options.codexHomeOverride } : {}),
-    ...(options.sessionId ? { OMB_SESSION_ID: options.sessionId, OMX_SESSION_ID: options.sessionId } : {}),
+    ...(options.sessionId ? { OMB_SESSION_ID: options.sessionId } : {}),
     OMB_HUD_AUTHORITY: options.enableAuthority ? "1" : "0",
-    OMX_HUD_AUTHORITY: options.enableAuthority ? "1" : "0",
   };
 }
 
@@ -431,7 +446,7 @@ export function shouldEnableNotifyFallbackWatcher(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): boolean {
-  const toggle = String(env.OMB_NOTIFY_FALLBACK ?? env.OMX_NOTIFY_FALLBACK ?? "").trim();
+  const toggle = String(env.OMB_NOTIFY_FALLBACK ?? env.OMB_NOTIFY_FALLBACK ?? "").trim();
   if (platform === "win32") return toggle === "1";
   return toggle !== "0";
 }
@@ -458,16 +473,16 @@ export function buildTmuxSessionName(cwd: string, sessionId: string): string {
   const grandparentDir = basename(grandparentPath);
   const repoDir = parentDir.endsWith(".omb-worktrees")
     ? parentDir.slice(0, -".omb-worktrees".length)
-    : parentDir.endsWith(".omx-worktrees")
-      ? parentDir.slice(0, -".omx-worktrees".length)
-      : parentDir === "worktrees" && (grandparentDir === ".omb" || grandparentDir === ".omx")
+    : parentDir.endsWith(".omb-worktrees")
+      ? parentDir.slice(0, -".omb-worktrees".length)
+      : parentDir === "worktrees" && (grandparentDir === ".omb" || grandparentDir === ".omb")
         ? basename(dirname(grandparentPath))
         : null;
   const dirToken = repoDir ? sanitizeTmuxToken(`${repoDir}-${dirName}`) : sanitizeTmuxToken(dirName);
   let branchToken = "detached";
   const branch = tryReadGitValue(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (branch) branchToken = sanitizeTmuxToken(branch);
-  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^(?:omb|omx)-/, ""));
+  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^(?:omb|omb)-/, ""));
   const prefix = `omb-${dirToken}-${branchToken}`;
   const name = `${prefix}-${sessionToken}`;
   if (name.length <= 120) return name;
@@ -477,7 +492,7 @@ export function buildTmuxSessionName(cwd: string, sessionId: string): string {
 }
 
 export function buildDetachedTmuxSessionName(cwd: string, sessionId: string): string {
-  return buildTmuxSessionName(cwd, sessionId).replace(/^omb-/, "omx-");
+  return buildTmuxSessionName(cwd, sessionId).replace(/^omb-/, "omb-");
 }
 
 // ── Tmux pane commands ─────────────────────────────────────────────────────
@@ -552,7 +567,7 @@ function blockMs(ms: number): void {
 }
 
 function tmuxExtendedKeysLeaseRoot(cwd: string): string {
-  return join(cwd, ".omx", "state", TMUX_EXTENDED_KEYS_LEASE_DIR);
+  return join(cwd, ".omb", "state", TMUX_EXTENDED_KEYS_LEASE_DIR);
 }
 
 function resolveTmuxSocketPath(
@@ -656,11 +671,11 @@ function buildTmuxExtendedKeysHelperCommand(cwd: string, operation: "acquire" | 
 }
 
 function buildTmuxExtendedKeysAcquireShellSnippet(cwd: string): string {
-  return `OMX_TMUX_EXTENDED_KEYS_LEASE=$(${buildTmuxExtendedKeysHelperCommand(cwd, "acquire")} 2>/dev/null || true);`;
+  return `OMB_TMUX_EXTENDED_KEYS_LEASE=$(${buildTmuxExtendedKeysHelperCommand(cwd, "acquire")} 2>/dev/null || true);`;
 }
 
 function buildTmuxExtendedKeysReleaseShellSnippet(cwd: string): string {
-  return `if [ -n "\${OMX_TMUX_EXTENDED_KEYS_LEASE:-}" ]; then ${buildTmuxExtendedKeysHelperCommand(cwd, "release")} "\${OMX_TMUX_EXTENDED_KEYS_LEASE}" >/dev/null 2>&1 || true; fi;`;
+  return `if [ -n "\${OMB_TMUX_EXTENDED_KEYS_LEASE:-}" ]; then ${buildTmuxExtendedKeysHelperCommand(cwd, "release")} "\${OMB_TMUX_EXTENDED_KEYS_LEASE}" >/dev/null 2>&1 || true; fi;`;
 }
 
 export function withTmuxExtendedKeys<T>(
@@ -679,7 +694,7 @@ function escapeShellDoubleQuotedValue(value: string): string {
 function buildDetachedSessionLeaderCommand(cwd: string, sessionName: string, codexCmd: string): string {
   const wrapped = [
     buildTmuxExtendedKeysAcquireShellSnippet(cwd),
-    "omx_detached_session_cleanup() {",
+    "omb_detached_session_cleanup() {",
     "status=$?;",
     "trap - 0 INT TERM HUP;",
     buildTmuxExtendedKeysReleaseShellSnippet(cwd),
@@ -688,7 +703,7 @@ function buildDetachedSessionLeaderCommand(cwd: string, sessionName: string, cod
     "fi;",
     "exit $status;",
     "};",
-    "trap omx_detached_session_cleanup 0;",
+    "trap omb_detached_session_cleanup 0;",
     codexCmd,
   ].join(" ");
   return `/bin/sh -c ${quoteShellArg(wrapped)}`;
@@ -729,7 +744,7 @@ export function buildDetachedSessionBootstrapSteps(
   const newSessionArgs: string[] = [
     "new-session", "-d", "-P", "-F", "#{pane_id}", "-s", sessionName, "-c", cwd,
     ...(workerLaunchArgs ? ["-e", `${TEAM_WORKER_LAUNCH_ARGS_ENV}=${workerLaunchArgs}`] : []),
-    ...(sessionId ? ["-e", `OMB_SESSION_ID=${sessionId}`, "-e", `OMX_SESSION_ID=${sessionId}`] : []),
+    ...(sessionId ? ["-e", `OMB_SESSION_ID=${sessionId}`, "-e", `OMB_SESSION_ID=${sessionId}`] : []),
     ...(codexHomeOverride ? ["-e", `CODEBUDDY_HOME=${codexHomeOverride}`, "-e", `CODEX_HOME=${codexHomeOverride}`] : []),
     ...(notifyTempContractRaw ? ["-e", `${OMB_NOTIFY_TEMP_CONTRACT_ENV}=${notifyTempContractRaw}`] : []),
     detachedLeaderCmd,
@@ -923,7 +938,7 @@ async function startNotifyFallbackWatcher(
   const watcherScript = resolveNotifyFallbackWatcherScript(pkgRoot);
   const notifyScript = resolveNotifyHookScript(pkgRoot);
   if (!existsSync(watcherScript) || !existsSync(notifyScript)) return;
-  await mkdir(join(cwd, ".omx", "state"), { recursive: true }).catch((error: unknown) => {
+  await mkdir(join(cwd, ".omb", "state"), { recursive: true }).catch((error: unknown) => {
     console.warn("[omb] warning: failed to create notify fallback watcher state directory", { cwd, error: error instanceof Error ? error.message : String(error) });
   });
   const watcherEnv = buildNotifyFallbackWatcherEnv(process.env, {
@@ -935,7 +950,7 @@ async function startNotifyFallbackWatcher(
   try {
     watcherPid = await launchBackgroundHelper([
       watcherScript, "--cwd", cwd, "--notify-script", notifyScript, "--pid-file", pidPath, "--parent-pid", String(process.pid),
-      ...(process.env.OMX_NOTIFY_FALLBACK_MAX_LIFETIME_MS ? ["--max-lifetime-ms", process.env.OMX_NOTIFY_FALLBACK_MAX_LIFETIME_MS] : []),
+      ...(process.env.OMB_NOTIFY_FALLBACK_MAX_LIFETIME_MS ? ["--max-lifetime-ms", process.env.OMB_NOTIFY_FALLBACK_MAX_LIFETIME_MS] : []),
     ], { cwd, env: watcherEnv });
   } catch (error: unknown) {
     console.warn("[omb] warning: failed to launch notify fallback watcher", { cwd, error: error instanceof Error ? error.message : String(error) });
@@ -947,7 +962,7 @@ async function startNotifyFallbackWatcher(
 }
 
 async function startHookDerivedWatcher(cwd: string): Promise<void> {
-  if (process.env.OMX_HOOK_DERIVED_SIGNALS !== "1") return;
+  if (process.env.OMB_HOOK_DERIVED_SIGNALS !== "1") return;
   const { mkdir, writeFile, readFile } = await import("fs/promises");
   const pidPath = hookDerivedWatcherPidPath(cwd);
   const pkgRoot = getPackageRoot();
@@ -961,7 +976,7 @@ async function startHookDerivedWatcher(cwd: string): Promise<void> {
       console.warn("[omb] warning: failed to stop stale hook-derived watcher", { path: pidPath, error: error instanceof Error ? error.message : String(error) });
     }
   }
-  await mkdir(join(cwd, ".omx", "state"), { recursive: true }).catch((error: unknown) => {
+  await mkdir(join(cwd, ".omb", "state"), { recursive: true }).catch((error: unknown) => {
     console.warn("[omb] warning: failed to create hook-derived watcher state directory", { cwd, error: error instanceof Error ? error.message : String(error) });
   });
   let watcherPid: number | undefined;
@@ -1021,14 +1036,14 @@ async function flushNotifyFallbackOnce(
 }
 
 async function flushHookDerivedWatcherOnce(cwd: string): Promise<void> {
-  if (process.env.OMX_HOOK_DERIVED_SIGNALS !== "1") return;
+  if (process.env.OMB_HOOK_DERIVED_SIGNALS !== "1") return;
   const { spawnSync } = await import("child_process");
   const pkgRoot = getPackageRoot();
   const watcherScript = resolveHookDerivedWatcherScript(pkgRoot);
   if (!existsSync(watcherScript)) return;
   spawnSync(process.execPath, [watcherScript, "--once", "--cwd", cwd], {
     cwd, stdio: "ignore", timeout: 3000, windowsHide: true,
-    env: { ...process.env, OMX_HOOK_DERIVED_SIGNALS: "1" },
+    env: { ...process.env, OMB_HOOK_DERIVED_SIGNALS: "1" },
   });
 }
 
@@ -1036,7 +1051,7 @@ async function flushHookDerivedWatcherOnce(cwd: string): Promise<void> {
 
 import {
   cleanupCommand,
-  cleanupOmxMcpProcesses,
+  cleanupOmbMcpProcesses,
   findLaunchSafeCleanupCandidates,
   type CleanupDependencies,
   type CleanupResult,
@@ -1045,7 +1060,7 @@ import {
 export async function cleanupLaunchOrphanedMcpProcesses(
   dependencies: CleanupDependencies = {},
 ): Promise<CleanupResult> {
-  return cleanupOmxMcpProcesses([], {
+  return cleanupOmbMcpProcesses([], {
     ...dependencies,
     selectCandidates: dependencies.selectCandidates ?? findLaunchSafeCleanupCandidates,
     writeLine: dependencies.writeLine ?? (() => {}),
@@ -1164,8 +1179,8 @@ export async function reapPostLaunchOrphanedMcpProcesses(
   const writeError = dependencies.writeError ?? ((line: string) => process.stderr.write(line));
   try {
     const result = await cleanup();
-    if (result.terminatedCount > 0) writeInfo(`[omb] postLaunch: reaped ${result.terminatedCount} orphaned OMX MCP process(es).`);
-    if (result.failedPids.length > 0) writeWarn(`[omb] postLaunch: failed to reap ${result.failedPids.length} orphaned OMX MCP process(es); continuing cleanup.`);
+    if (result.terminatedCount > 0) writeInfo(`[omb] postLaunch: reaped ${result.terminatedCount} orphaned OMB MCP process(es).`);
+    if (result.failedPids.length > 0) writeWarn(`[omb] postLaunch: failed to reap ${result.failedPids.length} orphaned OMB MCP process(es); continuing cleanup.`);
   } catch (err) { writeError(`[cli/index] postLaunch MCP cleanup failed: ${err}\n`); }
 }
 
@@ -1222,8 +1237,8 @@ async function emitNativeHookEvent(
 
 async function readLaunchAppendInstructions(): Promise<string> {
   const appendixCandidates = [
-    process.env[OMX_RALPH_APPEND_INSTRUCTIONS_FILE_ENV]?.trim(),
-    process.env[OMX_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV]?.trim(),
+    process.env[OMB_RALPH_APPEND_INSTRUCTIONS_FILE_ENV]?.trim(),
+    process.env[OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV]?.trim(),
   ].filter((value): value is string => typeof value === "string" && value.length > 0);
   if (appendixCandidates.length === 0) return "";
   const appendixPath = appendixCandidates[0];
@@ -1312,7 +1327,7 @@ export function readPersistedSetupScope(cwd: string): SetupScope | undefined {
 }
 
 export function readPersistedSetupPreferences(cwd: string): Partial<{ scope: SetupScope }> | undefined {
-  for (const scopePath of [join(cwd, ".omb", "setup-scope.json"), join(cwd, ".omx", "setup-scope.json")]) {
+  for (const scopePath of [join(cwd, ".omb", "setup-scope.json"), join(cwd, ".omb", "setup-scope.json")]) {
     if (!existsSync(scopePath)) continue;
     try {
       const parsed = JSON.parse(readFileSync(scopePath, "utf-8")) as Partial<{ scope: string }>;
@@ -1424,8 +1439,8 @@ async function preLaunch(
   // 1. Best-effort launch-safe orphan cleanup
   try {
     const cleanup = await cleanupLaunchOrphanedMcpProcesses();
-    if (cleanup.terminatedCount > 0) console.log(`[omb] Reaped ${cleanup.terminatedCount} orphaned OMX MCP process(es) before launch.`);
-    if (cleanup.failedPids.length > 0) console.warn(`[omb] Failed to reap ${cleanup.failedPids.length} orphaned OMX MCP process(es); continuing launch.`);
+    if (cleanup.terminatedCount > 0) console.log(`[omb] Reaped ${cleanup.terminatedCount} orphaned OMB MCP process(es) before launch.`);
+    if (cleanup.failedPids.length > 0) console.warn(`[omb] Failed to reap ${cleanup.failedPids.length} orphaned OMB MCP process(es); continuing launch.`);
   } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
 
   // 2. Generate runtime overlay + write session-scoped model instructions file
@@ -1483,13 +1498,13 @@ function runCodex(
 ): void {
   const launchArgs = injectModelInstructionsBypassArgs(cwd, args, process.env, sessionModelInstructionsPath(cwd, sessionId));
   const nativeWindows = isNativeWindows();
-  const omxBin = resolveOmxEntryPath();
-  if (!omxBin) throw new Error("Unable to resolve OMX launcher path for tmux HUD bootstrap");
-  const hudCmd = nativeWindows ? buildWindowsPromptCommand("node", [omxBin, "hud", "--watch"]) : buildTmuxPaneCommand("node", [omxBin, "hud", "--watch"]);
+  const ombBin = resolveOmbCliEntryPath();
+  if (!ombBin) throw new Error("Unable to resolve OMB launcher path for tmux HUD bootstrap");
+  const hudCmd = nativeWindows ? buildWindowsPromptCommand("node", [ombBin, "hud", "--watch"]) : buildTmuxPaneCommand("node", [ombBin, "hud", "--watch"]);
   const inheritLeaderFlags = process.env[TEAM_INHERIT_LEADER_FLAGS_ENV] !== "0";
   const workerLaunchArgs = resolveTeamWorkerLaunchArgsEnv(process.env[TEAM_WORKER_LAUNCH_ARGS_ENV], launchArgs, inheritLeaderFlags, workerDefaultModel);
   const codexBaseEnv = codexHomeOverride ? { ...process.env, CODEBUDDY_HOME: codexHomeOverride, CODEX_HOME: codexHomeOverride } : process.env;
-  const codexEnvWithSession = { ...codexBaseEnv, OMB_SESSION_ID: sessionId, OMX_SESSION_ID: sessionId };
+  const codexEnvWithSession = { ...codexBaseEnv, OMB_SESSION_ID: sessionId };
   const codexEnv = workerLaunchArgs ? { ...codexEnvWithSession, [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs } : codexEnvWithSession;
   const codexEnvWithNotify = notifyTempContractRaw ? { ...codexEnv, [OMB_NOTIFY_TEMP_CONTRACT_ENV]: notifyTempContractRaw } : codexEnv;
   const launchBinary = launchArgs[0] === "resume" ? "codex" : CODEBUDDY_BIN;
@@ -1503,7 +1518,7 @@ function runCodex(
     for (const paneId of staleHudPaneIds) killTmuxPane(paneId);
     let hudPaneId: string | null = null;
     try { hudPaneId = createHudWatchPane(cwd, hudCmd); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
-    if (process.env.OMX_MOUSE !== "0") {
+    if (process.env.OMB_MOUSE !== "0") {
       try {
         const tmuxPaneTarget = process.env.TMUX_PANE;
         const displayArgs = tmuxPaneTarget ? ["display-message", "-p", "-t", tmuxPaneTarget, "#S"] : ["display-message", "-p", "#S"];
@@ -1539,7 +1554,7 @@ function runCodex(
           const hookTarget = hudPaneId && hookWindowIndex ? buildResizeHookTarget(sessionName, hookWindowIndex) : null;
           const hookName = hudPaneId && hookWindowIndex ? buildResizeHookName("launch", sessionName, hookWindowIndex, hudPaneId) : null;
           const clientAttachedHookName = hudPaneId && hookWindowIndex ? buildClientAttachedReconcileHookName("launch", sessionName, hookWindowIndex, hudPaneId) : null;
-          const finalizeSteps = buildDetachedSessionFinalizeSteps(sessionName, hudPaneId, hookWindowIndex, process.env.OMX_MOUSE !== "0", nativeWindows);
+          const finalizeSteps = buildDetachedSessionFinalizeSteps(sessionName, hudPaneId, hookWindowIndex, process.env.OMB_MOUSE !== "0", nativeWindows);
           if (nativeWindows && detachedWindowsCodexCmd) scheduleDetachedWindowsCodexLaunch(sessionName, detachedWindowsCodexCmd);
           for (const finalizeStep of finalizeSteps) {
             const stdio = finalizeStep.name === "attach-session" ? "inherit" : "ignore";
@@ -1646,7 +1661,7 @@ export async function launchWithHud(args: string[]): Promise<void> {
     const ensured = ensureWorktree(planned);
     if (ensured.enabled) cwd = ensured.worktreePath;
   }
-  const sessionId = `omx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const sessionId = `omb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   await preflight(cwd);
 
@@ -1679,7 +1694,7 @@ export async function execWithOverlay(args: string[]): Promise<void> {
     if (ensured.enabled) cwd = ensured.worktreePath;
   }
 
-  const sessionId = `omx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const sessionId = `omb-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   await preflight(cwd);
 

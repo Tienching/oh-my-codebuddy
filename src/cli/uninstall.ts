@@ -6,10 +6,10 @@ import { readFile, writeFile, readdir, rm } from "fs/promises";
 import { existsSync } from "fs";
 import { join, basename } from "path";
 import {
-  stripExistingOmxBlocks,
-  stripOmxEnvSettings,
-  stripOmxTopLevelKeys,
-  stripOmxFeatureFlags,
+  stripExistingOmbBlocks,
+  stripOmbEnvSettings,
+  stripOmbTopLevelKeys,
+  stripOmbFeatureFlags,
 } from "../config/generator.js";
 import {
   parseCodebuddyHooksConfig,
@@ -20,7 +20,7 @@ import { AGENT_DEFINITIONS } from "../agents/definitions.js";
 import { detectLegacySkillRootOverlap } from "../utils/paths.js";
 import { resolveScopeDirectories, type SetupScope } from "./setup.js";
 import { readPersistedSetupScope } from "./index.js";
-import { isOmxGeneratedAgentsMd } from "../utils/agents-md.js";
+import { isOmbGeneratedAgentsMd } from "../utils/agents-md.js";
 
 export interface UninstallOptions {
   dryRun?: boolean;
@@ -46,14 +46,14 @@ interface UninstallSummary {
   legacySkillRootWarning: string | null;
 }
 
-const OMX_MCP_SERVERS = [
-  "omx_state",
-  "omx_memory",
-  "omx_code_intel",
-  "omx_trace",
+const OMB_MCP_SERVERS = [
+  "omb_state",
+  "omb_memory",
+  "omb_code_intel",
+  "omb_trace",
 ];
 
-function detectOmxConfigArtifacts(config: string): {
+function detectOmbConfigArtifacts(config: string): {
   hasMcpServers: string[];
   hasAgentEntries: number;
   hasTuiSection: boolean;
@@ -61,7 +61,7 @@ function detectOmxConfigArtifacts(config: string): {
   hasFeatureFlags: boolean;
   hasExploreRoutingEnv: boolean;
 } {
-  const hasMcpServers = OMX_MCP_SERVERS.filter((name) =>
+  const hasMcpServers = OMB_MCP_SERVERS.filter((name) =>
     new RegExp(`\\[mcp_servers\\.${name}\\]`).test(config),
   );
 
@@ -77,19 +77,19 @@ function detectOmxConfigArtifacts(config: string): {
   const hasTuiSection =
     /^\[tui\]/m.test(config) &&
     config.includes("oh-my-codebuddy (OMB) Configuration")
-    || config.includes("oh-my-codex (OMX) Configuration");
+    || config.includes("oh-my-codebuddy (OMB) Configuration");
 
   const hasTopLevelKeys =
     /^\s*notify\s*=.*node/m.test(config) ||
     /^\s*model_reasoning_effort\s*=/m.test(config) ||
     /^\s*developer_instructions\s*=.*oh-my-codebuddy/m.test(config)
-    || /^\s*developer_instructions\s*=.*oh-my-codex/m.test(config);
+    || /^\s*developer_instructions\s*=.*oh-my-codebuddy/m.test(config);
 
   const hasFeatureFlags =
     /^\s*multi_agent\s*=\s*true/m.test(config) ||
     /^\s*child_agents_md\s*=\s*true/m.test(config) ||
     /^\s*codex_hooks\s*=\s*true/m.test(config);
-  const hasExploreRoutingEnv = /^\s*USE_OMX_EXPLORE_CMD\s*=/m.test(config);
+  const hasExploreRoutingEnv = /^\s*USE_OMB_EXPLORE_CMD\s*=/m.test(config);
 
   return {
     hasMcpServers,
@@ -130,7 +130,7 @@ async function cleanConfig(
   }
 
   const original = await readFile(configPath, "utf-8");
-  const detected = detectOmxConfigArtifacts(original);
+  const detected = detectOmbConfigArtifacts(original);
 
   result.mcpServersRemoved = detected.hasMcpServers;
   result.agentEntriesRemoved = detected.hasAgentEntries;
@@ -138,19 +138,19 @@ async function cleanConfig(
   result.topLevelKeysRemoved = detected.hasTopLevelKeys;
   result.featureFlagsRemoved = detected.hasFeatureFlags;
 
-  // Strip managed OMB/OMX tables block (MCP servers, agents, tui)
+  // Strip managed OMB/OMB tables block (MCP servers, agents, tui)
   let config = original;
-  const { cleaned } = stripExistingOmxBlocks(config);
+  const { cleaned } = stripExistingOmbBlocks(config);
   config = cleaned;
 
   // Strip top-level keys
-  config = stripOmxTopLevelKeys(config);
+  config = stripOmbTopLevelKeys(config);
 
   // Strip feature flags
-  config = stripOmxFeatureFlags(config);
+  config = stripOmbFeatureFlags(config);
 
-  // Strip managed OMB/OMX env defaults
-  config = stripOmxEnvSettings(config);
+  // Strip managed OMB/OMB env defaults
+  config = stripOmbEnvSettings(config);
 
   // Normalize trailing whitespace
   config = config.trimEnd() + "\n";
@@ -166,7 +166,7 @@ async function cleanConfig(
       );
     }
   } else {
-    if (options.verbose) console.log("  No OMB/OMX config entries found.");
+    if (options.verbose) console.log("  No OMB/OMB config entries found.");
   }
 
   return result;
@@ -277,7 +277,7 @@ async function removeAgentsMd(
 
   try {
     const content = await readFile(agentsMdPath, "utf-8");
-    if (!isOmxGeneratedAgentsMd(content)) {
+    if (!isOmbGeneratedAgentsMd(content)) {
       if (options.verbose)
       console.log("  AGENTS.md is not OMB-generated, skipping.");
       return false;
@@ -329,14 +329,14 @@ async function removeCacheDirectory(
   projectRoot: string,
   options: Pick<UninstallOptions, "dryRun" | "verbose">,
 ): Promise<boolean> {
-  const omxDir = join(projectRoot, ".omx");
-  if (!existsSync(omxDir)) return false;
+  const ombDir = join(projectRoot, ".omb");
+  if (!existsSync(ombDir)) return false;
 
   if (!options.dryRun) {
-    await rm(omxDir, { recursive: true, force: true });
+    await rm(ombDir, { recursive: true, force: true });
   }
   if (options.verbose)
-    console.log(`  ${options.dryRun ? "Would remove" : "Removed"} ${omxDir}`);
+    console.log(`  ${options.dryRun ? "Would remove" : "Removed"} ${ombDir}`);
   return true;
 }
 
@@ -353,7 +353,7 @@ async function detectLegacySkillRootWarning(
   if (overlap.overlappingSkillNames.length === 0) {
     return (
       `legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills). ` +
-      "omx uninstall does not remove that historical root automatically; " +
+      "omb uninstall does not remove that historical root automatically; " +
       "archive or remove ~/.agents/skills if Codex still shows stale or duplicate skills"
     );
   }
@@ -365,7 +365,7 @@ async function detectLegacySkillRootWarning(
   return (
     `${overlap.overlappingSkillNames.length} overlapping skill names remain between ` +
     `${overlap.canonicalDir} and ${overlap.legacyDir}${mismatchMessage}. ` +
-    "omx uninstall only removes the active canonical skill root; " +
+    "omb uninstall only removes the active canonical skill root; " +
     "archive or remove ~/.agents/skills if Codex still shows duplicates"
   );
 }
@@ -376,7 +376,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
   console.log("\nUninstall summary:");
 
   if (summary.configCleaned) {
-    console.log(`  ${prefix} OMB configuration block from config.toml (legacy OMX markers also cleaned)`);
+    console.log(`  ${prefix} OMB configuration block from config.toml (legacy OMB markers also cleaned)`);
     if (summary.mcpServersRemoved.length > 0) {
       console.log(`    MCP servers: ${summary.mcpServersRemoved.join(", ")}`);
     }
@@ -395,7 +395,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
       console.log("    Feature flags (multi_agent, child_agents_md, codex_hooks)");
     }
   } else if (!summary.configCleaned && summary.mcpServersRemoved.length === 0) {
-    console.log("  config.toml: no OMB/OMX entries found (or --keep-config used)");
+    console.log("  config.toml: no OMB/OMB entries found (or --keep-config used)");
   }
 
   if (summary.hooksFileRemoved) {
@@ -417,7 +417,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
     console.log(`  ${prefix} AGENTS.md`);
   }
   if (summary.cacheDirectoryRemoved) {
-    console.log(`  ${prefix} .omx/ cache directory`);
+    console.log(`  ${prefix} .omb/ cache directory`);
   }
   if (summary.legacySkillRootWarning) {
     console.log(`  Warning: ${summary.legacySkillRootWarning}`);
@@ -552,7 +552,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   );
   console.log();
 
-  // Step 6: Remove AGENTS.md and optionally .omx/ cache directory
+  // Step 6: Remove AGENTS.md and optionally .omb/ cache directory
   console.log("[6/6] Cleaning up...");
   const agentsMdPath =
     scope === "project"
@@ -569,8 +569,8 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     });
   } else {
     // Always clean up setup-scope.json and hud-config.json
-    const scopeFile = join(projectRoot, ".omx", "setup-scope.json");
-    const hudConfig = join(projectRoot, ".omx", "hud-config.json");
+    const scopeFile = join(projectRoot, ".omb", "setup-scope.json");
+    const hudConfig = join(projectRoot, ".omb", "hud-config.json");
     for (const f of [scopeFile, hudConfig]) {
       if (existsSync(f)) {
         if (!dryRun) await rm(f, { force: true });
@@ -587,7 +587,7 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
 
   if (!dryRun) {
     console.log(
-      '\noh-my-codebuddy has been uninstalled. Run "omb setup" to reinstall (legacy: "omx setup").',
+      '\noh-my-codebuddy has been uninstalled. Run "omb setup" to reinstall (legacy: "omb setup").',
     );
   } else {
     console.log("\nRun without --dry-run to apply changes.");

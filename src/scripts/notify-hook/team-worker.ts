@@ -16,7 +16,7 @@ import {
   resolveAllWorkersIdleIntent,
   resolveWorkerIdleIntent,
 } from './orchestration-intent.js';
-const TEAM_WORKER_INJECT_MARKER = '[OMX_TMUX_INJECT]';
+const TEAM_WORKER_INJECT_MARKER = '[OMB_TMUX_INJECT]';
 const LEADER_PANE_SHELL_NO_INJECTION_REASON = 'leader_pane_shell_no_injection';
 
 function resolveTeamRuntimeBrand(stateDir) {
@@ -49,7 +49,7 @@ async function readTeamStateRootFromJson(path) {
 }
 
 export async function resolveTeamStateDirForWorker(cwd, parsedTeamWorker) {
-  const explicitStateRoot = envValue('OMX_TEAM_STATE_ROOT', 'OMB_TEAM_STATE_ROOT');
+  const explicitStateRoot = envValue('OMB_TEAM_STATE_ROOT');
   if (explicitStateRoot) {
     const resolvedExplicitStateRoot = resolvePath(cwd, explicitStateRoot);
     const explicitTeamRoot = join(resolvedExplicitStateRoot, 'team', parsedTeamWorker.teamName);
@@ -57,9 +57,9 @@ export async function resolveTeamStateDirForWorker(cwd, parsedTeamWorker) {
       return resolvedExplicitStateRoot;
     }
     const alternateExplicitStateRoot = resolvedExplicitStateRoot.includes('/.omb/state')
-      ? resolvedExplicitStateRoot.replace('/.omb/state', '/.omx/state')
-      : (resolvedExplicitStateRoot.includes('/.omx/state')
-        ? resolvedExplicitStateRoot.replace('/.omx/state', '/.omb/state')
+      ? resolvedExplicitStateRoot.replace('/.omb/state', '/.omb/state')
+      : (resolvedExplicitStateRoot.includes('/.omb/state')
+        ? resolvedExplicitStateRoot.replace('/.omb/state', '/.omb/state')
         : '');
     if (alternateExplicitStateRoot) {
       const alternateTeamRoot = join(alternateExplicitStateRoot, 'team', parsedTeamWorker.teamName);
@@ -72,14 +72,12 @@ export async function resolveTeamStateDirForWorker(cwd, parsedTeamWorker) {
 
   const teamName = parsedTeamWorker.teamName;
   const workerName = parsedTeamWorker.workerName;
-  const leaderCwd = envValue('OMX_TEAM_LEADER_CWD', 'OMB_TEAM_LEADER_CWD');
+  const leaderCwd = envValue('OMB_TEAM_LEADER_CWD');
 
   const candidateStateDirs = [];
   if (leaderCwd) {
-    candidateStateDirs.push(join(resolvePath(leaderCwd), '.omx', 'state'));
     candidateStateDirs.push(join(resolvePath(leaderCwd), '.omb', 'state'));
   }
-  candidateStateDirs.push(join(cwd, '.omx', 'state'));
   candidateStateDirs.push(join(cwd, '.omb', 'state'));
 
   for (const candidateStateDir of candidateStateDirs) {
@@ -100,7 +98,7 @@ export async function resolveTeamStateDirForWorker(cwd, parsedTeamWorker) {
     return candidateStateDir;
   }
 
-  return join(cwd, '.omx', 'state');
+  return join(cwd, '.omb', 'state');
 }
 
 export function parseTeamWorkerEnv(rawValue) {
@@ -111,14 +109,14 @@ export function parseTeamWorkerEnv(rawValue) {
 }
 
 export function resolveWorkerIdleNotifyEnabled() {
-  const raw = envValue('OMX_TEAM_WORKER_IDLE_NOTIFY', 'OMB_TEAM_WORKER_IDLE_NOTIFY').toLowerCase();
+  const raw = envValue('OMB_TEAM_WORKER_IDLE_NOTIFY').toLowerCase();
   // Default: enabled. Disable with "false", "0", or "off".
   if (raw === 'false' || raw === '0' || raw === 'off') return false;
   return true;
 }
 
 export function resolveWorkerIdleCooldownMs() {
-  const raw = envValue('OMX_TEAM_WORKER_IDLE_COOLDOWN_MS', 'OMB_TEAM_WORKER_IDLE_COOLDOWN_MS');
+  const raw = envValue('OMB_TEAM_WORKER_IDLE_COOLDOWN_MS');
   const parsed = asNumber(raw);
   // Default: 30 seconds. Guard against unreasonable values.
   if (parsed !== null && parsed >= 5_000 && parsed <= 10 * 60_000) return parsed;
@@ -126,7 +124,7 @@ export function resolveWorkerIdleCooldownMs() {
 }
 
 export function resolveAllWorkersIdleCooldownMs() {
-  const raw = envValue('OMX_TEAM_ALL_IDLE_COOLDOWN_MS', 'OMB_TEAM_ALL_IDLE_COOLDOWN_MS');
+  const raw = envValue('OMB_TEAM_ALL_IDLE_COOLDOWN_MS');
   const parsed = asNumber(raw);
   // Default: 60 seconds. Guard against unreasonable values.
   if (parsed !== null && parsed >= 5_000 && parsed <= 10 * 60_000) return parsed;
@@ -134,14 +132,14 @@ export function resolveAllWorkersIdleCooldownMs() {
 }
 
 export function resolveStatusStaleMs() {
-  const raw = envValue('OMX_TEAM_STATUS_STALE_MS', 'OMB_TEAM_STATUS_STALE_MS');
+  const raw = envValue('OMB_TEAM_STATUS_STALE_MS');
   const parsed = asNumber(raw);
   if (parsed !== null && parsed >= 5_000 && parsed <= 60 * 60_000) return parsed;
   return 120_000;
 }
 
 export function resolveHeartbeatStaleMs() {
-  const raw = envValue('OMX_TEAM_HEARTBEAT_STALE_MS', 'OMB_TEAM_HEARTBEAT_STALE_MS');
+  const raw = envValue('OMB_TEAM_HEARTBEAT_STALE_MS');
   const parsed = asNumber(raw);
   if (parsed !== null && parsed >= 5_000 && parsed <= 60 * 60_000) return parsed;
   return 180_000;

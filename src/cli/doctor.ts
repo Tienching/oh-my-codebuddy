@@ -648,7 +648,7 @@ function hasOmbManagedEntries(parsed: Record<string, unknown>): boolean {
   const developerInstructions = parsed.developer_instructions ?? parsed.developerInstructions;
   return extractMcpServerNames(parsed).some((key) => key.startsWith('omb-') || key.startsWith('omb_'))
     || (typeof developerInstructions === 'string'
-      && (developerInstructions.includes('oh-my-codebuddy') || developerInstructions.includes('oh-my-codex')));
+      && (developerInstructions.includes('oh-my-codebuddy') || developerInstructions.includes('oh-my-codebuddy')));
 }
 
 function extractConfigEnv(parsed: Record<string, unknown>): Record<string, unknown> | null {
@@ -708,7 +708,7 @@ async function checkExploreRouting(configPath: string): Promise<Check> {
   }
 
   const envBlock = extractConfigEnv(resolved.parsed);
-  const configuredValue = envBlock?.USE_OMB_EXPLORE_CMD ?? envBlock?.USE_OMX_EXPLORE_CMD;
+  const configuredValue = envBlock?.USE_OMB_EXPLORE_CMD ?? envBlock?.USE_OMB_EXPLORE_CMD;
 
   if (
     typeof configuredValue === 'string' &&
