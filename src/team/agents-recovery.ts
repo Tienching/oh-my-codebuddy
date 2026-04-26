@@ -141,7 +141,7 @@ export class RecoveryLedger {
    *
    * Returns a summary of what was done.
    */
-  async reconcile(cwd: string): Promise<ReconciliationResult> {
+  async reconcile(_cwd: string): Promise<ReconciliationResult> {
     const result: ReconciliationResult = {
       reconciled: [],
       skipped: [],

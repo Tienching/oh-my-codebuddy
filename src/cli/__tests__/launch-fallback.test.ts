@@ -80,6 +80,100 @@ describe('omb launch fallback when tmux is unavailable', () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
+
+  it('runs omb exec through CodeBuddy --print instead of Codex exec subcommand', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-exec-codebuddy-print-'));
+    try {
+      const home = join(wd, 'home');
+      const fakeBin = join(wd, 'bin');
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      const fakePsPath = join(fakeBin, 'ps');
+
+      await mkdir(home, { recursive: true });
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        fakeCodebuddyPath,
+        '#!/bin/sh\nprintf \'fake-codebuddy:%s\\n\' "$*"\n',
+      );
+      await chmod(fakeCodebuddyPath, 0o755);
+      await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
+      await chmod(fakePsPath, 0o755);
+
+      const result = runOmb(
+        wd,
+        ['exec', '--json', 'say hi'],
+        {
+          HOME: home,
+          PATH: fakeBin,
+          OMB_AUTO_UPDATE: '0',
+          OMB_NOTIFY_FALLBACK: '0',
+          OMB_HOOK_DERIVED_SIGNALS: '0',
+        },
+      );
+
+      if (shouldSkipForSpawnPermissions(result.error)) return;
+
+      assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
+      assert.match(result.stdout, /fake-codebuddy:--print --output-format stream-json say hi\b/);
+      assert.doesNotMatch(result.stdout, /fake-codebuddy:exec\b/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('auto-installs CodeBuddy globally when codebuddy is missing', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-launch-autoinstall-'));
+    try {
+      const home = join(wd, 'home');
+      const fakeBin = join(wd, 'bin');
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      const fakeNpmPath = join(fakeBin, 'npm');
+      const fakePsPath = join(fakeBin, 'ps');
+      const npmLogPath = join(wd, 'npm.log');
+
+      await mkdir(home, { recursive: true });
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        fakeNpmPath,
+        `#!/bin/sh
+printf '%s\\n' "$*" > "${npmLogPath}"
+if [ "$1" = "install" ] && [ "$2" = "-g" ] && [ "$3" = "@tencent-ai/codebuddy-code" ]; then
+  /bin/cat > "${fakeCodebuddyPath}" <<'EOF'
+#!/bin/sh
+printf 'auto-installed-codebuddy:%s\\n' "$*"
+EOF
+  /bin/chmod +x "${fakeCodebuddyPath}"
+  exit 0
+fi
+exit 99
+`,
+      );
+      await chmod(fakeNpmPath, 0o755);
+      await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
+      await chmod(fakePsPath, 0o755);
+
+      const result = runOmb(
+        wd,
+        ['--madmax'],
+        {
+          HOME: home,
+          PATH: fakeBin,
+          OMB_AUTO_UPDATE: '0',
+          OMB_NOTIFY_FALLBACK: '0',
+          OMB_HOOK_DERIVED_SIGNALS: '0',
+        },
+      );
+
+      if (shouldSkipForSpawnPermissions(result.error)) return;
+
+      assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
+      assert.match(result.stderr, /CodeBuddy CLI not found in PATH\. Installing @tencent-ai\/codebuddy-code globally/);
+      assert.match(await readFile(npmLogPath, 'utf-8'), /^install -g @tencent-ai\/codebuddy-code$/m);
+      assert.match(result.stdout, /auto-installed-codebuddy:.*--dangerously-skip-permissions/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('omb launcher when tmux is available', () => {

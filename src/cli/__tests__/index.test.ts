@@ -25,6 +25,8 @@ import {
   collectInheritableTeamWorkerArgs,
   resolveTeamWorkerLaunchArgsEnv,
   injectModelInstructionsBypassArgs,
+  translateCodeBuddyExecArgs,
+  translateCodeBuddyResumeArgs,
   resolveWorkerSparkModel,
   resolveSetupScopeArg,
   readPersistedSetupPreferences,
@@ -223,6 +225,25 @@ describe("normalizeCodexLaunchArgs", () => {
     );
   });
 
+  it("drops unsupported Codex config overrides so CodeBuddy does not treat -c as continue", () => {
+    const origWrite = process.stderr.write;
+    process.stderr.write = () => true;
+    try {
+      assert.deepEqual(
+        normalizeCodexLaunchArgs(["-c", 'sandbox_permissions=["danger-full-access"]', "--model", "gpt-5"]),
+        ["--model", "gpt-5"],
+      );
+    } finally {
+      process.stderr.write = origWrite;
+    }
+  });
+
+  it("maps Codex approval never to CodeBuddy bypass permissions", () => {
+    assert.deepEqual(normalizeCodexLaunchArgs(["--ask-for-approval", "never"]), [
+      "--dangerously-skip-permissions",
+    ]);
+  });
+
   it("preserves explicit CodeBuddy permission mode and avoids duplicate bypass flag", () => {
     assert.deepEqual(
       normalizeCodexLaunchArgs([
@@ -312,6 +333,38 @@ describe("normalizeCodexLaunchArgs", () => {
       "--tmux",
       "--dangerously-skip-permissions",
     ]);
+  });
+});
+
+describe("translateCodeBuddyResumeArgs", () => {
+  it("maps omb resume --last to CodeBuddy continue flag", () => {
+    assert.deepEqual(
+      translateCodeBuddyResumeArgs(["resume", "--last", "--effort", "high"]),
+      ["--continue", "--effort", "high"],
+    );
+  });
+
+  it("maps omb resume session id to CodeBuddy resume flag", () => {
+    assert.deepEqual(
+      translateCodeBuddyResumeArgs(["resume", "session-123", "--effort", "high"]),
+      ["--resume", "session-123", "--effort", "high"],
+    );
+  });
+});
+
+describe("translateCodeBuddyExecArgs", () => {
+  it("uses CodeBuddy --print instead of Codex exec subcommand", () => {
+    assert.deepEqual(
+      translateCodeBuddyExecArgs(["--model", "gpt-5", "say hi"]),
+      ["--print", "--model", "gpt-5", "say hi"],
+    );
+  });
+
+  it("maps Codex exec JSON flags to CodeBuddy print output flags", () => {
+    assert.deepEqual(
+      translateCodeBuddyExecArgs(["--json", "--output-schema", "schema.json", "say hi"]),
+      ["--print", "--output-format", "stream-json", "--json-schema", "schema.json", "say hi"],
+    );
   });
 });
 

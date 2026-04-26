@@ -15,7 +15,7 @@ export function getRalphHelp(): string {
 Usage:
   {cmd} ralph [task text...]
   {cmd} ralph --prd "<task text>"
-  {cmd} ralph [ralph-options] [codex-args...] [task text...]
+  {cmd} ralph [ralph-options] [codebuddy-args...] [task text...]
 
 Options:
   --help, -h           Show this help message

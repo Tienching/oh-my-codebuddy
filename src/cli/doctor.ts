@@ -19,6 +19,7 @@ import { OMB_EXPLORE_CMD_ENV, isExploreCommandRoutingEnabled } from '../hooks/ex
 import { triagePrompt } from '../hooks/triage-heuristic.js';
 import { readTriageConfig } from '../hooks/triage-config.js';
 import { isLeaderRuntimeStale } from '../team/leader-activity.js';
+import { CODEBUDDY_BIN } from './constants.js';
 
 interface DoctorOptions {
   verbose?: boolean;
@@ -118,7 +119,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
   const checks: Check[] = [];
 
   // Check 1: CodeBuddy CLI installed
-  checks.push(checkCodexCli());
+  checks.push(checkCodeBuddyCli());
 
   // Check 2: Node.js version
   checks.push(checkNodeVersion());
@@ -425,8 +426,8 @@ function listTeamTmuxSessions(): Set<string> | null {
   return new Set(sessions);
 }
 
-function checkCodexCli(): Check {
-  const { result } = spawnPlatformCommandSync('codex', ['--version'], {
+function checkCodeBuddyCli(): Check {
+  const { result } = spawnPlatformCommandSync(CODEBUDDY_BIN, ['--version'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -434,7 +435,7 @@ function checkCodexCli(): Check {
     const code = (result.error as NodeJS.ErrnoException).code;
     const kind = classifySpawnError(result.error as NodeJS.ErrnoException);
     if (kind === 'missing') {
-      return { name: 'CodeBuddy CLI', status: 'fail', message: 'not found - install from https://github.com/openai/codex' };
+      return { name: 'CodeBuddy CLI', status: 'fail', message: 'not found - install with: npm install -g @tencent-ai/codebuddy-code' };
     }
     if (kind === 'blocked') {
       return {

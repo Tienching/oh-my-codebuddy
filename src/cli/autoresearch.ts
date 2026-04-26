@@ -24,7 +24,17 @@ import {
   listAutoresearchDeepInterviewResultPaths,
   resolveAutoresearchDeepInterviewResult,
 } from './autoresearch-intake.js';
-import { CODEBUDDY_LEGACY_BYPASS_FLAG, CODEBUDDY_BIN, CODEBUDDY_BYPASS_FLAG, CODEBUDDY_PRINT_FLAG, MADMAX_FLAG } from './constants.js';
+import {
+  CODEBUDDY_LEGACY_BYPASS_FLAG,
+  CODEBUDDY_BIN,
+  CODEBUDDY_BYPASS_FLAG,
+  CODEBUDDY_EFFORT_FLAG,
+  CODEBUDDY_PRINT_FLAG,
+  CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG,
+  CONFIG_FLAG,
+  LONG_CONFIG_FLAG,
+  MADMAX_FLAG,
+} from './constants.js';
 import { restoreStandaloneHudPane, enableMouseScrolling } from '../team/tmux-session.js';
 import { resolveOmbCliEntryPath } from '../utils/paths.js';
 import { formatCliText } from './brand.js';
@@ -36,9 +46,9 @@ Usage:
   {cmd} autoresearch                                                (human entrypoint: launch {product} CLI deep-interview intake, then execute)
   {cmd} autoresearch [--topic T] [--evaluator CMD] [--keep-policy P] [--slug S]
   {cmd} autoresearch init [--topic T] [--evaluator CMD] [--keep-policy P] [--slug S]
-  {cmd} autoresearch run <mission-dir> [codex-args...]              (agent/explicit execution entrypoint)
-  {cmd} autoresearch <mission-dir> [codex-args...]                  (compatibility alias for run)
-  {cmd} autoresearch --resume <run-id> [codex-args...]
+  {cmd} autoresearch run <mission-dir> [codebuddy-args...]          (agent/explicit execution entrypoint)
+  {cmd} autoresearch <mission-dir> [codebuddy-args...]              (compatibility alias for run)
+  {cmd} autoresearch --resume <run-id> [codebuddy-args...]
 
 Arguments:
   (no args)        Launch an interactive CodeBuddy session that activates deep-interview --autoresearch,
@@ -62,6 +72,8 @@ Behavior:
 
 const AUTORESEARCH_APPEND_INSTRUCTIONS_ENV = 'OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE';
 const AUTORESEARCH_MAX_CONSECUTIVE_NOOPS = 3;
+const REASONING_KEY = 'model_reasoning_effort';
+const MODEL_INSTRUCTIONS_FILE_KEY = 'model_instructions_file';
 
 function buildAutoresearchDeepInterviewAppendix(): string {
   return [
@@ -126,7 +138,8 @@ export function normalizeAutoresearchCodexArgs(codebuddyArgs: readonly string[])
   const normalized: string[] = [];
   let hasBypass = false;
 
-  for (const arg of codebuddyArgs) {
+  for (let index = 0; index < codebuddyArgs.length; index++) {
+    const arg = codebuddyArgs[index];
     if (arg === MADMAX_FLAG || arg === CODEBUDDY_LEGACY_BYPASS_FLAG) {
       if (!hasBypass) {
         normalized.push(CODEBUDDY_BYPASS_FLAG);
@@ -138,6 +151,39 @@ export function normalizeAutoresearchCodexArgs(codebuddyArgs: readonly string[])
       if (!hasBypass) {
         normalized.push(arg);
         hasBypass = true;
+      }
+      continue;
+    }
+    if (arg === CONFIG_FLAG || arg === LONG_CONFIG_FLAG) {
+      const next = codebuddyArgs[index + 1];
+      if (typeof next === 'string') {
+        const match = next.match(/^\s*([A-Za-z0-9_.-]+)\s*=\s*(.*?)\s*$/);
+        const key = match?.[1];
+        const value = match?.[2]?.replace(/^["']|["']$/g, '');
+        if (key === REASONING_KEY && value && ['low', 'medium', 'high', 'xhigh'].includes(value)) {
+          normalized.push(CODEBUDDY_EFFORT_FLAG, value);
+        } else if (key === MODEL_INSTRUCTIONS_FILE_KEY && value) {
+          normalized.push(CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, value);
+        } else {
+          process.stderr.write(`[omb] warning: dropped Codex-only autoresearch CLI argument for CodeBuddy: ${arg} ${next}\n`);
+        }
+        index += 1;
+        continue;
+      }
+      process.stderr.write(`[omb] warning: dropped Codex-only autoresearch CLI argument for CodeBuddy: ${arg}\n`);
+      continue;
+    }
+    if (arg.startsWith(`${LONG_CONFIG_FLAG}=`)) {
+      const raw = arg.slice(`${LONG_CONFIG_FLAG}=`.length);
+      const match = raw.match(/^\s*([A-Za-z0-9_.-]+)\s*=\s*(.*?)\s*$/);
+      const key = match?.[1];
+      const value = match?.[2]?.replace(/^["']|["']$/g, '');
+      if (key === REASONING_KEY && value && ['low', 'medium', 'high', 'xhigh'].includes(value)) {
+        normalized.push(CODEBUDDY_EFFORT_FLAG, value);
+      } else if (key === MODEL_INSTRUCTIONS_FILE_KEY && value) {
+        normalized.push(CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, value);
+      } else {
+        process.stderr.write(`[omb] warning: dropped Codex-only autoresearch CLI argument for CodeBuddy: ${arg}\n`);
       }
       continue;
     }

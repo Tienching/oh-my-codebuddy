@@ -12,11 +12,6 @@
 import { join } from "path";
 import { existsSync, statSync, readdirSync, readFileSync } from "fs";
 import {
-  codebuddyHome,
-  codebuddyConfigPath,
-  codebuddyPromptsDir,
-  codebuddyAgentsDir,
-  userSkillsDir,
   ombStateDir,
   ombPlansDir,
   ombLogsDir,

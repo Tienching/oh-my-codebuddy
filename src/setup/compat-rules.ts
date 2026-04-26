@@ -85,7 +85,7 @@ export const COMPAT_RULES: CompatRule[] = [
     message: `Legacy model "${LEGACY_SETUP_MODEL}" detected. Consider upgrading to "${DEFAULT_FRONTIER_MODEL}".`,
     autoFix: false, // Requires user confirmation
     status: "active",
-    condition: (cwd: string): boolean => {
+    condition: (): boolean => {
       const configPath = codebuddyConfigPath();
       if (!existsSync(configPath)) return false;
       try {

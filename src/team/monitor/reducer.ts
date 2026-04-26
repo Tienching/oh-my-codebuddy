@@ -1,5 +1,5 @@
 import type { TeamPhase, TerminalPhase } from '../orchestrator.js';
-import type { TeamTask, WorkerInfo, WorkerStatus, WorkerHeartbeat, TeamMonitorSnapshotState } from '../team-ops.js';
+import type { TeamTask, WorkerInfo } from '../team-ops.js';
 import type { TeamMonitorSnapshot } from './snapshot.js';
 
 export interface MonitorDecision {
@@ -28,7 +28,6 @@ export function decideFromSnapshot(snapshot: TeamMonitorSnapshot): MonitorDecisi
     taskCounts,
     reclaimedTaskIds,
     config,
-    previousSnapshot,
   } = snapshot;
 
   const deadWorkers: string[] = [];

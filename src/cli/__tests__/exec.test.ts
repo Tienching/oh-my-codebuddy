@@ -36,7 +36,7 @@ function runOmb(
 }
 
 describe('omb exec', () => {
-  it('runs codebuddy exec with session-scoped instructions that preserve AGENTS and overlay content', async () => {
+  it('runs CodeBuddy --print with session-scoped instructions that preserve AGENTS and overlay content', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-exec-cli-'));
     try {
       const home = join(wd, 'home');
@@ -93,7 +93,7 @@ describe('omb exec', () => {
       });
 
       assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
-      assert.match(result.stdout, /fake-codebuddy:exec --model gpt-5 say hi/);
+      assert.match(result.stdout, /fake-codebuddy:--print --model gpt-5 say hi/);
       assert.match(result.stdout, /instructions-path:.*\/\.omb\/state\/sessions\/omb-.*\/AGENTS\.md/);
       assert.match(result.stdout, /# User Instructions/);
       assert.match(result.stdout, /# Project Instructions/);
@@ -110,7 +110,7 @@ describe('omb exec', () => {
     }
   });
 
-  it('passes exec --help through to codex exec', async () => {
+  it('passes exec --help through to CodeBuddy --print', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-exec-help-'));
     try {
       const home = join(wd, 'home');
@@ -136,7 +136,7 @@ describe('omb exec', () => {
       });
 
       assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
-      assert.match(result.stdout, /fake-codebuddy:exec --help\b/);
+      assert.match(result.stdout, /fake-codebuddy:--print --help\b/);
       assert.doesNotMatch(result.stdout, /oh-my-codebuddy \(omb\) - Multi-agent orchestration for CodeBuddy CLI/i);
     } finally {
       await rm(wd, { recursive: true, force: true });

@@ -21,7 +21,7 @@ export const nativeAgentsInstaller: AssetInstaller = {
     const agentsDir = scopeDirs.nativeAgentsDir;
     const actions: SetupAction[] = [];
 
-    for (const [name, agent] of Object.entries(AGENT_DEFINITIONS)) {
+    for (const name of Object.keys(AGENT_DEFINITIONS)) {
       const promptPath = join(pkgRoot, "prompts", `${name}.md`);
       if (!existsSync(promptPath)) continue;
 

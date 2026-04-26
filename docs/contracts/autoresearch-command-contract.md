@@ -1,12 +1,12 @@
 # `omb autoresearch` parity contract
 
-`omb autoresearch` is a thin supervisor that drives one Codex experiment session per iteration while OMB owns the durable keep/discard/reset loop.
+`omb autoresearch` is a thin supervisor that drives one CodeBuddy non-interactive session per iteration while OMB owns the durable keep/discard/reset loop.
 
 ## CLI
 
 ```bash
-omb autoresearch <mission-dir> [codex-args...]
-omb autoresearch --resume <run-id> [codex-args...]
+omb autoresearch <mission-dir> [codebuddy-args...]
+omb autoresearch --resume <run-id> [codebuddy-args...]
 omb autoresearch --help
 ```
 

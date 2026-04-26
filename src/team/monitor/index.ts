@@ -2,7 +2,6 @@ import { performance } from 'perf_hooks';
 import {
   sanitizeTeamName,
   isWorkerAlive,
-  isTmuxAvailable,
 } from '../tmux-session.js';
 import {
   teamReadConfig as readTeamConfig,
@@ -13,9 +12,6 @@ import {
   teamReclaimExpiredTaskClaim as reclaimExpiredTaskClaim,
   teamClaimTask as claimTask,
   teamAppendEvent as appendTeamEvent,
-  teamListMailbox as listMailboxMessages,
-  teamMarkMessageDelivered as markMessageDelivered,
-  teamMarkMessageNotified as markMessageNotified,
   teamReadMonitorSnapshot as readMonitorSnapshot,
   teamWriteMonitorSnapshot as writeMonitorSnapshot,
   teamReadPhase as readTeamPhaseState,
@@ -26,8 +22,7 @@ import {
 } from '../team-ops.js';
 import { inferPhaseTargetFromTaskCounts, reconcilePhaseStateForMonitor } from '../phase-controller.js';
 import { hasStructuredVerificationEvidence } from '../../verification/verifier.js';
-import { buildRebalanceDecisions } from '../rebalance-policy.js';
-import { isTerminalPhase, type TeamPhase, type TerminalPhase } from '../orchestrator.js';
+import type { TeamPhase, TerminalPhase } from '../orchestrator.js';
 import type { TeamMonitorSnapshot } from './snapshot.js';
 import { decideFromSnapshot, type MonitorDecision } from './reducer.js';
 

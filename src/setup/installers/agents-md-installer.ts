@@ -11,10 +11,6 @@ import {
   addGeneratedAgentsMarker,
   isOmbGeneratedAgentsMd,
 } from "../../utils/agents-md.js";
-import {
-  resolveAgentsModelTableContext,
-  upsertAgentsModelTable,
-} from "../../utils/agents-model-table.js";
 
 export const agentsMdInstaller: AssetInstaller = {
   name: "agents-md",

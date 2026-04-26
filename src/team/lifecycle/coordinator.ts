@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 import { existsSync } from 'fs';
-import type { TeamConfig, WorkerInfo } from '../team-ops.js';
+import type { TeamConfig } from '../team-ops.js';
 import type { EnsureWorktreeResult } from '../worktree.js';
 import {
   teardownWorkerPanes,
@@ -49,7 +49,7 @@ export class TeamLifecycleCoordinator {
     this.completedSteps = [];
   }
 
-  async rollback(failedStep: string): Promise<LifecycleResult> {
+  async rollback(_failedStep: string): Promise<LifecycleResult> {
     const errors: string[] = [];
     const ctx = this.context;
     if (!ctx) {

@@ -67,17 +67,10 @@ import {
   formatPlatformRuntime,
 } from "../platform/index.js";
 import {
-  type SetupAction,
-  type SetupPlan,
-  generateSetupPlan,
-  computePlanSummary,
-} from "../setup/plan.js";
-import { applySetupPlan, type ApplyResult } from "../setup/apply.js";
-import {
   getLegacyScopeMigration,
   getLegacySetupModel,
-  COMPAT_RULES,
 } from "../setup/compat-rules.js";
+import { CODEBUDDY_BIN } from "./constants.js";
 
 interface SetupOptions {
   codexVersionProbe?: () => string | null;
@@ -594,8 +587,8 @@ function semverGte(
   return version[2] >= minimum[2];
 }
 
-function probeInstalledCodexVersion(): string | null {
-  const { result } = spawnPlatformCommandSync("codex", ["--version"], {
+function probeInstalledCodeBuddyVersion(): string | null {
+  const { result } = spawnPlatformCommandSync(CODEBUDDY_BIN, ["--version"], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -1691,7 +1684,7 @@ async function updateManagedConfig(
   const currentModel = getRootModelName(existing);
   let modelOverride: string | undefined;
   const codexVersion =
-    options.codexVersionProbe?.() ?? probeInstalledCodexVersion();
+    options.codexVersionProbe?.() ?? probeInstalledCodeBuddyVersion();
   const ombManagesTui = shouldOmbManageTuiFromCodexVersion(codexVersion);
 
   if (currentModel === LEGACY_SETUP_MODEL) {

@@ -18,6 +18,7 @@ import {
   CODEBUDDY_BYPASS_FLAG,
   CODEBUDDY_EFFORT_FLAG,
   CODEBUDDY_LEGACY_BYPASS_FLAG,
+  CODEBUDDY_PRINT_FLAG,
   CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG,
   HIGH_REASONING_FLAG,
   XHIGH_REASONING_FLAG,
@@ -33,7 +34,6 @@ import {
 import {
   getBaseStateDir,
   getStateDir,
-  listModeStateFilesWithScopePreference,
 } from "../../mcp/state-paths.js";
 import { maybeCheckAndPromptUpdate } from "../update.js";
 import { maybePromptGithubStar } from "../star-prompt.js";
@@ -66,7 +66,7 @@ import {
   isTmuxAvailable,
 } from "../../team/tmux-session.js";
 import { getPackageRoot } from "../../utils/package.js";
-import { codexConfigPath, rememberOmbLaunchContext, resolveOmbCliEntryPath } from "../../utils/paths.js";
+import { codexConfigPath, resolveOmbCliEntryPath } from "../../utils/paths.js";
 import { repairConfigIfNeeded } from "../../config/generator.js";
 import { HUD_TMUX_HEIGHT_LINES } from "../../hud/constants.js";
 import {
@@ -75,9 +75,9 @@ import {
   listCurrentWindowHudPaneIds,
   parsePaneIdFromTmuxOutput,
 } from "../../hud/tmux.js";
-import { formatCliText } from "../brand.js";
 import {
   classifySpawnError,
+  resolveCommandPathForPlatform,
   spawnPlatformCommandSync,
 } from "../../utils/platform-command.js";
 import { buildHookEvent } from "../../hooks/extensibility/events.js";
@@ -120,10 +120,12 @@ const OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = "OMB_BYPASS_DEFAULT_SYSTEM_PROMPT";
 const OMB_MODEL_INSTRUCTIONS_FILE_ENV = "OMB_MODEL_INSTRUCTIONS_FILE";
 const OMB_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_RALPH_APPEND_INSTRUCTIONS_FILE";
 const OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE";
+const CODEBUDDY_NPM_PACKAGE = "@tencent-ai/codebuddy-code";
+const CODEBUDDY_AUTO_INSTALL_ENV = "OMB_CODEBUDDY_AUTO_INSTALL";
 const REASONING_MODES = ["low", "medium", "high", "xhigh"] as const;
 type ReasoningMode = (typeof REASONING_MODES)[number];
 const REASONING_MODE_SET = new Set<string>(REASONING_MODES);
-const CODEX_VERSION_FLAGS = new Set(["--version", "-V"]);
+const VERSION_FLAGS = new Set(["--version", "-V", "-v"]);
 const TMUX_EXTENDED_KEYS_MODE = "always";
 const TMUX_EXTENDED_KEYS_FALLBACK_MODE = "off";
 const TMUX_EXTENDED_KEYS_LEASE_DIR = "tmux-extended-keys";
@@ -187,6 +189,46 @@ export function classifyCodexExecFailure(error: unknown): CodexExecFailureClassi
   return { kind: "launch-error", code, message };
 }
 
+// ── CodeBuddy CLI auto-install ────────────────────────────────────────────
+
+export function shouldAutoInstallCodeBuddy(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env[CODEBUDDY_AUTO_INSTALL_ENV];
+  if (typeof raw !== "string" || raw.trim() === "") return true;
+  return !/^(0|false|no|off)$/i.test(raw.trim());
+}
+
+function isCodeBuddyAvailable(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(resolveCommandPathForPlatform(CODEBUDDY_BIN, process.platform, env));
+}
+
+export function ensureCodeBuddyAvailable(cwd: string, env: NodeJS.ProcessEnv = process.env): void {
+  if (isCodeBuddyAvailable(env)) return;
+  if (!shouldAutoInstallCodeBuddy(env)) return;
+
+  console.error(`[omb] CodeBuddy CLI not found in PATH. Installing ${CODEBUDDY_NPM_PACKAGE} globally...`);
+  const { result } = spawnPlatformCommandSync("npm", ["install", "-g", CODEBUDDY_NPM_PACKAGE], {
+    cwd,
+    stdio: "inherit",
+    env,
+    encoding: "utf-8",
+  });
+
+  if (result.error) {
+    const errno = result.error as NodeJS.ErrnoException;
+    const kind = classifySpawnError(errno);
+    const installHint = `Install CodeBuddy manually: npm install -g ${CODEBUDDY_NPM_PACKAGE}`;
+    if (kind === "missing") throw new Error(`[omb] npm was not found, so CodeBuddy could not be installed. ${installHint}`);
+    if (kind === "blocked") throw new Error(`[omb] npm is blocked in this environment (${errno.code || "blocked"}). ${installHint}`);
+    throw new Error(`[omb] failed to install CodeBuddy: ${errno.message}. ${installHint}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(`[omb] npm install -g ${CODEBUDDY_NPM_PACKAGE} failed with exit code ${result.status ?? "unknown"}. Install CodeBuddy manually, then retry.`);
+  }
+  if (!isCodeBuddyAvailable(env)) {
+    throw new Error(`[omb] ${CODEBUDDY_NPM_PACKAGE} was installed, but '${CODEBUDDY_BIN}' is still not available in PATH. Add your npm global bin directory to PATH, then retry.`);
+  }
+}
+
 // ── Run codex blocking ─────────────────────────────────────────────────────
 
 function runCodexBlocking(
@@ -195,6 +237,7 @@ function runCodexBlocking(
   launchArgs: string[],
   codexEnv: NodeJS.ProcessEnv,
 ): void {
+  if (binary === CODEBUDDY_BIN) ensureCodeBuddyAvailable(cwd, codexEnv);
   const { result } = spawnPlatformCommandSync(binary, launchArgs, {
     cwd,
     stdio: "inherit",
@@ -334,6 +377,10 @@ function parseTomlStringValue(value: string): string {
   return trimmed;
 }
 
+function warnDroppedCodexOnlyArg(arg: string): void {
+  process.stderr.write(`[omb] warning: dropped Codex-only CLI argument for CodeBuddy: ${arg}\n`);
+}
+
 export function normalizeCodexLaunchArgs(args: string[]): string[] {
   const parsed = parseWorktreeMode(args);
   const launchPolicyParsed = splitLeaderLaunchPolicyArgs(parsed.remainingArgs);
@@ -365,15 +412,36 @@ export function normalizeCodexLaunchArgs(args: string[]): string[] {
         const translated = parseLegacyConfigOverride(next);
         if (translated?.kind === "system-prompt-file") { normalized.push(CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, translated.value); index += 1; continue; }
         if (translated?.kind === "reasoning") { reasoningMode = translated.value; index += 1; continue; }
-        normalized.push(arg, next); index += 1; continue;
+        warnDroppedCodexOnlyArg(`${arg} ${next}`);
+        index += 1;
+        continue;
       }
-      normalized.push(arg); continue;
+      warnDroppedCodexOnlyArg(arg); continue;
     }
     if (arg.startsWith(`${LONG_CONFIG_FLAG}=`)) {
       const translated = parseLegacyConfigOverride(arg.slice(`${LONG_CONFIG_FLAG}=`.length));
       if (translated?.kind === "system-prompt-file") { normalized.push(CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, translated.value); continue; }
       if (translated?.kind === "reasoning") { reasoningMode = translated.value; continue; }
-      normalized.push(arg); continue;
+      warnDroppedCodexOnlyArg(arg); continue;
+    }
+    if (arg === "--ask-for-approval" || arg === "-a") {
+      const next = launchPolicyParsed.remainingArgs[index + 1];
+      if (next === "never") {
+        wantsBypass = true;
+        index += 1;
+        continue;
+      }
+      if (typeof next === "string") {
+        warnDroppedCodexOnlyArg(`${arg} ${next}`);
+        index += 1;
+        continue;
+      }
+      warnDroppedCodexOnlyArg(arg); continue;
+    }
+    if (arg.startsWith("--ask-for-approval=")) {
+      const value = arg.slice("--ask-for-approval=".length);
+      if (value === "never") { wantsBypass = true; continue; }
+      warnDroppedCodexOnlyArg(arg); continue;
     }
     if (arg === SPARK_FLAG) continue;
     if (arg === MADMAX_SPARK_FLAG) { wantsBypass = true; continue; }
@@ -386,6 +454,78 @@ export function normalizeCodexLaunchArgs(args: string[]): string[] {
     process.stderr.write(`[omb] ${warning}\n`);
   }
   return normalized;
+}
+
+export function translateCodeBuddyResumeArgs(args: string[]): string[] {
+  if (args[0] !== "resume") return [...args];
+  const rest = args.slice(1);
+  const translated: string[] = [];
+  let useContinue = false;
+
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index];
+    if (arg === "--last") {
+      useContinue = true;
+      continue;
+    }
+    if (arg === "--all" || arg === "--include-non-interactive") {
+      warnDroppedCodexOnlyArg(`resume ${arg}`);
+      continue;
+    }
+    translated.push(arg);
+  }
+
+  return [useContinue ? "--continue" : "--resume", ...translated];
+}
+
+export function translateCodeBuddyExecArgs(args: string[]): string[] {
+  const translated: string[] = [];
+  let hasPrint = false;
+
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === CODEBUDDY_PRINT_FLAG || arg === "-p") {
+      hasPrint = true;
+      translated.push(arg);
+      continue;
+    }
+    if (arg === "--json") {
+      translated.push("--output-format", "stream-json");
+      continue;
+    }
+    if (arg === "--output-schema") {
+      const next = args[index + 1];
+      if (typeof next === "string") {
+        translated.push("--json-schema", next);
+        index += 1;
+        continue;
+      }
+      warnDroppedCodexOnlyArg(arg);
+      continue;
+    }
+    if (arg.startsWith("--output-schema=")) {
+      translated.push("--json-schema", arg.slice("--output-schema=".length));
+      continue;
+    }
+    if (arg === "--output-last-message" || arg === "-o" || arg === "--color") {
+      const next = args[index + 1];
+      if (typeof next === "string" && !next.startsWith("-")) index += 1;
+      warnDroppedCodexOnlyArg(arg);
+      continue;
+    }
+    if (
+      arg === "--skip-git-repo-check"
+      || arg === "--ephemeral"
+      || arg === "--ignore-user-config"
+      || arg === "--ignore-rules"
+    ) {
+      warnDroppedCodexOnlyArg(arg);
+      continue;
+    }
+    translated.push(arg);
+  }
+
+  return hasPrint ? translated : [CODEBUDDY_PRINT_FLAG, ...translated];
 }
 
 export function injectModelInstructionsBypassArgs(
@@ -506,7 +646,7 @@ function encodePowerShellCommand(commandText: string): string {
 }
 
 function isCodexVersionRequest(args: string[]): boolean {
-  return args.some((arg) => CODEX_VERSION_FLAGS.has(arg));
+  return args.some((arg) => VERSION_FLAGS.has(arg));
 }
 
 export function buildWindowsPromptCommand(command: string, args: string[]): string {
@@ -1050,7 +1190,6 @@ async function flushHookDerivedWatcherOnce(cwd: string): Promise<void> {
 // ── MCP orphan cleanup ─────────────────────────────────────────────────────
 
 import {
-  cleanupCommand,
   cleanupOmbMcpProcesses,
   findLaunchSafeCleanupCandidates,
   type CleanupDependencies,
@@ -1318,7 +1457,7 @@ function killTmuxPane(paneId: string): void {
 
 // ── Codex home resolution ──────────────────────────────────────────────────
 
-import { setup, SETUP_SCOPES, type SetupScope } from "../setup.js";
+import { SETUP_SCOPES, type SetupScope } from "../setup.js";
 
 const LEGACY_SCOPE_MIGRATION_SYNC: Record<string, SetupScope> = { "project-local": "project" };
 
@@ -1507,10 +1646,13 @@ function runCodex(
   const codexEnvWithSession = { ...codexBaseEnv, OMB_SESSION_ID: sessionId };
   const codexEnv = workerLaunchArgs ? { ...codexEnvWithSession, [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs } : codexEnvWithSession;
   const codexEnvWithNotify = notifyTempContractRaw ? { ...codexEnv, [OMB_NOTIFY_TEMP_CONTRACT_ENV]: notifyTempContractRaw } : codexEnv;
-  const launchBinary = launchArgs[0] === "resume" ? "codex" : CODEBUDDY_BIN;
+  const translatedLaunchArgs = translateCodeBuddyResumeArgs(launchArgs);
+  const launchBinary = CODEBUDDY_BIN;
   const launchPolicy = resolveCodexLaunchPolicy(process.env, process.platform, undefined, nativeWindows, undefined, undefined, explicitLaunchPolicy);
 
-  if (isCodexVersionRequest(launchArgs)) { runCodexBlocking(cwd, launchBinary, launchArgs, codexEnvWithNotify); return; }
+  ensureCodeBuddyAvailable(cwd, codexEnvWithNotify);
+
+  if (isCodexVersionRequest(translatedLaunchArgs)) { runCodexBlocking(cwd, launchBinary, translatedLaunchArgs, codexEnvWithNotify); return; }
 
   if (launchPolicy === "inside-tmux") {
     const currentPaneId = process.env.TMUX_PANE;
@@ -1528,16 +1670,16 @@ function runCodex(
     }
     const activePaneId = process.env.TMUX_PANE?.trim();
     if (activePaneId) { try { execFileSync("tmux", ["display-message", "-p", "-t", activePaneId, "#S"], { encoding: "utf-8" }); } catch {} }
-    try { withTmuxExtendedKeys(cwd, () => { runCodexBlocking(cwd, launchBinary, launchArgs, codexEnvWithNotify); }); } finally {
+    try { withTmuxExtendedKeys(cwd, () => { runCodexBlocking(cwd, launchBinary, translatedLaunchArgs, codexEnvWithNotify); }); } finally {
       const cleanupPaneIds = buildHudPaneCleanupTargets(listHudWatchPaneIdsInCurrentWindow(currentPaneId), hudPaneId, currentPaneId);
       for (const paneId of cleanupPaneIds) killTmuxPane(paneId);
     }
   } else if (launchPolicy === "direct") {
-    runCodexBlocking(cwd, launchBinary, launchArgs, codexEnvWithNotify);
+    runCodexBlocking(cwd, launchBinary, translatedLaunchArgs, codexEnvWithNotify);
   } else {
     // detached-tmux
-    const codexCmd = buildTmuxPaneCommand(launchBinary, launchArgs);
-    const detachedWindowsCodexCmd = nativeWindows ? buildWindowsPromptCommand(launchBinary, launchArgs) : null;
+    const codexCmd = buildTmuxPaneCommand(launchBinary, translatedLaunchArgs);
+    const detachedWindowsCodexCmd = nativeWindows ? buildWindowsPromptCommand(launchBinary, translatedLaunchArgs) : null;
     const sessionName = buildDetachedTmuxSessionName(cwd, sessionId);
     let createdDetachedSession = false;
     let registeredHookTarget: string | null = null;
@@ -1574,7 +1716,7 @@ function runCodex(
         const rollbackSteps = buildDetachedSessionRollbackSteps(sessionName, registeredHookTarget, registeredHookName, registeredClientAttachedHookName);
         for (const rollbackStep of rollbackSteps) { try { execFileSync("tmux", rollbackStep.args, { stdio: "ignore" }); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); } }
       }
-      runCodexBlocking(cwd, launchBinary, launchArgs, codexEnvWithNotify);
+      runCodexBlocking(cwd, launchBinary, translatedLaunchArgs, codexEnvWithNotify);
     }
   }
 }
@@ -1704,7 +1846,7 @@ export async function execWithOverlay(args: string[]): Promise<void> {
 
   try {
     const notifyTempContractRaw = notifyTempResult.contract.active ? serializeNotifyTempContract(notifyTempResult.contract) : null;
-    const codexArgs = injectModelInstructionsBypassArgs(cwd, ["exec", ...normalizedArgs], process.env, sessionModelInstructionsPath(cwd, sessionId));
+    const codexArgs = injectModelInstructionsBypassArgs(cwd, translateCodeBuddyExecArgs(normalizedArgs), process.env, sessionModelInstructionsPath(cwd, sessionId));
     const codexEnvBase = codexHomeOverride ? { ...process.env, CODEBUDDY_HOME: codexHomeOverride, CODEX_HOME: codexHomeOverride } : process.env;
     const codexEnv = notifyTempContractRaw ? { ...codexEnvBase, [OMB_NOTIFY_TEMP_CONTRACT_ENV]: notifyTempContractRaw } : codexEnvBase;
     runCodexBlocking(cwd, CODEBUDDY_BIN, codexArgs, codexEnv);
@@ -1717,7 +1859,7 @@ export async function execWithOverlay(args: string[]): Promise<void> {
  * Execute the launch pipeline with explicit context (for programmatic use).
  */
 export async function executeLaunchPipeline(
-  ctx: CliBootstrapContext,
+  _ctx: CliBootstrapContext,
   command: string,
   args: string[],
 ): Promise<LaunchPipelineResult> {

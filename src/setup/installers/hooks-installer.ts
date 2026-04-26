@@ -14,7 +14,7 @@ export const hooksInstaller: AssetInstaller = {
   name: "hooks",
 
   async generateActions(options: InstallerOptions): Promise<SetupAction[]> {
-    const { pkgRoot, projectRoot, scope } = options;
+    const { projectRoot, scope } = options;
     const { resolveScopeDirectories } = await import("../../cli/setup.js");
     const scopeDirs = resolveScopeDirectories(scope, projectRoot);
     const actions: SetupAction[] = [];

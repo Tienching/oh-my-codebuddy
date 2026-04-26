@@ -7,7 +7,6 @@
  */
 
 import { getRootModelName } from "../config/generator.js";
-import { DEFAULT_FRONTIER_MODEL } from "../config/models.js";
 
 // ---------------------------------------------------------------------------
 // Input and result types

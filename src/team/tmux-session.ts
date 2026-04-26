@@ -699,11 +699,11 @@ function normalizeCodebuddyWorkerLaunchArgs(args: string[]): string[] {
           index += 1;
           continue;
         }
-        normalized.push(arg, next);
+        process.stderr.write(`[omb] warning: dropped Codex-only worker CLI argument for CodeBuddy: ${arg} ${next}\n`);
         index += 1;
         continue;
       }
-      normalized.push(arg);
+      process.stderr.write(`[omb] warning: dropped Codex-only worker CLI argument for CodeBuddy: ${arg}\n`);
       continue;
     }
 
@@ -717,7 +717,7 @@ function normalizeCodebuddyWorkerLaunchArgs(args: string[]): string[] {
         reasoningMode = translated.value;
         continue;
       }
-      normalized.push(arg);
+      process.stderr.write(`[omb] warning: dropped Codex-only worker CLI argument for CodeBuddy: ${arg}\n`);
       continue;
     }
 

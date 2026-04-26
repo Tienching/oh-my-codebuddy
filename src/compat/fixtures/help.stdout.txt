@@ -3,7 +3,7 @@ oh-my-codebuddy (omb) - Multi-agent orchestration for CodeBuddy CLI
 
 Usage:
   omb           Launch CodeBuddy CLI (HUD auto-attaches only when already inside tmux)
-  omb exec      Run codebuddy exec non-interactively with OMB AGENTS/overlay injection
+  omb exec      Run CodeBuddy non-interactively via --print with OMB AGENTS/overlay injection
   omb setup     Install skills, prompts, MCP servers, and scope-specific AGENTS.md
   omb uninstall Remove OMB configuration and clean up installed artifacts
   omb doctor    Check installation health

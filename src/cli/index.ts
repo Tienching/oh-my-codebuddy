@@ -10,9 +10,9 @@
  * - runtime/errors: unified error classification
  */
 
-import { basename, join } from "path";
-import { existsSync, readFileSync } from "fs";
-import { setup, SETUP_SCOPES, type SetupScope } from "./setup.js";
+import { basename } from "path";
+import { existsSync } from "fs";
+import { setup } from "./setup.js";
 import { uninstall } from "./uninstall.js";
 import { version } from "./version.js";
 import { tmuxHookCommand } from "./tmux-hook.js";
@@ -24,11 +24,7 @@ import { askCommand } from "./ask.js";
 import { stateCommand } from "./state.js";
 import { adaptCommand } from "./adapt.js";
 import { questionCommand } from "./question.js";
-import {
-  cleanupCommand,
-  type CleanupDependencies,
-  type CleanupResult,
-} from "./cleanup.js";
+import { cleanupCommand } from "./cleanup.js";
 import { exploreCommand } from "./explore.js";
 import { sparkshellCommand } from "./sparkshell.js";
 import { agentsInitCommand } from "./agents-init.js";
@@ -36,28 +32,8 @@ import { agentsCommand } from "./agents.js";
 import { sessionCommand } from "./session-search.js";
 import { autoresearchCommand } from "./autoresearch.js";
 import { mcpParityCommand } from "./mcp-parity.js";
-import {
-  CODEBUDDY_BIN,
-  CODEBUDDY_BYPASS_FLAG,
-  CODEBUDDY_EFFORT_FLAG,
-  CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG,
-  CODEBUDDY_LEGACY_BYPASS_FLAG,
-  HIGH_REASONING_FLAG,
-  XHIGH_REASONING_FLAG,
-  DEPRECATED_HIGH_REASONING_MSG,
-  DEPRECATED_XHIGH_REASONING_MSG,
-  EFFORT_FLAG,
-  SPARK_FLAG,
-  MADMAX_SPARK_FLAG,
-  CONFIG_FLAG,
-  LONG_CONFIG_FLAG,
-  YOLO_FLAG,
-  MADMAX_FLAG,
-} from "./constants.js";
 import { listModeStateFilesWithScopePreference } from "../mcp/state-paths.js";
 import { expandCommandPrompt } from "../commands/index.js";
-import { isNativeWindows } from "../team/tmux-session.js";
-import { getPackageRoot } from "../utils/package.js";
 import { codexConfigPath, rememberOmbLaunchContext } from "../utils/paths.js";
 import { formatCliText } from "./brand.js";
 
@@ -99,6 +75,8 @@ export {
   collectInheritableTeamWorkerArgs,
   resolveTeamWorkerLaunchArgsEnv,
   injectModelInstructionsBypassArgs,
+  translateCodeBuddyExecArgs,
+  translateCodeBuddyResumeArgs,
   resolveWorkerSparkModel,
   resolveCodexHomeForLaunch,
   readPersistedSetupScope,
@@ -138,12 +116,7 @@ rememberOmbLaunchContext();
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const REASONING_KEY = "model_reasoning_effort";
-const TEAM_WORKER_LAUNCH_ARGS_ENV = "OMB_TEAM_WORKER_LAUNCH_ARGS";
-const TEAM_INHERIT_LEADER_FLAGS_ENV = "OMB_TEAM_INHERIT_LEADER_FLAGS";
-const OMB_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_RALPH_APPEND_INSTRUCTIONS_FILE";
-const OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_AUTORESEARCH_APPEND_INSTRUCTIONS_FILE";
 const REASONING_MODES = ["low", "medium", "high", "xhigh"] as const;
-type ReasoningMode = (typeof REASONING_MODES)[number];
 const REASONING_MODE_SET = new Set<string>(REASONING_MODES);
 function getReasoningUsage(): string {
   return formatCliText("Usage: {cmd} reasoning <low|medium|high|xhigh>");
@@ -187,12 +160,6 @@ export async function resolveCommandTemplateLaunchPrompt(
 
 // commandOwnsLocalHelp is imported above and re-exported for backward compat
 
-const NESTED_HELP_COMMANDS = new Set<CliCommand>([
-  "ask", "adapt", "question", "cleanup", "autoresearch", "agents", "agents-init", "deepinit",
-  "exec", "hooks", "hud", "state", "ralph", "resume", "session",
-  "sparkshell", "team", "tmux-hook",
-]);
-
 // ── Help text ──────────────────────────────────────────────────────────────
 
 function getHelp(): string {
@@ -201,7 +168,7 @@ function getHelp(): string {
 
 Usage:
   {cmd}           Launch {product} CLI (HUD auto-attaches only when already inside tmux)
-  {cmd} exec      Run codebuddy exec non-interactively with {acronym} AGENTS/overlay injection
+  {cmd} exec      Run {product} non-interactively via --print with {acronym} AGENTS/overlay injection
   {cmd} setup     Install skills, prompts, MCP servers, and scope-specific AGENTS.md
   {cmd} uninstall Remove {acronym} configuration and clean up installed artifacts
   {cmd} doctor    Check installation health

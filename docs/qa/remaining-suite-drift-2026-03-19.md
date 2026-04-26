@@ -35,7 +35,7 @@ Observed status:
 
 Failing test:
 
-- `runs codex exec with session-scoped instructions that preserve AGENTS and overlay content`
+- `runs CodeBuddy --print with session-scoped instructions that preserve AGENTS and overlay content`
 
 Observed mismatch:
 

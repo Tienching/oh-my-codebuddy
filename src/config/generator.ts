@@ -51,8 +51,6 @@ const SHARED_MCP_REGISTRY_MARKER = "oh-my-codebuddy (OMB) Shared MCP Registry Sy
 const LEGACY_SHARED_MCP_REGISTRY_MARKER = "oh-my-codebuddy (OMB) Shared MCP Registry Sync";
 const SHARED_MCP_REGISTRY_END_MARKER =
   "# End oh-my-codebuddy shared MCP registry sync";
-const LEGACY_SHARED_MCP_REGISTRY_END_MARKER =
-  "# End oh-my-codebuddy shared MCP registry sync";
 const OMB_AGENTS_MAX_THREADS = 6;
 const OMB_AGENTS_MAX_DEPTH = 2;
 const OMB_EXPLORE_ROUTING_DEFAULT = '1';
@@ -614,9 +612,7 @@ export function stripExistingOmbBlocks(config: string): {
   removed: number;
 } {
   const marker = "oh-my-codebuddy (OMB) Configuration";
-  const legacyMarker = "oh-my-codebuddy (OMB) Configuration";
   const endMarker = "# End oh-my-codebuddy";
-  const legacyEndMarker = "# End oh-my-codebuddy";
   let cleaned = config;
   let removed = 0;
 

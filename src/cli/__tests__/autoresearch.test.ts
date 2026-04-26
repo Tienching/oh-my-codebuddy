@@ -72,6 +72,13 @@ describe('normalizeAutoresearchCodexArgs', () => {
   it('normalizes --madmax to the canonical bypass flag', () => {
     assert.deepEqual(normalizeAutoresearchCodexArgs(['--madmax']), ['--dangerously-skip-permissions']);
   });
+
+  it('translates known Codex config overrides to CodeBuddy flags', () => {
+    assert.deepEqual(
+      normalizeAutoresearchCodexArgs(['-c', 'model_reasoning_effort="high"', '--config=model_instructions_file="/tmp/agents.md"']),
+      ['--effort', 'high', '--system-prompt-file', '/tmp/agents.md', '--dangerously-skip-permissions'],
+    );
+  });
 });
 
 describe('omb autoresearch', () => {
@@ -173,7 +180,7 @@ if [ "$1" = "--print" ]; then
   "candidate_commit": null,
   "base_commit": "HEAD_PLACEHOLDER",
   "description": "stop after guided handoff",
-  "notes": ["fake codex exec"],
+  "notes": ["fake codebuddy print"],
   "created_at": "2026-03-18T00:00:00.000Z"
 }
 EOF
@@ -286,7 +293,7 @@ cat >"$candidate_file" <<'EOF'
   "candidate_commit": null,
   "base_commit": "HEAD_PLACEHOLDER",
   "description": "stop after guided handoff",
-  "notes": ["fake codex exec"],
+  "notes": ["fake codebuddy print"],
   "created_at": "2026-03-18T00:00:00.000Z"
 }
 EOF
@@ -458,7 +465,7 @@ cat >"$candidate_file" <<'EOF'
   "candidate_commit": null,
   "base_commit": "HEAD_PLACEHOLDER",
   "description": "stop after split launch",
-  "notes": ["fake codex exec"],
+  "notes": ["fake codebuddy print"],
   "created_at": "2026-03-18T00:00:00.000Z"
 }
 EOF
@@ -564,7 +571,7 @@ cat >"$candidate_file" <<'EOF'
   "candidate_commit": null,
   "base_commit": "HEAD_PLACEHOLDER",
   "description": "stop after foreground fallback",
-  "notes": ["fake codex exec"],
+  "notes": ["fake codebuddy print"],
   "created_at": "2026-03-18T00:00:00.000Z"
 }
 EOF
@@ -728,7 +735,7 @@ esac
     }
   });
 
-  it('launches codex exec for autoresearch turns without shelling out to cat', async () => {
+  it('launches CodeBuddy --print for autoresearch turns without shelling out to cat', async () => {
     const repo = await initRepo();
     const fakeBin = await mkdtemp(join(tmpdir(), 'omb-autoresearch-fake-bin-'));
     try {
@@ -763,7 +770,7 @@ exit 97
 printf 'fake-codebuddy:%s\\n' "$*" >&2
 candidate_file=$(find "$OMB_TEST_REPO_ROOT/.omb/logs/autoresearch" -name candidate.json | head -n 1)
 head_commit=$(git rev-parse HEAD)
-printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit": "%s",\\n  "description": "stop after first exec",\\n  "notes": ["fake codex exec"],\\n  "created_at": "2026-03-15T00:00:00.000Z"\\n}\\n' "$head_commit" >"$candidate_file"
+printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit": "%s",\\n  "description": "stop after first exec",\\n  "notes": ["fake codebuddy print"],\\n  "created_at": "2026-03-15T00:00:00.000Z"\\n}\\n' "$head_commit" >"$candidate_file"
 `,
         'utf-8',
       );
@@ -812,7 +819,7 @@ cat >"$candidate_file" <<EOF
   "status": "noop",
   "candidate_commit": null,
   "base_commit": "$head_commit",
-  "description": "noop from fake codex exec",
+  "description": "noop from fake codebuddy print",
   "notes": ["fake noop"],
   "created_at": "2026-03-15T00:00:00.000Z"
 }

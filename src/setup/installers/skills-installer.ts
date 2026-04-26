@@ -4,12 +4,11 @@
 
 import { join } from "path";
 import { existsSync, readdirSync, statSync, readFileSync } from "fs";
-import { mkdir, copyFile, rm, readFile } from "fs/promises";
+import { mkdir, copyFile, rm } from "fs/promises";
 import { dirname } from "path";
 import type { SetupAction } from "../plan.js";
 import type { AssetInstaller, InstallerOptions } from "./types.js";
 import { tryReadCatalogManifest } from "../../catalog/reader.js";
-import { validateSkillFile } from "../../cli/setup.js";
 
 export const skillsInstaller: AssetInstaller = {
   name: "skills",

@@ -54,7 +54,7 @@ export class CommandRegistry {
 
 Usage:
   {cmd}           Launch {product} CLI (HUD auto-attaches only when already inside tmux)
-  {cmd} exec      Run codebuddy exec non-interactively with {acronym} AGENTS/overlay injection
+  {cmd} exec      Run CodeBuddy non-interactively via --print with {acronym} AGENTS/overlay injection
   {cmd} setup     Install skills, prompts, MCP servers, and scope-specific AGENTS.md
   {cmd} uninstall Remove {acronym} configuration and clean up installed artifacts
   {cmd} doctor    Check installation health
@@ -157,7 +157,7 @@ export function buildCommandRegistry(): CommandRegistry {
   const registry = new CommandRegistry();
 
   registry.register({ name: "launch", aliases: [], helpText: "Launch CodeBuddy CLI with HUD" });
-  registry.register({ name: "exec", aliases: [], helpText: "Run codebuddy exec non-interactively", ownsLocalHelp: true });
+  registry.register({ name: "exec", aliases: [], helpText: "Run CodeBuddy --print non-interactively", ownsLocalHelp: true });
   registry.register({ name: "setup", aliases: [], helpText: "Install skills, prompts, MCP servers, and scope-specific AGENTS.md" });
   registry.register({ name: "uninstall", aliases: [], helpText: "Remove OMB configuration and clean up installed artifacts" });
   registry.register({ name: "doctor", aliases: [], helpText: "Check installation health" });
