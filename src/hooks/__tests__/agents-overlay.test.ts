@@ -42,6 +42,27 @@ function setMockCodebuddyHome(codebuddyHomePath: string): () => void {
   };
 }
 
+function setMockCodexHome(codexHomePath: string): () => void {
+  const previous = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHomePath;
+  return () => {
+    if (typeof previous === "string") process.env.CODEX_HOME = previous;
+    else delete process.env.CODEX_HOME;
+  };
+}
+
+function setMockLeaderCli(
+  leaderCli: "codebuddy" | "codex" | undefined,
+): () => void {
+  const previous = process.env.OMB_LEADER_CLI;
+  if (typeof leaderCli === "string") process.env.OMB_LEADER_CLI = leaderCli;
+  else delete process.env.OMB_LEADER_CLI;
+  return () => {
+    if (typeof previous === "string") process.env.OMB_LEADER_CLI = previous;
+    else delete process.env.OMB_LEADER_CLI;
+  };
+}
+
 describe("generateOverlay", () => {
   let tempDir: string;
   before(async () => {
@@ -636,8 +657,71 @@ describe("session-scoped model instructions file", () => {
       sessionContent.indexOf("# User instructions") <
         sessionContent.indexOf("# Project instructions"),
     );
+    assert.match(sessionContent, /OMB workflow routing fallback/);
+    assert.match(sessionContent, /do not use CodeBuddy's native TeamCreate surface/);
     assert.match(sessionContent, /<!-- OMB:RUNTIME:START -->/);
     assert.equal(projectAfter, projectContent);
+  });
+
+  it("uses CODEBUDDY_HOME AGENTS only for CodeBuddy sessions even if CODEX_HOME AGENTS exists", async () => {
+    const restoreCodexHome = setMockCodexHome(join(tempDir, "home", ".codex"));
+    const restoreLeaderCli = setMockLeaderCli("codebuddy");
+    try {
+      const codebuddyAgentsMd = join(tempDir, "home", ".codebuddy", "AGENTS.md");
+      const codexAgentsMd = join(tempDir, "home", ".codex", "AGENTS.md");
+      const projectAgentsMd = join(tempDir, "AGENTS.md");
+      await mkdir(join(tempDir, "home", ".codex"), { recursive: true });
+      await writeFile(codebuddyAgentsMd, "# CodeBuddy instructions\n");
+      await writeFile(codexAgentsMd, "# Codex instructions\n");
+      await writeFile(projectAgentsMd, "# Project instructions\n");
+
+      const overlay = await generateOverlay(
+        tempDir,
+        "session-provider-codebuddy",
+      );
+      const writtenPath = await writeSessionModelInstructionsFile(
+        tempDir,
+        "session-provider-codebuddy",
+        overlay,
+      );
+      const sessionContent = await readFile(writtenPath, "utf-8");
+
+      assert.match(sessionContent, /# CodeBuddy instructions/);
+      assert.doesNotMatch(sessionContent, /# Codex instructions/);
+      assert.match(sessionContent, /# Project instructions/);
+    } finally {
+      restoreCodexHome();
+      restoreLeaderCli();
+    }
+  });
+
+  it("uses CODEX_HOME AGENTS when OMB_LEADER_CLI is codex", async () => {
+    const restoreCodexHome = setMockCodexHome(join(tempDir, "home", ".codex"));
+    const restoreLeaderCli = setMockLeaderCli("codex");
+    try {
+      const codebuddyAgentsMd = join(tempDir, "home", ".codebuddy", "AGENTS.md");
+      const codexAgentsMd = join(tempDir, "home", ".codex", "AGENTS.md");
+      const projectAgentsMd = join(tempDir, "AGENTS.md");
+      await mkdir(join(tempDir, "home", ".codex"), { recursive: true });
+      await writeFile(codebuddyAgentsMd, "# CodeBuddy instructions\n");
+      await writeFile(codexAgentsMd, "# Codex instructions\n");
+      await writeFile(projectAgentsMd, "# Project instructions\n");
+
+      const overlay = await generateOverlay(tempDir, "session-provider-codex");
+      const writtenPath = await writeSessionModelInstructionsFile(
+        tempDir,
+        "session-provider-codex",
+        overlay,
+      );
+      const sessionContent = await readFile(writtenPath, "utf-8");
+
+      assert.doesNotMatch(sessionContent, /# CodeBuddy instructions/);
+      assert.match(sessionContent, /# Codex instructions/);
+      assert.match(sessionContent, /# Project instructions/);
+    } finally {
+      restoreCodexHome();
+      restoreLeaderCli();
+    }
   });
 
   it("deduplicates duplicate skill references when project and user scopes both install the same skill", async () => {
@@ -694,8 +778,36 @@ describe("session-scoped model instructions file", () => {
     );
     const sessionContent = await readFile(writtenPath, "utf-8");
 
+    assert.ok(sessionContent.includes("<!-- OMB:WORKFLOW-FALLBACK:START -->"));
+    assert.ok(sessionContent.includes("do not use CodeBuddy's native TeamCreate surface"));
     assert.ok(sessionContent.includes("<!-- OMB:RUNTIME:START -->"));
     assert.ok(sessionContent.includes("<!-- OMB:RUNTIME:END -->"));
+  });
+
+  it("does not inject fallback routing when full OMB AGENTS guidance is already present", async () => {
+    const userAgentsMd = join(tempDir, "home", ".codebuddy", "AGENTS.md");
+    await mkdir(join(tempDir, "home", ".codebuddy"), { recursive: true });
+    await writeFile(
+      userAgentsMd,
+      [
+        "# oh-my-codebuddy - Intelligent Multi-Agent Orchestration",
+        "",
+        "<keyword_detection>",
+        'team -> run "omb team ..."',
+        "</keyword_detection>",
+      ].join("\n"),
+    );
+
+    const overlay = await generateOverlay(tempDir, "session-full-omb");
+    const writtenPath = await writeSessionModelInstructionsFile(
+      tempDir,
+      "session-full-omb",
+      overlay,
+    );
+    const sessionContent = await readFile(writtenPath, "utf-8");
+
+    assert.doesNotMatch(sessionContent, /OMB workflow routing fallback/);
+    assert.match(sessionContent, /# oh-my-codebuddy - Intelligent Multi-Agent Orchestration/);
   });
 
   it("removes session-scoped file without touching project AGENTS.md", async () => {

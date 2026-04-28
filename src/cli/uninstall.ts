@@ -18,8 +18,12 @@ import {
 import { getPackageRoot } from "../utils/package.js";
 import { AGENT_DEFINITIONS } from "../agents/definitions.js";
 import { detectLegacySkillRootOverlap } from "../utils/paths.js";
-import { resolveScopeDirectories, type SetupScope } from "./setup.js";
-import { readPersistedSetupScope } from "./index.js";
+import {
+  resolveScopeDirectories,
+  type SetupProvider,
+  type SetupScope,
+} from "./setup.js";
+import { readPersistedSetupPreferences } from "./index.js";
 import { isOmbGeneratedAgentsMd } from "../utils/agents-md.js";
 
 export interface UninstallOptions {
@@ -27,7 +31,15 @@ export interface UninstallOptions {
   keepConfig?: boolean;
   verbose?: boolean;
   purge?: boolean;
+  provider?: SetupProvider;
   scope?: SetupScope;
+}
+
+type UninstallTargetProvider = Exclude<SetupProvider, "both">;
+
+interface UninstallTarget {
+  provider: UninstallTargetProvider;
+  scopeDirs: ReturnType<typeof resolveScopeDirectories>;
 }
 
 interface UninstallSummary {
@@ -43,7 +55,42 @@ interface UninstallSummary {
   agentConfigsRemoved: number;
   agentsMdRemoved: boolean;
   cacheDirectoryRemoved: boolean;
-  legacySkillRootWarning: string | null;
+  legacySkillRootWarnings: string[];
+}
+
+function setupProviderTargets(provider: SetupProvider): UninstallTargetProvider[] {
+  return provider === "both" ? ["codebuddy", "codex"] : [provider];
+}
+
+function providerDisplayName(provider: UninstallTargetProvider): string {
+  return provider === "codex" ? "Codex" : "CodeBuddy";
+}
+
+function resolveUninstallTargets(
+  scope: SetupScope,
+  projectRoot: string,
+  provider: SetupProvider,
+): UninstallTarget[] {
+  return setupProviderTargets(provider).map((targetProvider) => {
+    const scopeDirs = resolveScopeDirectories(scope, projectRoot, targetProvider);
+    return { provider: targetProvider, scopeDirs };
+  });
+}
+
+function mergeConfigResult(
+  summary: UninstallSummary,
+  result: Awaited<ReturnType<typeof cleanConfig>>,
+): void {
+  summary.configCleaned = summary.configCleaned || result.configCleaned;
+  summary.mcpServersRemoved = Array.from(
+    new Set([...summary.mcpServersRemoved, ...result.mcpServersRemoved]),
+  );
+  summary.agentEntriesRemoved += result.agentEntriesRemoved;
+  summary.tuiSectionRemoved = summary.tuiSectionRemoved || result.tuiSectionRemoved;
+  summary.topLevelKeysRemoved =
+    summary.topLevelKeysRemoved || result.topLevelKeysRemoved;
+  summary.featureFlagsRemoved =
+    summary.featureFlagsRemoved || result.featureFlagsRemoved;
 }
 
 const OMB_MCP_SERVERS = [
@@ -342,10 +389,13 @@ async function removeCacheDirectory(
 
 async function detectLegacySkillRootWarning(
   scope: SetupScope,
+  canonicalDir: string,
+  provider: UninstallTargetProvider,
 ): Promise<string | null> {
   if (scope !== "user") return null;
 
-  const overlap = await detectLegacySkillRootOverlap();
+  const overlap = await detectLegacySkillRootOverlap(canonicalDir);
+  const providerName = providerDisplayName(provider);
   if (!overlap.legacyExists || overlap.sameResolvedTarget) {
     return null;
   }
@@ -354,7 +404,7 @@ async function detectLegacySkillRootWarning(
     return (
       `legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills). ` +
       "omb uninstall does not remove that historical root automatically; " +
-      "archive or remove ~/.agents/skills if Codex still shows stale or duplicate skills"
+      `archive or remove ~/.agents/skills if ${providerName} still shows stale or duplicate skills`
     );
   }
 
@@ -366,7 +416,7 @@ async function detectLegacySkillRootWarning(
     `${overlap.overlappingSkillNames.length} overlapping skill names remain between ` +
     `${overlap.canonicalDir} and ${overlap.legacyDir}${mismatchMessage}. ` +
     "omb uninstall only removes the active canonical skill root; " +
-    "archive or remove ~/.agents/skills if Codex still shows duplicates"
+    `archive or remove ~/.agents/skills if ${providerName} still shows duplicates`
   );
 }
 
@@ -399,7 +449,7 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
   }
 
   if (summary.hooksFileRemoved) {
-    console.log(`  ${prefix} OMB-managed entries in .codex/hooks.json`);
+    console.log(`  ${prefix} OMB-managed entries in provider hooks.json (.codebuddy/hooks.json and/or .codex/hooks.json)`);
   }
 
   if (summary.promptsRemoved > 0) {
@@ -419,8 +469,8 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
   if (summary.cacheDirectoryRemoved) {
     console.log(`  ${prefix} .omb/ cache directory`);
   }
-  if (summary.legacySkillRootWarning) {
-    console.log(`  Warning: ${summary.legacySkillRootWarning}`);
+  for (const warning of summary.legacySkillRootWarnings) {
+    console.log(`  Warning: ${warning}`);
   }
 
   const totalActions =
@@ -451,22 +501,10 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
   const pkgRoot = getPackageRoot();
 
   // Resolve scope (explicit --scope overrides persisted scope)
-  const scope = options.scope ?? readPersistedSetupScope(projectRoot) ?? "user";
-  const scopeDirs = resolveScopeDirectories(scope, projectRoot);
-  const effectiveScopeDirs =
-    scope === "project" &&
-    !existsSync(scopeDirs.codexHomeDir) &&
-    existsSync(join(projectRoot, ".codex"))
-      ? {
-          ...scopeDirs,
-          codexHomeDir: join(projectRoot, ".codex"),
-          codexConfigFile: join(projectRoot, ".codex", "config.toml"),
-          codexHooksFile: join(projectRoot, ".codex", "hooks.json"),
-          nativeAgentsDir: join(projectRoot, ".codex", "agents"),
-          promptsDir: join(projectRoot, ".codex", "prompts"),
-          skillsDir: join(projectRoot, ".codex", "skills"),
-        }
-      : scopeDirs;
+  const persistedSetup = readPersistedSetupPreferences(projectRoot);
+  const scope = options.scope ?? persistedSetup?.scope ?? "user";
+  const setupProvider = options.provider ?? persistedSetup?.provider ?? "codebuddy";
+  const uninstallTargets = resolveUninstallTargets(scope, projectRoot, setupProvider);
 
   console.log("oh-my-codebuddy uninstall");
   console.log("=====================\n");
@@ -474,6 +512,15 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     console.log("[dry-run mode] No files will be modified.\n");
   }
   console.log(`Resolved scope: ${scope}\n`);
+  if (setupProvider !== "codebuddy") {
+    console.log(`Resolved provider: ${setupProvider}\n`);
+  }
+  if (verbose && uninstallTargets.length > 1) {
+    const targetSummary = uninstallTargets
+      .map((target) => `${providerDisplayName(target.provider)} (${target.scopeDirs.codexHomeDir})`)
+      .join(", ");
+    console.log(`Provider targets: ${targetSummary}\n`);
+  }
 
   const summary: UninstallSummary = {
     configCleaned: false,
@@ -488,42 +535,62 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     agentConfigsRemoved: 0,
     agentsMdRemoved: false,
     cacheDirectoryRemoved: false,
-    legacySkillRootWarning: null,
+    legacySkillRootWarnings: [],
   };
 
-  summary.legacySkillRootWarning = await detectLegacySkillRootWarning(scope);
+  for (const target of uninstallTargets) {
+    const warning = await detectLegacySkillRootWarning(
+      scope,
+      target.scopeDirs.skillsDir,
+      target.provider,
+    );
+    if (warning !== null) {
+      summary.legacySkillRootWarnings.push(warning);
+    }
+  }
 
   // Step 1: Clean config.toml
   if (keepConfig) {
     console.log("[1/5] Skipping config.toml cleanup (--keep-config).");
   } else {
     console.log("[1/5] Cleaning config.toml...");
-    const configResult = await cleanConfig(effectiveScopeDirs.codexConfigFile, {
-      dryRun,
-      verbose,
-    });
-    Object.assign(summary, configResult);
+    for (const target of uninstallTargets) {
+      const configResult = await cleanConfig(target.scopeDirs.codexConfigFile, {
+        dryRun,
+        verbose,
+      });
+      mergeConfigResult(summary, configResult);
+    }
   }
   console.log();
 
   // Step 2: Remove installed prompts
   console.log("[2/6] Removing native hooks artifact...");
-  summary.hooksFileRemoved = await removeHooksFile(effectiveScopeDirs.codexHooksFile, {
-    dryRun,
-    verbose,
-  });
+  let hooksCleaned = 0;
+  for (const target of uninstallTargets) {
+    const removed = await removeHooksFile(target.scopeDirs.codexHooksFile, {
+      dryRun,
+      verbose,
+    });
+    if (removed) {
+      hooksCleaned++;
+      summary.hooksFileRemoved = true;
+    }
+  }
   console.log(
-    `  ${dryRun ? "Would clean" : "Cleaned"} ${summary.hooksFileRemoved ? 1 : 0} hooks artifact(s).`,
+    `  ${dryRun ? "Would clean" : "Cleaned"} ${hooksCleaned} hooks artifact(s).`,
   );
   console.log();
 
   // Step 3: Remove installed prompts
   console.log("[3/6] Removing agent prompts...");
-  summary.promptsRemoved = await removeInstalledPrompts(
-    effectiveScopeDirs.promptsDir,
-    pkgRoot,
-    { dryRun, verbose },
-  );
+  for (const target of uninstallTargets) {
+    summary.promptsRemoved += await removeInstalledPrompts(
+      target.scopeDirs.promptsDir,
+      pkgRoot,
+      { dryRun, verbose },
+    );
+  }
   console.log(
     `  ${dryRun ? "Would remove" : "Removed"} ${summary.promptsRemoved} prompt(s).`,
   );
@@ -531,10 +598,12 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
 
   // Step 4: Remove native agent configs
   console.log("[4/6] Removing native agent configs...");
-  summary.agentConfigsRemoved = await removeAgentConfigs(
-    effectiveScopeDirs.nativeAgentsDir,
-    { dryRun, verbose },
-  );
+  for (const target of uninstallTargets) {
+    summary.agentConfigsRemoved += await removeAgentConfigs(
+      target.scopeDirs.nativeAgentsDir,
+      { dryRun, verbose },
+    );
+  }
   console.log(
     `  ${dryRun ? "Would remove" : "Removed"} ${summary.agentConfigsRemoved} agent config(s).`,
   );
@@ -542,11 +611,13 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
 
   // Step 5: Remove installed skills
   console.log("[5/6] Removing skills...");
-  summary.skillsRemoved = await removeInstalledSkills(
-    effectiveScopeDirs.skillsDir,
-    pkgRoot,
-    { dryRun, verbose },
-  );
+  for (const target of uninstallTargets) {
+    summary.skillsRemoved += await removeInstalledSkills(
+      target.scopeDirs.skillsDir,
+      pkgRoot,
+      { dryRun, verbose },
+    );
+  }
   console.log(
     `  ${dryRun ? "Would remove" : "Removed"} ${summary.skillsRemoved} skill(s).`,
   );
@@ -554,14 +625,20 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
 
   // Step 6: Remove AGENTS.md and optionally .omb/ cache directory
   console.log("[6/6] Cleaning up...");
-  const agentsMdPath =
-    scope === "project"
-      ? join(projectRoot, "AGENTS.md")
-      : join(effectiveScopeDirs.codexHomeDir, "AGENTS.md");
-  summary.agentsMdRemoved = await removeAgentsMd(agentsMdPath, {
-    dryRun,
-    verbose,
-  });
+  if (scope === "project") {
+    summary.agentsMdRemoved = await removeAgentsMd(join(projectRoot, "AGENTS.md"), {
+      dryRun,
+      verbose,
+    });
+  } else {
+    for (const target of uninstallTargets) {
+      const removed = await removeAgentsMd(join(target.scopeDirs.codexHomeDir, "AGENTS.md"), {
+        dryRun,
+        verbose,
+      });
+      summary.agentsMdRemoved = summary.agentsMdRemoved || removed;
+    }
+  }
   if (purge) {
     summary.cacheDirectoryRemoved = await removeCacheDirectory(projectRoot, {
       dryRun,

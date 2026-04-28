@@ -4,6 +4,16 @@
  * Takes a SetupPlan produced by generateSetupPlan() and executes each
  * pending action, recording the result.  Supports dry-run mode and
  * verbose logging.
+ *
+ * ⚠️  Coverage caveat: this executor implements the action kinds whose
+ * content generation already lives inside `executeAction` /
+ * `executeUpdateAction` (mkdir, copy, remove, symlink, verify, scope
+ * persistence, HUD preset, settings.json bootstrap). Remaining update
+ * kinds (config.toml, hooks.json, AGENTS.md, gitignore) intentionally
+ * delegate back to the legacy `src/cli/setup.ts` pipeline, which owns the
+ * real writes. Running `applySetupPlan` on its own is therefore not
+ * sufficient to produce a fully installed provider tree — `omb setup`
+ * remains the canonical install path. See the longer note in plan.ts.
  */
 
 import {
@@ -153,10 +163,17 @@ async function executeAction(
 async function executeUpdateAction(action: SetupAction): Promise<void> {
   const metadata = action.metadata ?? {};
 
-  // Scope persistence
+  // Scope persistence — provider is part of the persisted scope contract so
+  // downstream resolvers (ask.ts, commands/index.ts, runtime/launch) can
+  // distinguish CodeBuddy-only, Codex-only, and both-provider installs.
+  // Dropping provider here is the original bug behind handoff §8.1.
   if (metadata.scope !== undefined) {
     await mkdir(dirname(action.destination), { recursive: true });
-    const payload = JSON.stringify({ scope: metadata.scope }, null, 2) + "\n";
+    const scopeRecord: { scope: unknown; provider?: unknown } = { scope: metadata.scope };
+    if (metadata.provider !== undefined) {
+      scopeRecord.provider = metadata.provider;
+    }
+    const payload = JSON.stringify(scopeRecord, null, 2) + "\n";
     await writeFile(action.destination, payload, "utf-8");
     return;
   }

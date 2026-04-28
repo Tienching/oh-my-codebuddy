@@ -95,6 +95,9 @@ Usage:
   {cmd} reasoning Show or set model reasoning effort (low|medium|high|xhigh)
 
 Options:
+  --leader-cli <name>
+                Select leader CLI runtime: codebuddy (default) | codex
+                (--cli is kept as a compatibility alias)
   --yolo        Launch {product} in yolo mode (shorthand for: {cmd} launch --yolo)
   --model <id>  Pass through to {product} to choose the exact model directly
   --high        [DEPRECATED] Use --effort high instead
@@ -120,8 +123,10 @@ Options:
   --keep-config Skip settings.json cleanup during uninstall
   --purge       Remove .omb/ cache directory during uninstall
   --verbose     Show detailed output
-  --scope       Setup scope for "{cmd} setup" only:
+  --scope       Setup scope for "{cmd} setup", "{cmd} doctor", and "{cmd} uninstall":
                 user | project
+  --provider    Provider for "{cmd} setup", "{cmd} doctor", and "{cmd} uninstall":
+                codebuddy (default) | codex | both
 `);
   }
 }

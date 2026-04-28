@@ -59,9 +59,20 @@ requiring a separate linked Ralph launch up front.
 - **Escalation:** start a separate `omb ralph ...` / `$ralph ...` only when a later manual follow-up still needs a persistent single-owner fix/verification loop.
 - **Deprecation:** `omb team ralph ...` has been removed. Use plain `omb team ...` for team execution or run `omb ralph ...` separately when you explicitly want a later Ralph loop.
 
-### Claude teammates (v0.6.0+)
+### Worker CLI selection
 
-Important: `N:agent-type` (for example `2:executor`) selects the **worker role prompt**, not the worker CLI (`codex` vs `claude`).
+`N:agent-type` usually selects the **worker role prompt** (for example `2:executor`).
+As a provider-aware shorthand, `agent-type` may also be a worker CLI provider:
+`codebuddy`, `codex`, `claude`, or `gemini`. Provider shorthands follow the
+oh-my-claudecode pattern:
+
+```bash
+omb team 2:codex "review architecture and report risks"
+omb team 2:codebuddy:debugger "debug failing tests"
+omb team 1:codex,1:codebuddy "compare implementation approaches"
+```
+
+Use `N:provider:role` when you need both a worker CLI and a role prompt.
 
 To launch Claude teammates, use the team worker CLI env vars:
 
@@ -344,12 +355,12 @@ Useful runtime env vars:
 - `OMB_TEAM_WORKER_LAUNCH_ARGS`
   - Extra args passed to worker launch command
 - `OMB_TEAM_WORKER_CLI`
-  - Worker CLI selector: `auto|codex|claude` (default: `auto`)
-  - `auto` chooses `claude` when worker `--model` contains `claude`, otherwise `codex`
+  - Worker CLI selector: `auto|codebuddy|codex|claude|gemini` (default: `auto`)
+  - `auto` chooses `claude`/`gemini` when the worker model indicates that provider, otherwise `codebuddy`
   - In `claude` mode, workers launch with exactly one `--dangerously-skip-permissions`
     and ignore explicit model/config/effort launch overrides (uses default `settings.json`)
 - `OMB_TEAM_WORKER_CLI_MAP`
-  - Per-worker CLI selector (comma-separated `auto|codex|claude`)
+  - Per-worker CLI selector (comma-separated `auto|codebuddy|codex|claude|gemini`)
   - Length must be `1` (broadcast) or exactly the team worker count
   - Example: `OMB_TEAM_WORKER_CLI_MAP=codex,codex,claude,claude`
   - When present, overrides `OMB_TEAM_WORKER_CLI`

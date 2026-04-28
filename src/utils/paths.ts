@@ -15,9 +15,9 @@ import {
   resolveCanonicalEntryPath as boundaryResolveEntryPath,
 } from "../compat/legacy-boundary.js";
 
-/** Legacy Codex CLI home directory (~/.codex/) — compat-only; prefer codebuddyHome() */
+/** Codex CLI home directory (~/.codex/) */
 export function codexHome(): string {
-  return process.env.CODEX_HOME || process.env.CODEBUDDY_HOME || join(homedir(), ".codex");
+  return process.env.CODEX_HOME || join(homedir(), ".codex");
 }
 
 export const OMB_ENTRY_PATH_ENV = "OMB_ENTRY_PATH";
@@ -137,7 +137,7 @@ export function projectCodexAgentsDir(projectRoot?: string): string {
   return join(projectRoot || process.cwd(), ".codex", "agents");
 }
 
-/** User-level skills directory ($CODEBUDDY_HOME/skills, with $CODEX_HOME as fallback) */
+/** User-level skills directory ($CODEBUDDY_HOME/skills) */
 export function userSkillsDir(): string {
   return join(codebuddyHome(), "skills");
 }
@@ -154,7 +154,7 @@ export function legacyUserSkillsDir(): string {
 
 // ── Brand-migrated aliases (codex→codebuddy, omb→omb) ─────────────────────────────────
 
-/** CodeBuddy CLI home directory (~/.codebuddy/, with $CODEX_HOME compatibility fallback) */
+/** CodeBuddy CLI home directory (~/.codebuddy/) */
 export function codebuddyHome(): string {
   return resolveCanonicalCodebuddyHome();
 }

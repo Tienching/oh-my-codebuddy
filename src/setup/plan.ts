@@ -7,6 +7,21 @@
  *   2. applySetupPlan() executes each action and records the result.
  *
  * This replaces the previous linear script approach in setup.ts.
+ *
+ * ⚠️  Provider apply coverage (status as of 2026-04-27):
+ *   generateSetupPlan() is provider-aware for all action kinds, but
+ *   applySetupPlan() only fully executes the action kinds whose content
+ *   generation is already implemented inside `executeAction`/`executeUpdateAction`
+ *   (mkdir, copy, remove, symlink, verify, scope persistence, HUD preset,
+ *   settings.json bootstrap). Other update kinds (config.toml, hooks.json,
+ *   AGENTS.md, gitignore) are intentionally delegated back to the legacy
+ *   `src/cli/setup.ts` pipeline, which does the real writes. The plan/apply
+ *   flow therefore remains **preview-oriented** for those kinds: running
+ *   applySetupPlan() alone will not produce a fully installed provider
+ *   tree. Real installs still go through `omb setup`. Treat plan.ts as the
+ *   source of truth for "what would change" and the legacy setup CLI as the
+ *   source of truth for "what actually gets written" until the apply path
+ *   wires up content generation for the remaining kinds.
  */
 
 import { join } from "path";
@@ -20,6 +35,7 @@ import {
 import { getPackageRoot } from "../utils/package.js";
 import { DEFAULT_FRONTIER_MODEL } from "../config/models.js";
 import { COMPAT_RULES } from "./compat-rules.js";
+import type { SetupProvider } from "../cli/setup.js";
 
 // ---------------------------------------------------------------------------
 // Re-exported types from setup.ts for backward compatibility
@@ -67,6 +83,7 @@ export interface SetupPlanSummary {
 
 export interface SetupPlan {
   scope: import("../cli/setup.js").SetupScope;
+  provider: SetupProvider;
   scopeDirectories: import("../cli/setup.js").ScopeDirectories;
   actions: SetupAction[];
   warnings: string[];
@@ -81,10 +98,81 @@ export interface SetupPlanOptions {
   scope: import("../cli/setup.js").SetupScope;
   projectRoot: string;
   pkgRoot?: string;
+  provider?: SetupProvider;
   force?: boolean;
   verbose?: boolean;
   codexVersionProbe?: () => string | null;
   mcpRegistryCandidates?: string[];
+}
+
+type SetupTargetProvider = Exclude<SetupProvider, "both">;
+
+const PROJECT_GITIGNORE_BASE_ENTRIES = [
+  ".omb/",
+] as const;
+const PROJECT_CODEBUDDY_GITIGNORE_ENTRIES = [
+  ".codebuddy/*",
+  "!.codebuddy/agents/",
+  "!.codebuddy/agents/**",
+  "!.codebuddy/skills/",
+  "!.codebuddy/skills/**",
+  ".codebuddy/skills/.system/**",
+  "!.codebuddy/prompts/",
+  "!.codebuddy/prompts/**",
+] as const;
+const PROJECT_CODEX_GITIGNORE_ENTRIES = [
+  ".codex/*",
+  "!.codex/agents/",
+  "!.codex/agents/**",
+  "!.codex/skills/",
+  "!.codex/skills/**",
+  ".codex/skills/.system/**",
+  "!.codex/prompts/",
+  "!.codex/prompts/**",
+] as const;
+
+const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/"] as const;
+
+function setupProviderTargets(provider: SetupProvider): SetupTargetProvider[] {
+  return provider === "both" ? ["codebuddy", "codex"] : [provider];
+}
+
+function providerDisplayName(provider: SetupTargetProvider): string {
+  return provider === "codex" ? "Codex" : "CodeBuddy";
+}
+
+function projectGitignoreEntriesForProvider(
+  provider: SetupProvider,
+): readonly string[] {
+  return [
+    ...PROJECT_GITIGNORE_BASE_ENTRIES,
+    ...(provider === "codex" ? [] : PROJECT_CODEBUDDY_GITIGNORE_ENTRIES),
+    ...(provider === "codebuddy" ? [] : PROJECT_CODEX_GITIGNORE_ENTRIES),
+  ];
+}
+
+function planLegacySkillOverlapMessage(
+  overlap: Awaited<ReturnType<typeof detectLegacySkillRootOverlap>>,
+  provider: SetupTargetProvider,
+): string {
+  const providerName = providerDisplayName(provider);
+
+  if (overlap.overlappingSkillNames.length === 0) {
+    return (
+      `Legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) ` +
+      `alongside canonical ${overlap.canonicalDir}. ${providerName} may still discover both roots; ` +
+      `archive or remove ~/.agents/skills if ${providerName} shows duplicate entries.`
+    );
+  }
+
+  const mismatchSuffix = overlap.mismatchedSkillNames.length > 0
+    ? ` ${overlap.mismatchedSkillNames.length} overlap with different SKILL.md content.`
+    : "";
+
+  return (
+    `${overlap.overlappingSkillNames.length} overlapping skill names between ${overlap.canonicalDir} and ` +
+    `${overlap.legacyDir}. ${providerName} may show duplicate skills${mismatchSuffix}`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -135,25 +223,44 @@ export async function generateSetupPlan(
     projectRoot,
     pkgRoot = getPackageRoot(),
     force = false,
+    provider = "codebuddy",
   } = options;
 
   const { resolveScopeDirectories } = await import("../cli/setup.js");
-  const scopeDirs = resolveScopeDirectories(scope, projectRoot);
+  const setupTargets = setupProviderTargets(provider).map((targetProvider) => ({
+    provider: targetProvider,
+    scopeDirs: resolveScopeDirectories(scope, projectRoot, targetProvider),
+  }));
+  const scopeDirs = setupTargets[0]!.scopeDirs;
   const actions: SetupAction[] = [];
   const warnings: string[] = [];
 
   // ── 1. Directory creation ────────────────────────────────────────────
-  const dirs = [
-    scopeDirs.codexHomeDir,
-    scopeDirs.promptsDir,
-    scopeDirs.skillsDir,
-    scopeDirs.nativeAgentsDir,
+  for (const target of setupTargets) {
+    const dirs = [
+      target.scopeDirs.codexHomeDir,
+      target.scopeDirs.promptsDir,
+      target.scopeDirs.skillsDir,
+      target.scopeDirs.nativeAgentsDir,
+    ];
+
+    for (const dir of dirs) {
+      if (!existsSync(dir)) {
+        actions.push({
+          kind: "mkdir",
+          description: `Create directory ${dir}`,
+          destination: dir,
+          status: "pending",
+        });
+      }
+    }
+  }
+
+  for (const dir of [
     ombStateDir(projectRoot),
     ombPlansDir(projectRoot),
     ombLogsDir(projectRoot),
-  ];
-
-  for (const dir of dirs) {
+  ]) {
     if (!existsSync(dir)) {
       actions.push({
         kind: "mkdir",
@@ -170,45 +277,21 @@ export async function generateSetupPlan(
     kind: "update",
     description: `Persist setup scope "${scope}" to ${scopeFilePath}`,
     destination: scopeFilePath,
-    metadata: { scope },
+    metadata: { scope, provider },
     status: "pending",
   });
 
-  // ── 3. Legacy project alias ──────────────────────────────────────────
+  // ── 3. Project-local ignores ────────────────────────────────────────
   if (scope === "project") {
-    const legacyCodexDir = join(projectRoot, ".codex");
-    if (
-      scopeDirs.codexHomeDir !== legacyCodexDir &&
-      !existsSync(legacyCodexDir)
-    ) {
-      actions.push({
-        kind: "symlink",
-        description: `Create legacy alias .codex -> ${scopeDirs.codexHomeDir}`,
-        source: ".codebuddy",
-        destination: legacyCodexDir,
-        status: "pending",
-      });
-    }
-
-    // .gitignore actions
     const gitignorePath = join(projectRoot, ".gitignore");
     const gitignoreExists = existsSync(gitignorePath);
     const gitignoreContent = gitignoreExists
       ? readFileSync(gitignorePath, "utf-8")
       : "";
 
-    const PROJECT_GITIGNORE_ENTRIES = [
-      ".omb/",
-      ".codebuddy/*",
-      "!.codebuddy/agents/",
-      "!.codebuddy/agents/**",
-      "!.codebuddy/skills/",
-      "!.codebuddy/skills/**",
-      ".codebuddy/skills/.system/**",
-      "!.codebuddy/prompts/",
-      "!.codebuddy/prompts/**",
+    const projectGitignoreEntries = [
+      ...projectGitignoreEntriesForProvider(provider),
     ];
-    const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/"];
 
     const hasEntry = (content: string, entry: string): boolean =>
       content
@@ -216,12 +299,12 @@ export async function generateSetupPlan(
         .map((l) => l.trim())
         .some((l) => l === entry);
 
-    const legacyEntries = new Set(LEGACY_PROJECT_GITIGNORE_ENTRIES);
+  const legacyEntries = new Set<string>(LEGACY_PROJECT_GITIGNORE_ENTRIES);
     const hasLegacy = gitignoreContent
       .split(/\r?\n/)
       .some((l) => legacyEntries.has(l.trim()));
 
-    const missingEntries = PROJECT_GITIGNORE_ENTRIES.filter(
+    const missingEntries = projectGitignoreEntries.filter(
       (entry) => !hasEntry(gitignoreContent, entry),
     );
 
@@ -238,72 +321,32 @@ export async function generateSetupPlan(
 
   // ── 4. Agent prompts ─────────────────────────────────────────────────
   const promptsSrc = join(pkgRoot, "prompts");
-  const promptsDst = scopeDirs.promptsDir;
+  const skillsSrc = join(pkgRoot, "skills");
+
   if (existsSync(promptsSrc)) {
     const files = readdirSync(promptsSrc);
-    for (const file of files) {
-      if (!file.endsWith(".md")) continue;
-      const srcPath = join(promptsSrc, file);
-      if (!statSync(srcPath).isFile()) continue;
+    for (const target of setupTargets) {
+      for (const file of files) {
+        if (!file.endsWith(".md")) continue;
+        const srcPath = join(promptsSrc, file);
+        if (!statSync(srcPath).isFile()) continue;
 
-      const dstPath = join(promptsDst, file);
-      const needsCopy =
-        force || !existsSync(dstPath) || filesDifferSync(srcPath, dstPath);
-
-      if (needsCopy) {
-        actions.push({
-          kind: "copy",
-          description: `Install prompt ${file}`,
-          source: srcPath,
-          destination: dstPath,
-          status: "pending",
-        });
-      } else {
-        actions.push({
-          kind: "skip",
-          description: `Prompt ${file} already up to date`,
-          destination: dstPath,
-          status: "skipped",
-        });
-      }
-    }
-  }
-
-  // ── 5. Skills ────────────────────────────────────────────────────────
-  const skillsSrc = join(pkgRoot, "skills");
-  const skillsDst = scopeDirs.skillsDir;
-  if (existsSync(skillsSrc)) {
-    const entries = readdirSync(skillsSrc, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      const skillMd = join(skillsSrc, entry.name, "SKILL.md");
-      if (!existsSync(skillMd)) continue;
-
-      const skillSrcDir = join(skillsSrc, entry.name);
-      const skillDstDir = join(skillsDst, entry.name);
-
-      // Check each file in the skill
-      const skillFiles = readdirSync(skillSrcDir);
-      for (const sf of skillFiles) {
-        const sfPath = join(skillSrcDir, sf);
-        if (!statSync(sfPath).isFile()) continue;
-
-        const dstPath = join(skillDstDir, sf);
+        const dstPath = join(target.scopeDirs.promptsDir, file);
         const needsCopy =
-          force || !existsSync(dstPath) || filesDifferSync(sfPath, dstPath);
+          force || !existsSync(dstPath) || filesDifferSync(srcPath, dstPath);
 
         if (needsCopy) {
           actions.push({
             kind: "copy",
-            description: `Install skill ${entry.name}/${sf}`,
-            source: sfPath,
+            description: `Install prompt ${file}`,
+            source: srcPath,
             destination: dstPath,
             status: "pending",
           });
         } else {
           actions.push({
             kind: "skip",
-            description: `Skill ${entry.name}/${sf} already up to date`,
+            description: `Prompt ${file} already up to date`,
             destination: dstPath,
             status: "skipped",
           });
@@ -312,79 +355,130 @@ export async function generateSetupPlan(
     }
   }
 
+  // ── 5. Skills ────────────────────────────────────────────────────────
+  if (existsSync(skillsSrc)) {
+    const entries = readdirSync(skillsSrc, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillMd = join(skillsSrc, entry.name, "SKILL.md");
+      if (!existsSync(skillMd)) continue;
+
+      const skillSrcDir = join(skillsSrc, entry.name);
+
+      // Check each file in the skill
+      const skillFiles = readdirSync(skillSrcDir);
+      for (const target of setupTargets) {
+        const skillDstDir = join(target.scopeDirs.skillsDir, entry.name);
+        for (const sf of skillFiles) {
+          const sfPath = join(skillSrcDir, sf);
+          if (!statSync(sfPath).isFile()) continue;
+
+          const dstPath = join(skillDstDir, sf);
+          const needsCopy =
+            force || !existsSync(dstPath) || filesDifferSync(sfPath, dstPath);
+
+          if (needsCopy) {
+            actions.push({
+              kind: "copy",
+              description: `Install skill ${entry.name}/${sf}`,
+              source: sfPath,
+              destination: dstPath,
+              status: "pending",
+            });
+          } else {
+            actions.push({
+              kind: "skip",
+              description: `Skill ${entry.name}/${sf} already up to date`,
+              destination: dstPath,
+              status: "skipped",
+            });
+          }
+        }
+      }
+    }
+  }
+
   // ── 6. Native agent configs ──────────────────────────────────────────
-  if (existsSync(scopeDirs.nativeAgentsDir) || scope === "project") {
-    const { AGENT_DEFINITIONS } = await import("../agents/definitions.js");
-    for (const [name, _agent] of Object.entries(AGENT_DEFINITIONS)) {
-      const promptPath = join(pkgRoot, "prompts", `${name}.md`);
-      if (!existsSync(promptPath)) continue;
+  const agentDefs = await import("../agents/definitions.js");
+  const { AGENT_DEFINITIONS } = agentDefs;
+  for (const target of setupTargets) {
+    if (existsSync(target.scopeDirs.nativeAgentsDir) || scope === "project") {
+      for (const [name] of Object.entries(AGENT_DEFINITIONS)) {
+        const promptPath = join(pkgRoot, "prompts", `${name}.md`);
+        if (!existsSync(promptPath)) continue;
 
-      const dstPath = join(scopeDirs.nativeAgentsDir, `${name}.toml`);
-      const needsUpdate =
-        force || !existsSync(dstPath);
+        const dstPath = join(target.scopeDirs.nativeAgentsDir, `${name}.toml`);
+        const needsUpdate =
+          force || !existsSync(dstPath);
 
-      if (needsUpdate) {
-        actions.push({
-          kind: "update",
-          description: `Install native agent config ${name}.toml`,
-          destination: dstPath,
-          metadata: { agentName: name },
-          status: "pending",
-        });
-      } else {
-        actions.push({
-          kind: "skip",
-          description: `Native agent ${name}.toml already exists`,
-          destination: dstPath,
-          status: "skipped",
-        });
+        if (needsUpdate) {
+          actions.push({
+            kind: "update",
+            description: `Install native agent config ${name}.toml`,
+            destination: dstPath,
+            metadata: { agentName: name, provider: target.provider },
+            status: "pending",
+          });
+        } else {
+          actions.push({
+            kind: "skip",
+            description: `Native agent ${name}.toml already exists`,
+            destination: dstPath,
+            status: "skipped",
+          });
+        }
       }
     }
   }
 
   // ── 7. Config.toml ──────────────────────────────────────────────────
-  const configPath = scopeDirs.codexConfigFile;
-  actions.push({
-    kind: "update",
-    description: `Update config.toml`,
-    destination: configPath,
-    metadata: { scope },
-    status: "pending",
-  });
-
-  // ── 8. Settings.json bootstrap ──────────────────────────────────────
-  const settingsPath = join(scopeDirs.codexHomeDir, "settings.json");
-  if (!existsSync(settingsPath)) {
+  for (const target of setupTargets) {
     actions.push({
       kind: "update",
-      description: `Bootstrap settings.json`,
-      destination: settingsPath,
-      metadata: { model: DEFAULT_FRONTIER_MODEL },
+      description: `Update config.toml`,
+      destination: target.scopeDirs.codexConfigFile,
+      metadata: { scope, provider: target.provider },
       status: "pending",
     });
   }
 
+  // ── 8. Settings.json bootstrap ──────────────────────────────────────
+  for (const target of setupTargets) {
+    const settingsPath = join(target.scopeDirs.codexHomeDir, "settings.json");
+    if (!existsSync(settingsPath)) {
+      actions.push({
+        kind: "update",
+        description: `Bootstrap settings.json`,
+        destination: settingsPath,
+        metadata: {
+          model: DEFAULT_FRONTIER_MODEL,
+          provider: target.provider,
+        },
+        status: "pending",
+      });
+    }
+  }
+
   // ── 9. Hooks.json ───────────────────────────────────────────────────
-  const hooksPath = scopeDirs.codexHooksFile;
-  actions.push({
-    kind: "update",
-    description: `Update native hooks`,
-    destination: hooksPath,
-    status: "pending",
-  });
+  for (const target of setupTargets) {
+    actions.push({
+      kind: "update",
+      description: `Update native hooks`,
+      destination: target.scopeDirs.codexHooksFile,
+      metadata: { provider: target.provider },
+      status: "pending",
+    });
+  }
 
   // ── 10. Legacy hooks ────────────────────────────────────────────────
   if (scope === "project") {
-    const legacyCodexDir = join(projectRoot, ".codex");
-    const legacyHooksPath = join(legacyCodexDir, "hooks.json");
-    if (
-      legacyHooksPath !== hooksPath &&
-      (existsSync(legacyCodexDir) || existsSync(legacyHooksPath))
-    ) {
+    if (provider === "codebuddy" && existsSync(join(projectRoot, ".codex"))) {
+      const legacyHooksPath = join(projectRoot, ".codex", "hooks.json");
       actions.push({
         kind: "update",
         description: `Update legacy hooks at ${legacyHooksPath}`,
         destination: legacyHooksPath,
+        metadata: { provider: "codebuddy", legacyTarget: ".codex/hooks.json" },
         status: "pending",
       });
     }
@@ -400,20 +494,38 @@ export async function generateSetupPlan(
   });
 
   // ── 12. AGENTS.md ──────────────────────────────────────────────────
-  const agentsMdDst =
-    scope === "project"
-      ? join(projectRoot, "AGENTS.md")
-      : join(scopeDirs.codexHomeDir, "AGENTS.md");
   const agentsMdSrc = join(pkgRoot, "templates", "AGENTS.md");
 
   if (existsSync(agentsMdSrc)) {
-    actions.push({
-      kind: "update",
-      description: `Generate AGENTS.md`,
-      source: agentsMdSrc,
-      destination: agentsMdDst,
-      status: "pending",
-    });
+    const agentTargets =
+      scope === "project"
+        ? [{
+            destination: join(projectRoot, "AGENTS.md"),
+            provider: provider,
+          }]
+        : setupTargets.map((target) => ({
+            destination: join(target.scopeDirs.codexHomeDir, "AGENTS.md"),
+            provider: target.provider,
+          }));
+
+    for (const agentTarget of agentTargets) {
+      const alreadyQueued = actions.some(
+        (action) =>
+          action.kind === "update" &&
+          action.description === "Generate AGENTS.md" &&
+          action.destination === agentTarget.destination,
+      );
+      if (alreadyQueued) continue;
+
+      actions.push({
+        kind: "update",
+        description: `Generate AGENTS.md`,
+        source: agentsMdSrc,
+        destination: agentTarget.destination,
+        metadata: { provider: agentTarget.provider },
+        status: "pending",
+      });
+    }
   }
 
   // ── 13. Notify hook ────────────────────────────────────────────────
@@ -448,16 +560,16 @@ export async function generateSetupPlan(
 
   // ── Legacy skill overlap warning ─────────────────────────────────────
   if (scope === "user") {
-    const overlap = await detectLegacySkillRootOverlap();
-    if (overlap.legacyExists && overlap.overlappingSkillNames.length > 0) {
-      warnings.push(
-        `Detected ${overlap.overlappingSkillNames.length} overlapping skill names between canonical ${overlap.canonicalDir} and legacy ${overlap.legacyDir}.`,
-      );
+    for (const target of setupTargets) {
+      const overlap = await detectLegacySkillRootOverlap(target.scopeDirs.skillsDir);
+      if (!overlap.legacyExists) continue;
+      warnings.push(planLegacySkillOverlapMessage(overlap, target.provider));
     }
   }
 
   return {
     scope,
+    provider,
     scopeDirectories: scopeDirs,
     actions,
     warnings,

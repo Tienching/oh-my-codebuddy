@@ -43,6 +43,9 @@ export { parseTmuxPaneSnapshot, isHudWatchPane, findHudWatchPaneIds } from "../h
 
 export {
   normalizeCodexLaunchArgs,
+  normalizeCodexCliLaunchArgs,
+  normalizeLeaderLaunchArgs,
+  extractLeaderCliArgs,
   buildTmuxShellCommand,
   buildTmuxPaneCommand,
   buildWindowsPromptCommand,
@@ -69,12 +72,16 @@ export {
   resolveNotifyFallbackWatcherScript,
   resolveHookDerivedWatcherScript,
   resolveNotifyHookScript,
+  mirrorLeaderCliIntoProcessEnv,
   acquireTmuxExtendedKeysLease,
   releaseTmuxExtendedKeysLease,
   withTmuxExtendedKeys,
   collectInheritableTeamWorkerArgs,
   resolveTeamWorkerLaunchArgsEnv,
   injectModelInstructionsBypassArgs,
+  injectLeaderModelInstructionsBypassArgs,
+  translateLeaderExecArgs,
+  translateLeaderResumeArgs,
   translateCodeBuddyExecArgs,
   translateCodeBuddyResumeArgs,
   resolveWorkerSparkModel,
@@ -82,6 +89,7 @@ export {
   readPersistedSetupScope,
   readPersistedSetupPreferences,
   resolveSetupScopeArg,
+  resolveSetupProviderArg,
   readTopLevelTomlString,
   upsertTopLevelTomlString,
   launchWithHud,
@@ -89,6 +97,7 @@ export {
   buildWindowsMsysBackgroundHelperBootstrapScript,
   DetachedSessionTmuxStep,
   CodexLaunchPolicy,
+  LeaderCli,
   CodexExecFailureClassification,
 } from "./runtime/launch-pipeline.js";
 
@@ -102,6 +111,7 @@ import {
   launchWithHud,
   execWithOverlay,
   resolveSetupScopeArg,
+  resolveSetupProviderArg,
   readTopLevelTomlString,
   upsertTopLevelTomlString,
 } from "./runtime/launch-pipeline.js";
@@ -209,6 +219,9 @@ Usage:
   {cmd} reasoning Show or set model reasoning effort (low|medium|high|xhigh)
 
 Options:
+  --leader-cli <name>
+                Select leader CLI runtime: codebuddy (default) | codex
+                (--cli is kept as a compatibility alias)
   --yolo        Launch {product} in yolo mode (shorthand for: {cmd} launch --yolo)
   --model <id>  Pass through to {product} to choose the exact model directly
   --high        [DEPRECATED] Use --effort high instead
@@ -234,8 +247,10 @@ Options:
   --keep-config Skip settings.json cleanup during uninstall
   --purge       Remove .omb/ cache directory during uninstall
   --verbose     Show detailed output
-  --scope       Setup scope for "{cmd} setup" only:
+  --scope       Setup scope for "{cmd} setup", "{cmd} doctor", and "{cmd} uninstall":
                 user | project
+  --provider    Provider for "{cmd} setup", "{cmd} doctor", and "{cmd} uninstall":
+                codebuddy (default) | codex | both
 `);
 }
 
@@ -278,6 +293,7 @@ export async function main(args: string[]): Promise<void> {
           dryRun: options.dryRun,
           verbose: options.verbose,
           scope: resolveSetupScopeArg(args.slice(1)),
+          provider: resolveSetupProviderArg(args.slice(1)),
         });
         break;
       case "agents":
@@ -296,11 +312,16 @@ export async function main(args: string[]): Promise<void> {
           verbose: options.verbose,
           purge: flags.has("--purge"),
           scope: resolveSetupScopeArg(args.slice(1)),
+          provider: resolveSetupProviderArg(args.slice(1)),
         });
         break;
       case "doctor": {
         const { doctor } = await import("./doctor.js");
-        await doctor(options);
+        await doctor({
+          ...options,
+          scope: resolveSetupScopeArg(args.slice(1)),
+          provider: resolveSetupProviderArg(args.slice(1)),
+        });
         break;
       }
       case "ask":

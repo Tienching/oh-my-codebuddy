@@ -55,13 +55,13 @@ describe("resolveCanonicalCodebuddyHome", () => {
     assert.equal(result, "/custom/codebuddy");
   });
 
-  it("falls back to CODEX_HOME when CODEBUDDY_HOME is not set", () => {
+  it("ignores CODEX_HOME when CODEBUDDY_HOME is not set", () => {
     const result = resolveCanonicalCodebuddyHome(
       envWithout("CODEBUDDY_HOME").constructor === Object
         ? { ...envWithout("CODEBUDDY_HOME"), CODEX_HOME: "/custom/codex" }
         : envWith({ CODEX_HOME: "/custom/codex" }),
     );
-    assert.equal(result, "/custom/codex");
+    assert.ok(result.endsWith(".codebuddy"));
   });
 
   it("prefers CODEBUDDY_HOME over CODEX_HOME when both are set", () => {
@@ -88,10 +88,10 @@ describe("resolveLegacyCodexHome", () => {
     assert.equal(result, "/custom/codex");
   });
 
-  it("falls back to CODEBUDDY_HOME when CODEX_HOME is not set", () => {
+  it("ignores CODEBUDDY_HOME when CODEX_HOME is not set", () => {
     const env = { ...envWithout("CODEX_HOME"), CODEBUDDY_HOME: "/cb" };
     const result = resolveLegacyCodexHome(env);
-    assert.equal(result, "/cb");
+    assert.ok(result.endsWith(".codex"));
   });
 
   it("falls back to ~/.codex when neither is set", () => {
@@ -243,8 +243,8 @@ describe("findAlias", () => {
 // ── shouldDualWrite ──────────────────────────────────────────────────────
 
 describe("shouldDualWrite", () => {
-  it("returns true for active_compat alias", () => {
-    assert.equal(shouldDualWrite("CODEBUDDY_HOME"), true);
+  it("returns false for the CODEX_HOME removal-candidate alias", () => {
+    assert.equal(shouldDualWrite("CODEBUDDY_HOME"), false);
   });
 
   it("returns false for read_only alias", () => {
@@ -314,10 +314,10 @@ describe("isLegacyPathActive", () => {
   });
 });
 
-// ── Priority: canonical > legacy > default ───────────────────────────────
+// ── Priority: canonical > default ────────────────────────────────────────
 
-describe("priority: canonical env var > legacy env var > default", () => {
-  it("CODEBUDDY_HOME wins over CODEX_HOME and default", () => {
+describe("priority: provider env var > default", () => {
+  it("CODEBUDDY_HOME wins over default and ignores CODEX_HOME", () => {
     const env = envWith({
       CODEBUDDY_HOME: "/canonical",
       CODEX_HOME: "/legacy",
@@ -325,9 +325,9 @@ describe("priority: canonical env var > legacy env var > default", () => {
     assert.equal(resolveCanonicalCodebuddyHome(env), "/canonical");
   });
 
-  it("CODEX_HOME wins over default when CODEBUDDY_HOME absent", () => {
+  it("CODEX_HOME does not affect CodeBuddy home when CODEBUDDY_HOME is absent", () => {
     const env = { CODEX_HOME: "/legacy" };
-    assert.equal(resolveCanonicalCodebuddyHome(env), "/legacy");
+    assert.ok(resolveCanonicalCodebuddyHome(env).endsWith(".codebuddy"));
   });
 
   it("OMB_ENTRY_PATH is used when set", () => {

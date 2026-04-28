@@ -27,9 +27,9 @@ import {
 import {
   CODEBUDDY_LEGACY_BYPASS_FLAG,
   CODEBUDDY_BIN,
+  CODEX_BIN,
   CODEBUDDY_BYPASS_FLAG,
   CODEBUDDY_EFFORT_FLAG,
-  CODEBUDDY_PRINT_FLAG,
   CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG,
   CONFIG_FLAG,
   LONG_CONFIG_FLAG,
@@ -38,20 +38,29 @@ import {
 import { restoreStandaloneHudPane, enableMouseScrolling } from '../team/tmux-session.js';
 import { resolveOmbCliEntryPath } from '../utils/paths.js';
 import { formatCliText } from './brand.js';
+import {
+  extractLeaderCliArgs,
+  normalizeLeaderLaunchArgs,
+  translateLeaderExecArgs,
+  resolveCodexHomeForLaunch,
+  type LeaderCli,
+} from './runtime/launch-pipeline.js';
 
 export function getAutoresearchHelp(): string {
   return formatCliText(`{cmd} autoresearch - Launch {acronym} autoresearch with thin-supervisor parity semantics
 
 Usage:
-  {cmd} autoresearch                                                (human entrypoint: launch {product} CLI deep-interview intake, then execute)
+  {cmd} autoresearch                                                (human entrypoint: launch selected leader CLI deep-interview intake, then execute)
   {cmd} autoresearch [--topic T] [--evaluator CMD] [--keep-policy P] [--slug S]
   {cmd} autoresearch init [--topic T] [--evaluator CMD] [--keep-policy P] [--slug S]
-  {cmd} autoresearch run <mission-dir> [codebuddy-args...]          (agent/explicit execution entrypoint)
-  {cmd} autoresearch <mission-dir> [codebuddy-args...]              (compatibility alias for run)
-  {cmd} autoresearch --resume <run-id> [codebuddy-args...]
+  {cmd} autoresearch run <mission-dir> [leader-cli-args...]         (agent/explicit execution entrypoint)
+  {cmd} autoresearch <mission-dir> [leader-cli-args...]             (compatibility alias for run)
+  {cmd} autoresearch --resume <run-id> [leader-cli-args...]
 
 Arguments:
-  (no args)        Launch an interactive CodeBuddy session that activates deep-interview --autoresearch,
+  --leader-cli C   Select leader CLI runtime for intake and turns: codebuddy (default) | codex
+                   (--cli is kept as a compatibility alias).
+  (no args)        Launch an interactive selected-CLI session that activates deep-interview --autoresearch,
                    writes .omb/specs artifacts, then launches only after explicit confirmation.
   --topic/...      Seed the deep-interview intake with draft values; still requires refinement/confirmation before launch.
   init             Bare init is an interactive deep-interview alias on TTYs; init with flags is the expert scaffold path.
@@ -101,6 +110,7 @@ async function writeAutoresearchDeepInterviewAppendixFile(repoRoot: string): Pro
 async function runGuidedAutoresearchDeepInterview(
   repoRoot: string,
   seedArgs?: ReturnType<typeof parseInitArgs>,
+  leaderCli: LeaderCli = 'codebuddy',
 ): Promise<Awaited<ReturnType<typeof initAutoresearchMission>>> {
   const previousInstructionsFile = process.env[AUTORESEARCH_APPEND_INSTRUCTIONS_ENV];
   const appendixPath = await writeAutoresearchDeepInterviewAppendixFile(repoRoot);
@@ -110,7 +120,7 @@ async function runGuidedAutoresearchDeepInterview(
 
   try {
     const { launchWithHud } = await import('./index.js');
-    await launchWithHud([buildAutoresearchDeepInterviewPrompt(seedArgs ?? {})]);
+    await launchWithHud(['--leader-cli', leaderCli, buildAutoresearchDeepInterviewPrompt(seedArgs ?? {})]);
   } finally {
     if (typeof previousInstructionsFile === 'string') {
       process.env[AUTORESEARCH_APPEND_INSTRUCTIONS_ENV] = previousInstructionsFile;
@@ -134,7 +144,7 @@ async function runGuidedAutoresearchDeepInterview(
   return materializeAutoresearchDeepInterviewResult(result);
 }
 
-export function normalizeAutoresearchCodexArgs(codebuddyArgs: readonly string[]): string[] {
+export function normalizeAutoresearchCodeBuddyArgs(codebuddyArgs: readonly string[]): string[] {
   const normalized: string[] = [];
   let hasBypass = false;
 
@@ -197,23 +207,55 @@ export function normalizeAutoresearchCodexArgs(codebuddyArgs: readonly string[])
   return normalized;
 }
 
-function runAutoresearchTurn(worktreePath: string, instructionsFile: string, codebuddyArgs: string[]): void {
+export function normalizeAutoresearchCodexArgs(codebuddyArgs: readonly string[]): string[] {
+  return normalizeAutoresearchCodeBuddyArgs(codebuddyArgs);
+}
+
+function normalizeAutoresearchLeaderArgs(leaderCli: LeaderCli, args: string[]): string[] {
+  if (leaderCli === 'codebuddy') return normalizeAutoresearchCodeBuddyArgs(args);
+  const normalized = normalizeLeaderLaunchArgs(args, leaderCli);
+  return normalized.includes(CODEBUDDY_LEGACY_BYPASS_FLAG)
+    ? normalized
+    : [...normalized, CODEBUDDY_LEGACY_BYPASS_FLAG];
+}
+
+function resolveAutoresearchLeaderHomeEnv(leaderCli: LeaderCli, cwd: string): NodeJS.ProcessEnv {
+  const home = resolveCodexHomeForLaunch(cwd, process.env, leaderCli);
+  if (!home) return {};
+  return leaderCli === 'codex' ? { CODEX_HOME: home } : { CODEBUDDY_HOME: home };
+}
+
+function runAutoresearchTurn(
+  worktreePath: string,
+  instructionsFile: string,
+  codebuddyArgs: string[],
+  leaderCli: LeaderCli,
+): void {
   const prompt = readFileSync(instructionsFile, 'utf-8');
-  const launchArgs = [CODEBUDDY_PRINT_FLAG, ...normalizeAutoresearchCodexArgs(codebuddyArgs), prompt];
-  const result = spawnSync(CODEBUDDY_BIN, launchArgs, {
+  const normalizedArgs = normalizeAutoresearchLeaderArgs(leaderCli, codebuddyArgs);
+  const launchArgs = translateLeaderExecArgs([...normalizedArgs, prompt], leaderCli);
+  const leaderHomeEnv = resolveAutoresearchLeaderHomeEnv(leaderCli, worktreePath);
+  const launchEnv: NodeJS.ProcessEnv = { ...process.env, ...leaderHomeEnv, OMB_LEADER_CLI: leaderCli };
+  if (leaderCli === 'codex') {
+    delete launchEnv.CODEBUDDY_HOME;
+  } else {
+    delete launchEnv.CODEX_HOME;
+  }
+  const binary = leaderCli === 'codex' ? CODEX_BIN : CODEBUDDY_BIN;
+  const result = spawnSync(binary, launchArgs, {
     cwd: worktreePath,
     stdio: ['ignore', 'inherit', 'inherit'],
     encoding: 'utf-8',
-    env: process.env,
-      windowsHide: true,
-    });
+    env: launchEnv,
+    windowsHide: true,
+  });
 
   if (result.error) {
     throw result.error;
   }
   if (result.status !== 0) {
     process.exitCode = typeof result.status === 'number' ? result.status : 1;
-    throw new Error(`autoresearch_codex_exec_failed:${result.status ?? 'unknown'}`);
+    throw new Error(`autoresearch_${leaderCli}_exec_failed:${result.status ?? 'unknown'}`);
   }
 }
 
@@ -221,6 +263,7 @@ export interface ParsedAutoresearchArgs {
   missionDir: string | null;
   runId: string | null;
   codebuddyArgs: string[];
+  leaderCli: LeaderCli;
   guided?: boolean;
   initArgs?: string[];
   seedArgs?: ReturnType<typeof parseInitArgs>;
@@ -232,52 +275,57 @@ function resolveRepoRoot(cwd: string): string {
     cwd,
     encoding: 'utf-8',
     stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    }).trim();
+    windowsHide: true,
+  }).trim();
 }
 
-export function parseAutoresearchArgs(args: readonly string[]): ParsedAutoresearchArgs {
-  const values = [...args];
+export function parseAutoresearchArgs(
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): ParsedAutoresearchArgs {
+  const leaderCliResult = extractLeaderCliArgs([...args], env);
+  const leaderCli = leaderCliResult.leaderCli;
+  const values = leaderCliResult.remainingArgs;
   if (values.length === 0) {
     if (!process.stdin.isTTY) {
       throw new Error(`mission-dir is required.\n${getAutoresearchHelp()}`);
     }
-    return { missionDir: null, runId: null, codebuddyArgs: [], guided: true };
+    return { missionDir: null, runId: null, codebuddyArgs: [], leaderCli, guided: true };
   }
 
   const first = values[0];
   if (first === 'init') {
-    return { missionDir: null, runId: null, codebuddyArgs: [], guided: true, initArgs: values.slice(1) };
+    return { missionDir: null, runId: null, codebuddyArgs: [], leaderCli, guided: true, initArgs: values.slice(1) };
   }
   if (first === '--help' || first === '-h' || first === 'help') {
-    return { missionDir: '--help', runId: null, codebuddyArgs: [] };
+    return { missionDir: '--help', runId: null, codebuddyArgs: [], leaderCli };
   }
   if (first === '--resume') {
     const runId = values[1]?.trim();
     if (!runId) {
       throw new Error(`--resume requires <run-id>.\n${getAutoresearchHelp()}`);
     }
-    return { missionDir: null, runId, codebuddyArgs: values.slice(2) };
+    return { missionDir: null, runId, codebuddyArgs: values.slice(2), leaderCli };
   }
   if (first.startsWith('--resume=')) {
     const runId = first.slice('--resume='.length).trim();
     if (!runId) {
       throw new Error(`--resume requires <run-id>.\n${getAutoresearchHelp()}`);
     }
-    return { missionDir: null, runId, codebuddyArgs: values.slice(1) };
+    return { missionDir: null, runId, codebuddyArgs: values.slice(1), leaderCli };
   }
   if (first === 'run') {
     const missionDir = values[1]?.trim();
     if (!missionDir) {
       throw new Error(`run requires <mission-dir>.\n${getAutoresearchHelp()}`);
     }
-    return { missionDir, runId: null, codebuddyArgs: values.slice(2), runSubcommand: true };
+    return { missionDir, runId: null, codebuddyArgs: values.slice(2), leaderCli, runSubcommand: true };
   }
   if (first.startsWith('-')) {
     const seedArgs = parseInitArgs(values);
-    return { missionDir: null, runId: null, codebuddyArgs: [], guided: true, seedArgs };
+    return { missionDir: null, runId: null, codebuddyArgs: [], leaderCli, guided: true, seedArgs };
   }
-  return { missionDir: first, runId: null, codebuddyArgs: values.slice(1) };
+  return { missionDir: first, runId: null, codebuddyArgs: values.slice(1), leaderCli };
 }
 
 async function runAutoresearchLoop(
@@ -289,6 +337,7 @@ async function runAutoresearchLoop(
     worktreePath: string;
   },
   missionDir: string,
+  leaderCli: LeaderCli,
 ): Promise<void> {
   const previousInstructionsFile = process.env[AUTORESEARCH_APPEND_INSTRUCTIONS_ENV];
   const originalCwd = process.cwd();
@@ -296,7 +345,7 @@ async function runAutoresearchLoop(
 
   try {
     while (true) {
-      runAutoresearchTurn(runtime.worktreePath, runtime.instructionsFile, codebuddyArgs);
+      runAutoresearchTurn(runtime.worktreePath, runtime.instructionsFile, codebuddyArgs, leaderCli);
 
       const contract = await loadAutoresearchMissionContract(missionDir);
       const { run_id: runId } = JSON.parse(readFileSync(runtime.manifestFile, 'utf-8')) as { run_id: string };
@@ -328,16 +377,15 @@ async function runAutoresearchLoop(
 }
 
 function checkTmuxAvailable(): boolean {
-  const result = spawnSync('tmux', ['-V'], { stdio: 'pipe',
-      windowsHide: true,
-    });
+  const result = spawnSync('tmux', ['-V'], { stdio: 'pipe', windowsHide: true });
   return result.status === 0;
 }
 
 function tmuxDisplay(target: string, format: string): string | null {
-  const result = spawnSync('tmux', ['display-message', '-p', '-t', target, format], { encoding: 'utf-8',
-      windowsHide: true,
-    });
+  const result = spawnSync('tmux', ['display-message', '-p', '-t', target, format], {
+    encoding: 'utf-8',
+    windowsHide: true,
+  });
   if (result.error || result.status !== 0) return null;
   const value = (result.stdout || '').trim();
   return value || null;
@@ -369,6 +417,7 @@ function launchAutoresearchInSplitPane(args: {
   repoRoot: string;
   missionDir: string;
   codebuddyArgs: string[];
+  leaderCli: LeaderCli;
 }): boolean {
   if (!checkTmuxAvailable()) return false;
 
@@ -382,10 +431,16 @@ function launchAutoresearchInSplitPane(args: {
   if (!ombPath) return false;
   // Re-enter through the CLI entry so the new pane executes immediately
   // instead of recursively taking the split-pane branch again.
-  const launchArgs = ['autoresearch', args.missionDir, ...args.codebuddyArgs];
+  const launchArgs = ['autoresearch', '--leader-cli', args.leaderCli, args.missionDir, ...args.codebuddyArgs];
+  const leaderHomeEnv = resolveAutoresearchLeaderHomeEnv(args.leaderCli, args.repoRoot);
+  const commandEnvParts = [
+    ...Object.entries({ PATH: process.env.PATH || '' }).map(([key, value]) => `${key}=${value}`),
+    `OMB_LEADER_CLI=${args.leaderCli}`,
+    ...Object.entries(leaderHomeEnv).map(([key, value]) => `${key}=${value}`),
+  ];
   const commandParts = [
     'env',
-    `PATH=${process.env.PATH || ''}`,
+    ...commandEnvParts,
     process.execPath,
     ombPath,
     ...launchArgs,
@@ -413,7 +468,11 @@ function launchAutoresearchInSplitPane(args: {
   return true;
 }
 
-async function executeAutoresearchMissionRun(missionDir: string, codebuddyArgs: string[]): Promise<void> {
+async function executeAutoresearchMissionRun(
+  missionDir: string,
+  codebuddyArgs: string[],
+  leaderCli: LeaderCli,
+): Promise<void> {
   const contract = await loadAutoresearchMissionContract(missionDir);
   await assertModeStartAllowed('autoresearch', contract.repoRoot);
   const runTag = buildAutoresearchRunTag();
@@ -430,7 +489,7 @@ async function executeAutoresearchMissionRun(missionDir: string, codebuddyArgs: 
 
   const worktreeContract = await materializeAutoresearchMissionToWorktree(contract, ensured.worktreePath);
   const runtime = await prepareAutoresearchRuntime(worktreeContract, contract.repoRoot, ensured.worktreePath, { runTag });
-  await runAutoresearchLoop(codebuddyArgs, runtime, worktreeContract.missionDir);
+  await runAutoresearchLoop(codebuddyArgs, runtime, worktreeContract.missionDir, leaderCli);
 }
 
 export async function autoresearchCommand(args: string[]): Promise<void> {
@@ -460,7 +519,7 @@ export async function autoresearchCommand(args: string[]): Promise<void> {
         repoRoot,
       });
     } else {
-      result = await runGuidedAutoresearchDeepInterview(repoRoot, parsed.seedArgs);
+      result = await runGuidedAutoresearchDeepInterview(repoRoot, parsed.seedArgs, parsed.leaderCli);
     }
 
     const currentPaneId = process.env.TMUX_PANE?.trim();
@@ -469,11 +528,12 @@ export async function autoresearchCommand(args: string[]): Promise<void> {
       repoRoot,
       missionDir: result.missionDir,
       codebuddyArgs: [],
+      leaderCli: parsed.leaderCli,
     })) {
       return;
     }
 
-    await executeAutoresearchMissionRun(result.missionDir, []);
+    await executeAutoresearchMissionRun(result.missionDir, [], parsed.leaderCli);
     return;
   }
 
@@ -482,7 +542,7 @@ export async function autoresearchCommand(args: string[]): Promise<void> {
     await assertModeStartAllowed('autoresearch', repoRoot);
     const manifest = await loadAutoresearchRunManifest(repoRoot, parsed.runId);
     const runtime = await resumeAutoresearchRuntime(repoRoot, parsed.runId);
-    await runAutoresearchLoop(parsed.codebuddyArgs, runtime, manifest.mission_dir);
+    await runAutoresearchLoop(parsed.codebuddyArgs, runtime, manifest.mission_dir, parsed.leaderCli);
     return;
   }
 
@@ -494,10 +554,11 @@ export async function autoresearchCommand(args: string[]): Promise<void> {
       repoRoot,
       missionDir: parsed.missionDir as string,
       codebuddyArgs: parsed.codebuddyArgs,
+      leaderCli: parsed.leaderCli,
     })) {
       return;
     }
   }
 
-  await executeAutoresearchMissionRun(parsed.missionDir as string, parsed.codebuddyArgs);
+  await executeAutoresearchMissionRun(parsed.missionDir as string, parsed.codebuddyArgs, parsed.leaderCli);
 }

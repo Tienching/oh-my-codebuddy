@@ -19,10 +19,11 @@ Example: `alpha/worker-2`
 
 When a worker inbox tells you to load this skill, resolve the first existing path:
 
-1. `${CODEBUDDY_HOME:-~/.codex}/skills/worker/SKILL.md`
-2. `~/.codex/skills/worker/SKILL.md`
-3. `<leader_cwd>/.codex/skills/worker/SKILL.md`
-4. `<leader_cwd>/skills/worker/SKILL.md` (repo fallback)
+1. `${CODEBUDDY_HOME:-~/.codebuddy}/skills/worker/SKILL.md`
+2. `<leader_cwd>/.codebuddy/skills/worker/SKILL.md`
+3. `${CODEX_HOME:-~/.codex}/skills/worker/SKILL.md` (Codex-provider workers only)
+4. `<leader_cwd>/.codex/skills/worker/SKILL.md` (Codex-provider workers only)
+5. `<leader_cwd>/skills/worker/SKILL.md` (repo fallback)
 
 ## Startup Protocol (ACK)
 

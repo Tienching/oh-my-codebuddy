@@ -5,10 +5,11 @@
 import { existsSync } from 'fs';
 import { readdir, readFile } from 'fs/promises';
 import { join, dirname, basename } from 'path';
+import { homedir } from 'os';
 import { parse as parseToml } from '@iarna/toml';
 import {
   codebuddyHome, codebuddyConfigPath, codebuddyPromptsDir,
-  userSkillsDir, projectSkillsDir, ombStateDir, detectLegacySkillRootOverlap,
+  userSkillsDir, ombStateDir, detectLegacySkillRootOverlap,
 } from '../utils/paths.js';
 import { classifySpawnError, spawnPlatformCommandSync } from '../utils/platform-command.js';
 import { getCatalogExpectations } from './catalog-contract.js';
@@ -19,13 +20,15 @@ import { OMB_EXPLORE_CMD_ENV, isExploreCommandRoutingEnabled } from '../hooks/ex
 import { triagePrompt } from '../hooks/triage-heuristic.js';
 import { readTriageConfig } from '../hooks/triage-config.js';
 import { isLeaderRuntimeStale } from '../team/leader-activity.js';
-import { CODEBUDDY_BIN } from './constants.js';
+import { CODEBUDDY_BIN, CODEX_BIN } from './constants.js';
 
 interface DoctorOptions {
   verbose?: boolean;
   force?: boolean;
   dryRun?: boolean;
   team?: boolean;
+  scope?: DoctorSetupScope;
+  provider?: DoctorSetupProvider;
 }
 
 interface Check {
@@ -35,9 +38,12 @@ interface Check {
 }
 
 type DoctorSetupScope = 'user' | 'project';
+type DoctorSetupProvider = 'codebuddy' | 'codex' | 'both';
+type DoctorTargetProvider = Exclude<DoctorSetupProvider, 'both'>;
 
 interface DoctorScopeResolution {
   scope: DoctorSetupScope;
+  provider: DoctorSetupProvider;
   source: 'persisted' | 'default';
 }
 
@@ -49,6 +55,11 @@ interface DoctorPaths {
   stateDir: string;
 }
 
+interface DoctorTarget {
+  provider: DoctorTargetProvider;
+  paths: DoctorPaths;
+}
+
 const LEGACY_SCOPE_MIGRATION: Record<string, DoctorSetupScope> = {
   'project-local': 'project',
 };
@@ -56,36 +67,60 @@ const LEGACY_SCOPE_MIGRATION: Record<string, DoctorSetupScope> = {
 async function resolveDoctorScope(cwd: string): Promise<DoctorScopeResolution> {
   const scopePath = join(cwd, '.omb', 'setup-scope.json');
   if (!existsSync(scopePath)) {
-    return { scope: 'user', source: 'default' };
+    return { scope: 'user', provider: 'codebuddy', source: 'default' };
   }
 
   try {
     const raw = await readFile(scopePath, 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<{ scope: string }>;
+    const parsed = JSON.parse(raw) as Partial<{ provider: string; scope: string }>;
+    const provider =
+      parsed.provider === 'codex' || parsed.provider === 'both'
+        ? parsed.provider
+        : 'codebuddy';
     if (typeof parsed.scope === 'string') {
       if (parsed.scope === 'user' || parsed.scope === 'project') {
-        return { scope: parsed.scope, source: 'persisted' };
+        return { scope: parsed.scope, provider, source: 'persisted' };
       }
       const migrated = LEGACY_SCOPE_MIGRATION[parsed.scope];
       if (migrated) {
-        return { scope: migrated, source: 'persisted' };
+        return { scope: migrated, provider, source: 'persisted' };
       }
     }
   } catch {
     // ignore invalid persisted scope and fall back to default
   }
 
-  return { scope: 'user', source: 'default' };
+  return { scope: 'user', provider: 'codebuddy', source: 'default' };
 }
 
-function resolveDoctorPaths(cwd: string, scope: DoctorSetupScope): DoctorPaths {
+function codexProviderHome(): string {
+  const explicit = String(process.env.CODEX_HOME ?? '').trim();
+  return explicit !== '' ? explicit : join(homedir(), '.codex');
+}
+
+function resolveDoctorPaths(
+  cwd: string,
+  scope: DoctorSetupScope,
+  provider: DoctorTargetProvider,
+): DoctorPaths {
   if (scope === 'project') {
-    const codebuddyHomeDir = join(cwd, '.codebuddy');
+    const codebuddyHomeDir = join(cwd, provider === 'codex' ? '.codex' : '.codebuddy');
     return {
       codebuddyHomeDir,
       configPath: join(codebuddyHomeDir, 'config.toml'),
       promptsDir: join(codebuddyHomeDir, 'prompts'),
-      skillsDir: projectSkillsDir(cwd),
+      skillsDir: join(codebuddyHomeDir, 'skills'),
+      stateDir: ombStateDir(cwd),
+    };
+  }
+
+  if (provider === 'codex') {
+    const codebuddyHomeDir = codexProviderHome();
+    return {
+      codebuddyHomeDir,
+      configPath: join(codebuddyHomeDir, 'config.toml'),
+      promptsDir: join(codebuddyHomeDir, 'prompts'),
+      skillsDir: join(codebuddyHomeDir, 'skills'),
       stateDir: ombStateDir(cwd),
     };
   }
@@ -99,6 +134,37 @@ function resolveDoctorPaths(cwd: string, scope: DoctorSetupScope): DoctorPaths {
   };
 }
 
+function doctorProviderTargets(provider: DoctorSetupProvider): DoctorTargetProvider[] {
+  return provider === 'both' ? ['codebuddy', 'codex'] : [provider];
+}
+
+function providerDisplayName(provider: DoctorTargetProvider): string {
+  return provider === 'codex' ? 'Codex' : 'CodeBuddy';
+}
+
+function resolveDoctorTargets(
+  cwd: string,
+  scope: DoctorSetupScope,
+  provider: DoctorSetupProvider,
+): DoctorTarget[] {
+  return doctorProviderTargets(provider).map((targetProvider) => ({
+    provider: targetProvider,
+    paths: resolveDoctorPaths(cwd, scope, targetProvider),
+  }));
+}
+
+function scopedProviderCheck(
+  check: Check,
+  target: DoctorTarget,
+  multiProvider: boolean,
+): Check {
+  if (!multiProvider) return check;
+  return {
+    ...check,
+    name: `${providerDisplayName(target.provider)} ${check.name}`,
+  };
+}
+
 export async function doctor(options: DoctorOptions = {}): Promise<void> {
   if (options.team) {
     await doctorTeam();
@@ -107,19 +173,30 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 
   const cwd = process.cwd();
   const scopeResolution = await resolveDoctorScope(cwd);
-  const paths = resolveDoctorPaths(cwd, scopeResolution.scope);
-  const scopeSourceMessage = scopeResolution.source === 'persisted'
-    ? ' (from .omb/setup-scope.json)'
-    : '';
+  const resolvedScope = options.scope ?? scopeResolution.scope;
+  const resolvedProvider = options.provider ?? scopeResolution.provider;
+  const targets = resolveDoctorTargets(cwd, resolvedScope, resolvedProvider);
+  const multiProvider = targets.length > 1;
+  const scopeSourceMessage = options.scope
+    ? ' (from --scope)'
+    : scopeResolution.source === 'persisted'
+      ? ' (from .omb/setup-scope.json)'
+      : '';
+  const providerSourceMessage = options.provider ? ' (from --provider)' : '';
 
   console.log('oh-my-codebuddy doctor');
   console.log('======================\n');
-  console.log(`Resolved setup scope: ${scopeResolution.scope}${scopeSourceMessage}\n`);
+  console.log(`Resolved setup scope: ${resolvedScope}${scopeSourceMessage}\n`);
+  if (resolvedProvider !== 'codebuddy') {
+    console.log(`Resolved setup provider: ${resolvedProvider}${providerSourceMessage}\n`);
+  }
 
   const checks: Check[] = [];
 
-  // Check 1: CodeBuddy CLI installed
-  checks.push(checkCodeBuddyCli());
+  // Check 1: Provider CLI installed
+  for (const target of targets) {
+    checks.push(checkProviderCli(target.provider));
+  }
 
   // Check 2: Node.js version
   checks.push(checkNodeVersion());
@@ -127,34 +204,56 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
   // Check 2.5: Explore harness readiness
   checks.push(checkExploreHarness());
 
-  // Check 3: CodeBuddy home directory
-  checks.push(checkDirectory('CodeBuddy home', paths.codebuddyHomeDir));
+  for (const target of targets) {
+    const { paths } = target;
 
-  // Check 4: Config file
-  checks.push(await checkConfig(paths.configPath));
+    // Check 3: Provider home directory
+    checks.push(checkDirectory(
+      `${providerDisplayName(target.provider)} home`,
+      paths.codebuddyHomeDir,
+    ));
 
-  // Check 4.5: Explore routing default
-  checks.push(await checkExploreRouting(paths.configPath));
+    // Check 4: Config file
+    checks.push(scopedProviderCheck(await checkConfig(paths.configPath), target, multiProvider));
 
-  // Check 5: Prompts installed
-  checks.push(await checkPrompts(paths.promptsDir));
+    // Check 4.5: Explore routing default
+    checks.push(scopedProviderCheck(await checkExploreRouting(paths.configPath), target, multiProvider));
 
-  // Check 6: Skills installed
-  checks.push(await checkSkills(paths.skillsDir));
+    // Check 5: Prompts installed
+    checks.push(scopedProviderCheck(await checkPrompts(paths.promptsDir), target, multiProvider));
 
-  // Check 6.5: Legacy/current skill-root overlap
-  if (scopeResolution.scope === 'user') {
-    checks.push(await checkLegacySkillRootOverlap());
+    // Check 6: Skills installed
+    checks.push(scopedProviderCheck(await checkSkills(paths.skillsDir), target, multiProvider));
+
+    // Check 6.5: Legacy/current skill-root overlap
+    if (resolvedScope === 'user') {
+      checks.push(
+        scopedProviderCheck(
+          await checkLegacySkillRootOverlap(paths.skillsDir, providerDisplayName(target.provider)),
+          target,
+          multiProvider,
+        ),
+      );
+    }
+
+    // Check 7: AGENTS.md in user provider home
+    if (resolvedScope === 'user') {
+      checks.push(scopedProviderCheck(checkAgentsMd(resolvedScope, paths.codebuddyHomeDir), target, multiProvider));
+    }
   }
 
-  // Check 7: AGENTS.md in project
-  checks.push(checkAgentsMd(scopeResolution.scope, paths.codebuddyHomeDir));
+  // Check 7: Shared project AGENTS.md
+  if (resolvedScope === 'project') {
+    checks.push(checkAgentsMd(resolvedScope, targets[0]!.paths.codebuddyHomeDir));
+  }
 
   // Check 8: State directory
-  checks.push(checkDirectory('State dir', paths.stateDir));
+  checks.push(checkDirectory('State dir', targets[0]!.paths.stateDir));
 
   // Check 9: MCP servers configured
-  checks.push(await checkMcpServers(paths.configPath));
+  for (const target of targets) {
+    checks.push(scopedProviderCheck(await checkMcpServers(target.paths.configPath), target, multiProvider));
+  }
 
   // Check 10: Prompt triage
   checks.push(checkPromptTriage());
@@ -426,8 +525,10 @@ function listTeamTmuxSessions(): Set<string> | null {
   return new Set(sessions);
 }
 
-function checkCodeBuddyCli(): Check {
-  const { result } = spawnPlatformCommandSync(CODEBUDDY_BIN, ['--version'], {
+function checkProviderCli(provider: 'codebuddy' | 'codex'): Check {
+  const binary = provider === 'codex' ? CODEX_BIN : CODEBUDDY_BIN;
+  const label = provider === 'codex' ? 'Codex CLI' : 'CodeBuddy CLI';
+  const { result } = spawnPlatformCommandSync(binary, ['--version'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -435,28 +536,31 @@ function checkCodeBuddyCli(): Check {
     const code = (result.error as NodeJS.ErrnoException).code;
     const kind = classifySpawnError(result.error as NodeJS.ErrnoException);
     if (kind === 'missing') {
-      return { name: 'CodeBuddy CLI', status: 'fail', message: 'not found - install with: npm install -g @tencent-ai/codebuddy-code' };
+      const installHint = provider === 'codex'
+        ? 'install Codex CLI and ensure codex is on PATH'
+        : 'install with: npm install -g @tencent-ai/codebuddy-code';
+      return { name: label, status: 'fail', message: `not found - ${installHint}` };
     }
     if (kind === 'blocked') {
       return {
-        name: 'CodeBuddy CLI',
+        name: label,
         status: 'fail',
         message: `found but could not be executed in this environment (${code || 'blocked'})`,
       };
     }
     return {
-      name: 'CodeBuddy CLI',
+      name: label,
       status: 'fail',
       message: `probe failed - ${result.error.message}`,
     };
   }
   if (result.status === 0) {
     const version = (result.stdout || '').trim().split('\n')[0] ?? '';
-    return { name: 'CodeBuddy CLI', status: 'pass', message: `installed (${version})` };
+    return { name: label, status: 'pass', message: `installed (${version})` };
   }
   const stderr = (result.stderr || '').trim();
   return {
-    name: 'CodeBuddy CLI',
+    name: label,
     status: 'fail',
     message: stderr !== '' ? `probe failed - ${stderr}` : `probe failed with exit ${result.status}`,
   };
@@ -747,8 +851,11 @@ async function checkPrompts(dir: string): Promise<Check> {
   }
 }
 
-async function checkLegacySkillRootOverlap(): Promise<Check> {
-  const overlap = await detectLegacySkillRootOverlap();
+async function checkLegacySkillRootOverlap(
+  canonicalDir: string,
+  providerName: string,
+): Promise<Check> {
+  const overlap = await detectLegacySkillRootOverlap(canonicalDir);
   if (!overlap.legacyExists) {
     return {
       name: 'Legacy skill roots',
@@ -771,7 +878,7 @@ async function checkLegacySkillRootOverlap(): Promise<Check> {
       name: 'Legacy skill roots',
       status: 'warn',
       message:
-        `legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) alongside canonical ${overlap.canonicalDir}; remove or archive it if Codex shows duplicate entries`,
+        `legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) alongside canonical ${overlap.canonicalDir}; remove or archive it if ${providerName} shows duplicate entries`,
     };
   }
 
@@ -782,7 +889,7 @@ async function checkLegacySkillRootOverlap(): Promise<Check> {
     name: 'Legacy skill roots',
     status: 'warn',
     message:
-      `${overlap.overlappingSkillNames.length} overlapping skill names between ${overlap.canonicalDir} and ${overlap.legacyDir}${mismatchMessage}; Codex Enable/Disable Skills may show duplicates until ~/.agents/skills is cleaned up`,
+      `${overlap.overlappingSkillNames.length} overlapping skill names between ${overlap.canonicalDir} and ${overlap.legacyDir}${mismatchMessage}; ${providerName} Enable/Disable Skills may show duplicates until ~/.agents/skills is cleaned up`,
   };
 }
 

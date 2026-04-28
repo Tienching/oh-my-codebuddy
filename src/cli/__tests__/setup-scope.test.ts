@@ -152,6 +152,30 @@ describe("omb setup scope behavior", () => {
     }
   });
 
+  it("shows provider source when --provider is set", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-doctor-provider-source-"));
+    try {
+      const home = join(wd, "home");
+      const codexHome = join(home, ".codex");
+      await mkdir(home, { recursive: true });
+      await mkdir(codexHome, { recursive: true });
+
+      const res = runOmb(wd, ["doctor", "--provider", "codex"], {
+        HOME: home,
+        CODEX_HOME: codexHome,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Resolved setup provider: codex \(from --provider\)/,
+      );
+      assert.doesNotMatch(res.stdout, /Resolved setup provider: .*from --scope/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("does not persist setup scope on --dry-run", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {
@@ -227,6 +251,102 @@ describe("omb setup scope behavior", () => {
         scope: string;
       };
       assert.equal(persistedScope.scope, "project");
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("project scope can install a first-class Codex provider under .codex", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
+    try {
+      const home = join(wd, "home");
+      await mkdir(home, { recursive: true });
+      const res = runOmb(wd, ["setup", "--scope", "project", "--provider", "codex"], {
+        HOME: home,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+
+      assert.equal(existsSync(join(wd, ".codex", "prompts")), true);
+      assert.equal(existsSync(join(wd, ".codex", "skills", "help", "SKILL.md")), true);
+      assert.equal(existsSync(join(wd, ".codex", "agents", "executor.toml")), true);
+      assert.equal(existsSync(join(wd, ".codex", "config.toml")), true);
+      assert.equal(existsSync(join(wd, ".codex", "hooks.json")), true);
+      assert.equal(existsSync(join(wd, ".codebuddy", "config.toml")), false);
+
+      const hooksJson = await readFile(join(wd, ".codex", "hooks.json"), "utf-8");
+      assert.match(hooksJson, /codex-native-hook\.js/);
+      const agentsMd = await readFile(join(wd, "AGENTS.md"), "utf-8");
+      assert.match(agentsMd, /\.\/\.codex\/skills/);
+      assert.doesNotMatch(agentsMd, /\.\/\.codebuddy\/skills/);
+      const persisted = JSON.parse(
+        await readFile(join(wd, ".omb", "setup-scope.json"), "utf-8"),
+      ) as { provider?: string; scope: string };
+      assert.equal(persisted.scope, "project");
+      assert.equal(persisted.provider, "codex");
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("project scope can install both CodeBuddy and Codex provider homes", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
+    try {
+      const home = join(wd, "home");
+      await mkdir(home, { recursive: true });
+      const res = runOmb(wd, ["setup", "--scope", "project", "--provider=both"], {
+        HOME: home,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+
+      assert.equal(existsSync(join(wd, ".codebuddy", "config.toml")), true);
+      assert.equal(existsSync(join(wd, ".codex", "config.toml")), true);
+      assert.equal(existsSync(join(wd, ".codebuddy", "skills", "team", "SKILL.md")), true);
+      assert.equal(existsSync(join(wd, ".codex", "skills", "team", "SKILL.md")), true);
+      const agentsMd = await readFile(join(wd, "AGENTS.md"), "utf-8");
+      assert.match(agentsMd, /\.\/\.codex\/skills/);
+      const persisted = JSON.parse(
+        await readFile(join(wd, ".omb", "setup-scope.json"), "utf-8"),
+      ) as { provider?: string; scope: string };
+      assert.equal(persisted.provider, "both");
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("doctor checks both provider homes when persisted provider is both", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-doctor-provider-both-"));
+    try {
+      const home = join(wd, "home");
+      await mkdir(home, { recursive: true });
+      const setupRes = runOmb(wd, ["setup", "--scope", "project", "--provider=both"], {
+        HOME: home,
+      });
+      if (shouldSkipForSpawnPermissions(setupRes.error)) return;
+      assert.equal(setupRes.status, 0, setupRes.stderr || setupRes.stdout);
+
+    const res = runOmb(wd, ["doctor"], { HOME: home });
+    if (shouldSkipForSpawnPermissions(res.error)) return;
+    assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /Resolved setup provider: both/);
+      assert.doesNotMatch(res.stdout, /from --scope/);
+      assert.match(
+        res.stdout,
+        new RegExp(
+          `CodeBuddy home: (?:/private)?${wd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/\\.codebuddy`,
+        ),
+      );
+      assert.match(
+        res.stdout,
+        new RegExp(
+          `Codex home: (?:/private)?${wd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/\\.codex`,
+        ),
+      );
+      assert.match(res.stdout, /CodeBuddy Config: config\.toml has OMB entries/);
+      assert.match(res.stdout, /Codex Config: config\.toml has OMB entries/);
+      assert.match(res.stdout, /CodeBuddy MCP Servers: \d+ servers configured \(OMB present\)/);
+      assert.match(res.stdout, /Codex MCP Servers: \d+ servers configured \(OMB present\)/);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

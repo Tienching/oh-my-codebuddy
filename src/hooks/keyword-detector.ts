@@ -397,9 +397,9 @@ const KEYWORD_MAP: Array<{ pattern: RegExp; skill: string; priority: number }> =
   priority: entry.priority,
 }));
 
-const KEYWORDS_REQUIRING_INTENT = new Set(['ralph', 'team', 'swarm', 'stop', 'abort', 'parallel', 'autoresearch']);
+const KEYWORDS_REQUIRING_INTENT = new Set(['ralph', 'team', 'swarm', 'stop', 'abort', 'parallel', 'autoresearch', 'ecomode', 'eco', 'budget', 'web-clone', 'clone site', 'clone website', 'copy webpage']);
 
-type IntentKeyword = 'ralph' | 'team' | 'swarm' | 'stop' | 'abort' | 'parallel' | 'autoresearch';
+type IntentKeyword = 'ralph' | 'team' | 'swarm' | 'stop' | 'abort' | 'parallel' | 'autoresearch' | 'ecomode' | 'eco' | 'budget' | 'web-clone' | 'clone site' | 'clone website' | 'copy webpage';
 
 const DEEP_INTERVIEW_ACTIVATION_PATTERNS: RegExp[] = [
   /(?:^|[^\w])\$(?:deep-interview)\b/i,
@@ -474,6 +474,53 @@ const KEYWORD_INTENT_PATTERNS: Record<IntentKeyword, RegExp[]> = {
     /\b(?:use|run|start|enable|launch|invoke|activate)\s+(?:the\s+)?autoresearch\b/i,
     /\bautoresearch\s+(?:mode|workflow|skill|loop)\b/i,
   ],
+  // ecomode/eco/budget need intent because "eco-friendly", "ecological",
+  // "budget constraint", "over budget", etc. are common in normal prose and
+  // would otherwise falsely activate ultrawork every time.
+  ecomode: [
+    /(?:^|[^\w])\$(?:ecomode|eco|budget)\b/i,
+    /\/(?:ecomode|eco|budget)\b/i,
+    /\becomode\s+(?:mode|workflow|workers?|agents?)\b/i,
+    /\b(?:use|run|start|enable|launch|invoke|activate|switch\s+to)\s+(?:the\s+)?ecomode\b/i,
+  ],
+  eco: [
+    /(?:^|[^\w])\$(?:ecomode|eco|budget)\b/i,
+    /\/(?:ecomode|eco|budget)\b/i,
+    /\b(?:use|run|start|enable|launch|invoke|activate|switch\s+to)\s+(?:the\s+)?eco\s+(?:mode|workflow)\b/i,
+    /\beco\s+(?:mode|workflow)\b/i,
+  ],
+  budget: [
+    /(?:^|[^\w])\$(?:ecomode|eco|budget)\b/i,
+    /\/(?:ecomode|eco|budget)\b/i,
+    /\b(?:use|run|start|enable|launch|invoke|activate|switch\s+to)\s+(?:the\s+)?budget\s+(?:mode|workflow)\b/i,
+    /\bbudget\s+(?:mode|workflow)\b/i,
+  ],
+  // web-clone triggers also need intent: the "clone site" / "clone website" /
+  // "copy webpage" phrasings can appear in code reviews or docs without any
+  // intent to launch the cloning pipeline. `web-clone` itself is more
+  // distinctive but we still gate it so a code comment mentioning the skill
+  // doesn't activate it.
+  'web-clone': [
+    /(?:^|[^\w])\$(?:web-clone)\b/i,
+    /\/(?:web-clone)\b/i,
+    /\b(?:use|run|start|enable|launch|invoke|activate)\s+(?:the\s+)?web[- ]?clone\b/i,
+    /\bweb[- ]?clone\s+(?:mode|pipeline|workflow|skill)\b/i,
+  ],
+  'clone site': [
+    /(?:^|[^\w])\$(?:web-clone)\b/i,
+    /\/(?:web-clone)\b/i,
+    /\b(?:please\s+|let's\s+)?clone\s+site\b/i,
+  ],
+  'clone website': [
+    /(?:^|[^\w])\$(?:web-clone)\b/i,
+    /\/(?:web-clone)\b/i,
+    /\b(?:please\s+|let's\s+)?clone\s+website\b/i,
+  ],
+  'copy webpage': [
+    /(?:^|[^\w])\$(?:web-clone)\b/i,
+    /\/(?:web-clone)\b/i,
+    /\b(?:please\s+|let's\s+)?copy\s+webpage\b/i,
+  ],
 };
 
 function hasExplicitPromptsInvocation(text: string): boolean {
@@ -506,7 +553,17 @@ function extractExplicitSkillInvocations(text: string): KeywordMatch[] {
     const token = (match[1] ?? '').toLowerCase();
     if (!token) continue;
 
-    const normalizedSkill = token === 'swarm' ? 'team' : token === 'ulw' ? 'ultrawork' : token;
+    const normalizedSkill = token === 'swarm'
+      ? 'team'
+      : token === 'ulw'
+        ? 'ultrawork'
+        // ecomode/eco/budget were merged into ultrawork (src/modes/base.ts
+        // DeprecatedModeName) but we still accept `$ecomode` / `$eco` /
+        // `$budget` as explicit aliases so AGENTS-documented triggers keep
+        // working through native-hook SkillActiveState.
+        : token === 'ecomode' || token === 'eco' || token === 'budget'
+          ? 'ultrawork'
+          : token;
     const registryEntry = KEYWORD_TRIGGER_DEFINITIONS.find((entry) => entry.skill.toLowerCase() === normalizedSkill);
     if (!registryEntry) continue;
 

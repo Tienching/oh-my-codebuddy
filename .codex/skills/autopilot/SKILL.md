@@ -209,7 +209,7 @@ Autopilot can be driven by the configurable pipeline orchestrator (`src/pipeline
 sequences stages through a uniform `PipelineStage` interface:
 
 ```
-RALPLAN (consensus planning) -> team-exec (CodeBuddy CLI workers) -> ralph-verify (architect verification)
+RALPLAN (consensus planning) -> team-exec (selected worker CLI workers) -> ralph-verify (architect verification)
 ```
 
 Pipeline configuration options:
@@ -217,7 +217,7 @@ Pipeline configuration options:
 ```toml
 [omb.autopilot.pipeline]
 maxRalphIterations = 10    # Ralph verification iteration ceiling
-workerCount = 2            # Number of CodeBuddy CLI team workers
+workerCount = 2            # Number of team workers
 agentType = "executor"     # Agent type for team workers
 ```
 

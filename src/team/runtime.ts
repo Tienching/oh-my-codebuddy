@@ -1772,7 +1772,7 @@ export function resolveWorkerLaunchArgsFromEnv(
   const inheritedArgs = (typeof inheritedLeaderModel === 'string' && inheritedLeaderModel.trim() !== '')
     ? ['--model', inheritedLeaderModel.trim()]
     : [];
-  const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEBUDDY_HOME ?? env.CODEX_HOME);
+  const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEBUDDY_HOME);
 
   // Detect if an explicit reasoning override exists before resolving (for log source labelling)
   const preEnvArgs = splitWorkerLaunchArgs(env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMB_TEAM_WORKER_LAUNCH_ARGS);
@@ -1924,7 +1924,7 @@ export async function startTeam(
   let config: TeamConfig | null = null;
   const sharedWorkerLaunchArgs = resolveTeamWorkerLaunchArgs({
     existingRaw: process.env.OMB_TEAM_WORKER_LAUNCH_ARGS,
-    fallbackModel: resolveAgentDefaultModel(agentType, process.env.CODEBUDDY_HOME ?? process.env.CODEX_HOME),
+    fallbackModel: resolveAgentDefaultModel(agentType, process.env.CODEBUDDY_HOME),
   });
   const workerCliPlan = resolveTeamWorkerCliPlan(workerCount, sharedWorkerLaunchArgs, process.env);
   const workerReadyTimeoutMs = resolveWorkerReadyTimeoutMs(process.env);

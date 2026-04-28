@@ -19,7 +19,7 @@ describe("getOpenClawConfig", () => {
     originalEnv = { ...process.env };
     tmpDir = join(tmpdir(), `omb-openclaw-test-${Date.now()}`);
     mkdirSync(tmpDir, { recursive: true });
-    process.env.CODEBUDDY_HOME = join(tmpDir, ".codex");
+    process.env.CODEBUDDY_HOME = join(tmpDir, ".codebuddy");
   });
 
   afterEach(() => {
@@ -197,7 +197,7 @@ describe("getOpenClawConfig generic alias normalization", () => {
     mkdirSync(tmpDir, { recursive: true });
     process.env.OMB_OPENCLAW = "1";
     process.env.HOME = tmpDir;
-    process.env.CODEBUDDY_HOME = join(tmpDir, ".codex");
+    process.env.CODEBUDDY_HOME = join(tmpDir, ".codebuddy");
     delete process.env.OMB_OPENCLAW_CONFIG;
   });
 
@@ -212,8 +212,8 @@ describe("getOpenClawConfig generic alias normalization", () => {
   });
 
   it("normalizes custom_webhook_command alias to openclaw runtime config", async () => {
-    const ombConfigPath = join(tmpDir, ".codex", ".omb-config.json");
-    mkdirSync(join(tmpDir, ".codex"), { recursive: true });
+    const ombConfigPath = join(tmpDir, ".codebuddy", ".omb-config.json");
+    mkdirSync(join(tmpDir, ".codebuddy"), { recursive: true });
     writeFileSync(ombConfigPath, JSON.stringify({
       notifications: {
         enabled: true,
@@ -236,8 +236,8 @@ describe("getOpenClawConfig generic alias normalization", () => {
   });
 
   it("explicit notifications.openclaw wins over generic aliases", async () => {
-    const ombConfigPath = join(tmpDir, ".codex", ".omb-config.json");
-    mkdirSync(join(tmpDir, ".codex"), { recursive: true });
+    const ombConfigPath = join(tmpDir, ".codebuddy", ".omb-config.json");
+    mkdirSync(join(tmpDir, ".codebuddy"), { recursive: true });
     writeFileSync(ombConfigPath, JSON.stringify({
       notifications: {
         enabled: true,

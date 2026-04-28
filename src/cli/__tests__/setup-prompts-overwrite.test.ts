@@ -18,8 +18,8 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
 
       await setup({ scope: 'project' });
 
-      const promptsDir = join(wd, '.codex', 'prompts');
-      const nativeAgentsDir = join(wd, '.codex', 'agents');
+      const promptsDir = join(wd, '.codebuddy', 'prompts');
+      const nativeAgentsDir = join(wd, '.codebuddy', 'agents');
       const installedPrompts = new Set(await readdir(promptsDir));
       const installedNativeAgents = new Set(await readdir(nativeAgentsDir));
 
@@ -52,7 +52,7 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
       assert.equal(installedNativeAgents.has('product-analyst.toml'), false);
       assert.equal(installedNativeAgents.has('code-simplifier.toml'), true);
 
-      const codeReviewerToml = await readFile(join(wd, '.codex', 'agents', 'code-reviewer.toml'), 'utf-8');
+      const codeReviewerToml = await readFile(join(wd, '.codebuddy', 'agents', 'code-reviewer.toml'), 'utf-8');
       assert.match(codeReviewerToml, /^name = "code-reviewer"$/m);
       assert.match(codeReviewerToml, /developer_instructions\s*=/);
     } finally {
@@ -72,7 +72,7 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
 
       const stalePrompts = ['style-reviewer.md', 'quality-reviewer.md', 'sisyphus-lite.md'];
       for (const stalePrompt of stalePrompts) {
-        const stalePath = join(wd, '.codex', 'prompts', stalePrompt);
+        const stalePath = join(wd, '.codebuddy', 'prompts', stalePrompt);
         await writeFile(stalePath, `# stale ${stalePrompt}\n`);
         assert.equal(existsSync(stalePath), true);
       }
@@ -80,9 +80,9 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
       await setup({ scope: 'project', force: true });
 
       for (const stalePrompt of stalePrompts) {
-        assert.equal(existsSync(join(wd, '.codex', 'prompts', stalePrompt)), false);
+        assert.equal(existsSync(join(wd, '.codebuddy', 'prompts', stalePrompt)), false);
       }
-      assert.equal(existsSync(join(wd, '.codex', 'prompts', 'executor.md')), true);
+      assert.equal(existsSync(join(wd, '.codebuddy', 'prompts', 'executor.md')), true);
     } finally {
       process.chdir(previousCwd);
       await rm(wd, { recursive: true, force: true });
@@ -99,7 +99,7 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
 
       const staleAgents = ['style-reviewer.toml', 'quality-reviewer.toml'];
       for (const staleAgent of staleAgents) {
-        const stalePath = join(wd, '.codex', 'agents', staleAgent);
+        const stalePath = join(wd, '.codebuddy', 'agents', staleAgent);
         await writeFile(stalePath, '# stale native agent\n');
         assert.equal(existsSync(stalePath), true);
       }
@@ -107,9 +107,9 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
       await setup({ scope: 'project', force: true });
 
       for (const staleAgent of staleAgents) {
-        assert.equal(existsSync(join(wd, '.codex', 'agents', staleAgent)), false);
+        assert.equal(existsSync(join(wd, '.codebuddy', 'agents', staleAgent)), false);
       }
-      assert.equal(existsSync(join(wd, '.codex', 'agents', 'executor.toml')), true);
+      assert.equal(existsSync(join(wd, '.codebuddy', 'agents', 'executor.toml')), true);
     } finally {
       process.chdir(previousCwd);
       await rm(wd, { recursive: true, force: true });
@@ -125,7 +125,7 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
 
       await setup({ scope: 'project' });
 
-      const stalePath = join(wd, '.codex', 'agents', 'legacy-skill-agent.toml');
+      const stalePath = join(wd, '.codebuddy', 'agents', 'legacy-skill-agent.toml');
       await writeFile(
         stalePath,
         [
@@ -140,7 +140,7 @@ describe('omb setup prompt/native-agent overwrite behavior', () => {
       await setup({ scope: 'project' });
 
       assert.equal(existsSync(stalePath), false);
-      assert.equal(existsSync(join(wd, '.codex', 'agents', 'executor.toml')), true);
+      assert.equal(existsSync(join(wd, '.codebuddy', 'agents', 'executor.toml')), true);
     } finally {
       process.chdir(previousCwd);
       await rm(wd, { recursive: true, force: true });

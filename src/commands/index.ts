@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -23,13 +23,54 @@ export interface CommandTemplateOptions {
 
 const SUPPORTED_COMMAND_EXTS = [".md", ".txt", ""] as const;
 const COMMAND_NAME_RE = /^[A-Za-z0-9_.-]+$/;
+const COMMAND_TEMPLATE_SETUP_PROVIDERS = new Set(["codebuddy", "codex", "both"]);
+type CommandTemplateSetupProvider = "codebuddy" | "codex" | "both";
 
 function resolveCodeBuddyHome(env: NodeJS.ProcessEnv): string {
-  const envHome = env.CODEBUDDY_HOME || env.CODEX_HOME;
+  const envHome = env.CODEBUDDY_HOME;
   if (typeof envHome === "string" && envHome.trim() !== "") {
     return envHome.trim();
   }
   return join(homedir(), ".codebuddy");
+}
+
+function resolveCodexHome(env: NodeJS.ProcessEnv): string {
+  const envHome = env.CODEX_HOME;
+  if (typeof envHome === "string" && envHome.trim() !== "") {
+    return envHome.trim();
+  }
+  return join(homedir(), ".codex");
+}
+
+function resolveCommandTemplateSetupProvider(
+  cwd: string,
+): CommandTemplateSetupProvider {
+  const setupScopePath = join(cwd, ".omb", "setup-scope.json");
+  if (existsSync(setupScopePath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(setupScopePath, "utf-8")) as Partial<{
+        provider: string;
+      }>;
+      const rawProvider = parsed.provider ?? "";
+      const provider = String(rawProvider).trim().toLowerCase();
+      if (COMMAND_TEMPLATE_SETUP_PROVIDERS.has(provider)) {
+        return provider as CommandTemplateSetupProvider;
+      }
+      // Unknown provider in an otherwise readable scope file. Warn so a
+      // corrupted/hand-edited scope doesn't silently collapse to CodeBuddy,
+      // but fall back rather than fail-closed so the user can still recover.
+      process.stderr.write(
+        `[omb] warning: ignoring unknown provider "${String(rawProvider)}" in ${setupScopePath}; falling back to codebuddy. Run \`omb setup\` to repair.\n`,
+      );
+    } catch {
+      // Ignore malformed scope and fall back to CodeBuddy provider.
+      process.stderr.write(
+        `[omb] warning: could not parse ${setupScopePath}; falling back to codebuddy provider. Run \`omb setup\` to repair.\n`,
+      );
+    }
+  }
+
+  return "codebuddy";
 }
 
 function sanitizeCommandName(name: string): string | null {
@@ -65,23 +106,40 @@ function canonicalPath(value: string): string {
   }
 }
 
+function addCommandTemplateDirectory(paths: string[], path: string): void {
+  paths.push(path);
+}
+
 function resolveCommandTemplateDirectories(
   cwd: string,
   env: NodeJS.ProcessEnv,
+  provider: CommandTemplateSetupProvider,
 ): string[] {
-  const paths = [
-    join(cwd, ".codebuddy", "commands"),
-    join(cwd, ".codex", "commands"),
-    join(resolveCodeBuddyHome(env), "commands"),
-    join(homedir(), ".codex", "commands"),
-  ];
+  const paths: string[] = [];
 
-  if (env.CODEX_HOME) {
-    paths.push(join(env.CODEX_HOME, ".codex", "commands"));
+  // Order is intentional: project scope wins over user scope, and within each
+  // scope the primary provider (CodeBuddy) wins over the secondary (Codex).
+  // `provider=both` therefore resolves as:
+  //   1. project .codebuddy/commands
+  //   2. project .codex/commands
+  //   3. user CODEBUDDY_HOME/commands
+  //   4. user CODEX_HOME/commands
+  // so a per-project Codex override is never shadowed by an ambient user-level
+  // CodeBuddy install.
+  if (provider === "both" || provider === "codebuddy") {
+    addCommandTemplateDirectory(paths, join(cwd, ".codebuddy", "commands"));
   }
 
-  if (env.CODEBUDDY_HOME) {
-    paths.push(join(env.CODEBUDDY_HOME, "commands"));
+  if (provider === "both" || provider === "codex") {
+    addCommandTemplateDirectory(paths, join(cwd, ".codex", "commands"));
+  }
+
+  if (provider === "both" || provider === "codebuddy") {
+    addCommandTemplateDirectory(paths, join(resolveCodeBuddyHome(env), "commands"));
+  }
+
+  if (provider === "both" || provider === "codex") {
+    addCommandTemplateDirectory(paths, join(resolveCodexHome(env), "commands"));
   }
 
   const deduped: string[] = [];
@@ -136,7 +194,8 @@ export async function getCommandInfo(
 
   const cwd = options.cwd || process.cwd();
   const env = options.env || process.env;
-  const commandDirs = resolveCommandTemplateDirectories(cwd, env);
+  const provider = resolveCommandTemplateSetupProvider(cwd);
+  const commandDirs = resolveCommandTemplateDirectories(cwd, env, provider);
   const candidates = deriveCommandCandidates(name);
 
   for (const dir of commandDirs) {
@@ -167,7 +226,8 @@ export async function listCommandNames(
 ): Promise<string[]> {
   const cwd = options.cwd || process.cwd();
   const env = options.env || process.env;
-  const commandDirs = resolveCommandTemplateDirectories(cwd, env);
+  const provider = resolveCommandTemplateSetupProvider(cwd);
+  const commandDirs = resolveCommandTemplateDirectories(cwd, env, provider);
   const names: string[] = [];
 
   for (const dir of commandDirs) {

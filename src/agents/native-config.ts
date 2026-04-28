@@ -124,7 +124,7 @@ function readConfigContent(
 ): string {
   if (typeof provided === "string") return provided;
 
-  const homeDir = codebuddyHomeOverride ?? process.env.CODEBUDDY_HOME ?? process.env.CODEX_HOME ?? "";
+  const homeDir = codebuddyHomeOverride ?? process.env.CODEBUDDY_HOME ?? "";
   if (!homeDir) return "";
 
   const tomlPath = join(homeDir, "config.toml");

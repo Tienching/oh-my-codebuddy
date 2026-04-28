@@ -21,7 +21,8 @@ beforeEach(async () => {
 	originalEnv = { ...process.env };
 	tempDir = await mkdtemp(join(tmpdir(), "omb-adapt-foundation-"));
 	process.env.HOME = tempDir;
-	process.env.CODEX_HOME = join(tempDir, ".codex");
+	process.env.CODEBUDDY_HOME = join(tempDir, ".codebuddy");
+	delete process.env.CODEX_HOME;
 	delete process.env.OMB_OPENCLAW;
 	delete process.env.OMB_OPENCLAW_CONFIG;
 	delete process.env.OMB_OPENCLAW_COMMAND;
@@ -40,7 +41,7 @@ afterEach(async () => {
 });
 
 async function writeOpenClawOmbConfig(config: unknown): Promise<void> {
-	const configDir = join(tempDir, ".codex");
+	const configDir = join(tempDir, ".codebuddy");
 	await mkdir(configDir, { recursive: true });
 	await writeFile(
 		join(configDir, ".omb-config.json"),

@@ -218,6 +218,136 @@ describe('omb ask', () => {
     }
   });
 
+  it('uses CODEX_HOME prompts when setup provider=codex in user scope', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-ask-codex-scope-'));
+    const codexHome = await mkdtemp(join(tmpdir(), 'omb-codex-home-scope-'));
+    try {
+      const promptsDir = join(codexHome, 'prompts');
+      const setupDir = join(wd, '.omb');
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(promptsDir, { recursive: true });
+      await mkdir(setupDir, { recursive: true });
+
+      await writeFile(
+        join(wd, '.omb', 'setup-scope.json'),
+        JSON.stringify({ scope: 'user', provider: 'codex' }),
+      );
+      await writeFile(
+        join(promptsDir, 'planner.md'),
+        'You are Planner from CODEX_HOME',
+      );
+
+      const res = runOmb(
+        wd,
+        ['ask', 'claude', '--agent-prompt', 'planner', 'plan', 'feature'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          CODEX_HOME: codexHome,
+          OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
+        },
+      );
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /You are Planner from CODEX_HOME/);
+      assert.match(res.stdout, /plan feature/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  it('warns and falls back to codebuddy when setup-scope provider is invalid', async () => {
+    // Hand-edited or upgraded setup-scope.json with an unknown provider value
+    // must not silently collapse to CodeBuddy. Emit a stderr warning so the
+    // situation is visible, and still resolve CodeBuddy prompts so the user
+    // can keep working without a hard failure.
+    const wd = await mkdtemp(join(tmpdir(), 'omb-ask-invalid-provider-'));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), 'omb-codebuddy-home-invalid-'));
+    try {
+      const promptsDir = join(codebuddyHome, 'prompts');
+      const setupDir = join(wd, '.omb');
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(promptsDir, { recursive: true });
+      await mkdir(setupDir, { recursive: true });
+
+      await writeFile(
+        join(wd, '.omb', 'setup-scope.json'),
+        JSON.stringify({ scope: 'user', provider: 'gemini-cli' }),
+      );
+      await writeFile(
+        join(promptsDir, 'planner.md'),
+        'You are Planner from CodeBuddy fallback',
+      );
+
+      const res = runOmb(
+        wd,
+        ['ask', 'claude', '--agent-prompt', 'planner', 'warn', 'fallback'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          CODEBUDDY_HOME: codebuddyHome,
+          OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
+        },
+      );
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /CodeBuddy fallback/);
+      assert.match(res.stderr, /unknown provider "gemini-cli"/);
+      assert.match(res.stderr, /falling back to codebuddy/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+      await rm(codebuddyHome, { recursive: true, force: true });
+    }
+  });
+
+  it('uses available provider prompt when setup provider=both in ask --agent-prompt', async () => {    const wd = await mkdtemp(join(tmpdir(), 'omb-ask-both-scope-'));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), 'omb-codebuddy-home-both-scope-'));
+    try {
+      const setupDir = join(wd, '.omb');
+      const projectCodexPrompts = join(wd, '.codex', 'prompts');
+      const codebuddyPrompts = join(codebuddyHome, 'prompts');
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(setupDir, { recursive: true });
+      await mkdir(projectCodexPrompts, { recursive: true });
+      await mkdir(codebuddyPrompts, { recursive: true });
+
+      await writeFile(
+        join(wd, '.omb', 'setup-scope.json'),
+        JSON.stringify({ scope: 'project', provider: 'both' }),
+      );
+      await writeFile(
+        join(projectCodexPrompts, 'planner.md'),
+        'You are Planner from Project Codex',
+      );
+      await writeFile(
+        join(codebuddyPrompts, 'planner.md'),
+        'You are Planner from CodeBuddy Home',
+      );
+
+      const res = runOmb(
+        wd,
+        ['ask', 'gemini', '--agent-prompt', 'planner', 'triage', 'incident'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
+          CODEBUDDY_HOME: codebuddyHome,
+        },
+      );
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /Project Codex/);
+      assert.doesNotMatch(res.stdout, /CodeBuddy Home/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+      await rm(codebuddyHome, { recursive: true, force: true });
+    }
+  });
+
   it('injects --agent-prompt content into final prompt while keeping Original task raw', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-ask-agent-prompt-'));
     try {

@@ -324,24 +324,23 @@ describe('runtime', () => {
     assert.deepEqual(args, ['--no-alt-screen', '--model', expectedLowComplexityModel()]);
   });
 
-  it('resolveWorkerLaunchArgsFromEnv reads low-complexity model from config when present', async () => {
-    const previousCodexHome = process.env.CODEX_HOME;
-    const tempCodexHome = await mkdtemp(join(tmpdir(), 'omb-codex-home-'));
+  it('resolveWorkerLaunchArgsFromEnv reads low-complexity model from CODEBUDDY_HOME config when present', async () => {
+    const tempCodebuddyHome = await mkdtemp(join(tmpdir(), 'omb-codebuddy-home-'));
     await writeFile(
-      join(tempCodexHome, '.omb-config.json'),
+      join(tempCodebuddyHome, '.omb-config.json'),
       JSON.stringify({ models: { team_low_complexity: 'gpt-4.1-mini' } }),
     );
-    process.env.CODEX_HOME = tempCodexHome;
     try {
       const args = resolveWorkerLaunchArgsFromEnv(
-        { OMB_TEAM_WORKER_LAUNCH_ARGS: '--no-alt-screen' },
+        {
+          CODEBUDDY_HOME: tempCodebuddyHome,
+          OMB_TEAM_WORKER_LAUNCH_ARGS: '--no-alt-screen',
+        },
         'explore',
       );
       assert.deepEqual(args, ['--no-alt-screen', '--model', 'gpt-4.1-mini']);
     } finally {
-      if (typeof previousCodexHome === 'string') process.env.CODEX_HOME = previousCodexHome;
-      else delete process.env.CODEX_HOME;
-      await rm(tempCodexHome, { recursive: true, force: true });
+      await rm(tempCodebuddyHome, { recursive: true, force: true });
     }
   });
 

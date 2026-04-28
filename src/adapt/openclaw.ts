@@ -330,7 +330,7 @@ export function buildOpenClawDoctorReport(
 		issues,
 		nextSteps: [
 			"Run omb adapt openclaw init --write.",
-			"Set OMB_OPENCLAW=1 and configure notifications.openclaw or compatible aliases in ~/.codex/.omb-config.json.",
+			"Set OMB_OPENCLAW=1 and configure notifications.openclaw or compatible aliases in ~/.codebuddy/.omb-config.json.",
 			"If command gateways are configured, also set OMB_OPENCLAW_COMMAND=1 before expecting command mappings to be locally ready.",
 		],
 	};

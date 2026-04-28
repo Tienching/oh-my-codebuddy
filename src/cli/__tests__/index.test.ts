@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   normalizeCodexLaunchArgs,
+  normalizeCodexCliLaunchArgs,
+  normalizeLeaderLaunchArgs,
   buildTmuxShellCommand,
   buildTmuxPaneCommand,
   buildWindowsPromptCommand,
@@ -24,11 +26,16 @@ import {
   upsertTopLevelTomlString,
   collectInheritableTeamWorkerArgs,
   resolveTeamWorkerLaunchArgsEnv,
+  extractLeaderCliArgs,
   injectModelInstructionsBypassArgs,
+  injectLeaderModelInstructionsBypassArgs,
+  translateLeaderExecArgs,
+  translateLeaderResumeArgs,
   translateCodeBuddyExecArgs,
   translateCodeBuddyResumeArgs,
   resolveWorkerSparkModel,
   resolveSetupScopeArg,
+  resolveSetupProviderArg,
   readPersistedSetupPreferences,
   readPersistedSetupScope,
   resolveCodexHomeForLaunch,
@@ -45,6 +52,7 @@ import {
   reapPostLaunchOrphanedMcpProcesses,
   cleanupPostLaunchModeStateFiles,
   resolveBackgroundHelperLaunchMode,
+  mirrorLeaderCliIntoProcessEnv,
   shouldDetachBackgroundHelper,
   resolveNotifyFallbackWatcherScript,
   resolveHookDerivedWatcherScript,
@@ -333,6 +341,68 @@ describe("normalizeCodexLaunchArgs", () => {
       "--tmux",
       "--dangerously-skip-permissions",
     ]);
+  });
+});
+
+describe("leader CLI selection", () => {
+  it("defaults to CodeBuddy and strips leader CLI selector flags from leader args", () => {
+    assert.deepEqual(extractLeaderCliArgs(["--model", "gpt-5"], {}), {
+      leaderCli: "codebuddy",
+      remainingArgs: ["--model", "gpt-5"],
+    });
+    assert.deepEqual(extractLeaderCliArgs(["--leader-cli", "codex", "--model", "gpt-5"], {}), {
+      leaderCli: "codex",
+      remainingArgs: ["--model", "gpt-5"],
+    });
+    assert.deepEqual(extractLeaderCliArgs(["--cli", "codex", "--model", "gpt-5"], {}), {
+      leaderCli: "codex",
+      remainingArgs: ["--model", "gpt-5"],
+    });
+    assert.deepEqual(extractLeaderCliArgs(["--leader-cli=codex", "--yolo"], {}), {
+      leaderCli: "codex",
+      remainingArgs: ["--yolo"],
+    });
+    assert.deepEqual(extractLeaderCliArgs(["--cli=codebuddy", "--yolo"], { OMB_LEADER_CLI: "codex" }), {
+      leaderCli: "codebuddy",
+      remainingArgs: ["--yolo"],
+    });
+  });
+
+  it("normalizes Codex leader args back to Codex-native flags", () => {
+    assert.deepEqual(
+      normalizeCodexCliLaunchArgs(["--madmax", "--effort", "high", "--system-prompt-file", "/tmp/AGENTS.md"]),
+      [
+        "-c",
+        'model_instructions_file="/tmp/AGENTS.md"',
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-c",
+        'model_reasoning_effort="high"',
+      ],
+    );
+  });
+
+  it("dispatches normalization by selected leader CLI", () => {
+    assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "codebuddy"), ["--dangerously-skip-permissions"]);
+    assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "codex"), ["--dangerously-bypass-approvals-and-sandbox"]);
+  });
+
+  it("preserves Codex resume and exec subcommands while translating CodeBuddy", () => {
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--last"], "codex"),
+      ["resume", "--last"],
+    );
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--last"], "codebuddy"),
+      ["--continue"],
+    );
+    assert.deepEqual(
+      translateLeaderExecArgs(["--json", "say hi"], "codex"),
+      ["exec", "--json", "say hi"],
+    );
+    assert.deepEqual(
+      translateLeaderExecArgs(["--json", "say hi"], "codebuddy"),
+      ["--print", "--output-format", "stream-json", "say hi"],
+    );
   });
 });
 
@@ -700,7 +770,30 @@ describe("buildNotifyFallbackWatcherEnv", () => {
     );
     assert.equal(env.OMB_HUD_AUTHORITY, "1");
     assert.equal(env.CODEBUDDY_HOME, "/tmp/codebuddy-home");
-    assert.equal(env.CODEX_HOME, "/tmp/codebuddy-home");
+    assert.equal(env.CODEX_HOME, undefined);
+    assert.equal(env.OMB_LEADER_CLI, "codebuddy");
+    assert.equal(env.HOME, "/tmp/home");
+    assert.equal(env.TMUX, undefined);
+    assert.equal(env.TMUX_PANE, undefined);
+  });
+
+  it("propagates CODEX_HOME override only for codex watcher sessions", () => {
+    const env = buildNotifyFallbackWatcherEnv(
+      {
+        HOME: "/tmp/home",
+        OMB_HUD_AUTHORITY: "0",
+        TMUX: "sock,1,0",
+        TMUX_PANE: "%2",
+        CODEBUDDY_HOME: "/leaked/codebuddy-home",
+      },
+      { codexHomeOverride: "/tmp/codex-home", enableAuthority: true, leaderCli: "codex" },
+    );
+    assert.equal(env.OMB_HUD_AUTHORITY, "1");
+    // Opposite-provider home must be scrubbed so a Codex leader session can't
+    // inherit an ambient CodeBuddy home from the parent process env.
+    assert.equal(env.CODEBUDDY_HOME, undefined);
+    assert.equal(env.CODEX_HOME, "/tmp/codex-home");
+    assert.equal(env.OMB_LEADER_CLI, "codex");
     assert.equal(env.HOME, "/tmp/home");
     assert.equal(env.TMUX, undefined);
     assert.equal(env.TMUX_PANE, undefined);
@@ -715,6 +808,30 @@ describe("buildNotifyFallbackWatcherEnv", () => {
     assert.equal(env.HOME, "/tmp/home");
     assert.equal(env.TMUX, undefined);
     assert.equal(env.TMUX_PANE, undefined);
+  });
+});
+
+describe("mirrorLeaderCliIntoProcessEnv", () => {
+  it("publishes the resolved leader CLI into the supplied env so ambient readers agree", () => {
+    // Same-process consumers (agents-overlay.resolveSessionUserHome, worker
+    // bootstrap) read ambient OMB_LEADER_CLI. When --leader-cli arrives via
+    // argv, the leader process must mirror the resolved value into its env.
+    const env: NodeJS.ProcessEnv = { HOME: "/tmp/home" };
+    mirrorLeaderCliIntoProcessEnv("codex", env);
+    assert.equal(env.OMB_LEADER_CLI, "codex");
+    mirrorLeaderCliIntoProcessEnv("codebuddy", env);
+    assert.equal(env.OMB_LEADER_CLI, "codebuddy");
+  });
+
+  it("leaves provider home env untouched so callers can keep an explicit CODEBUDDY_HOME/CODEX_HOME override", () => {
+    const env: NodeJS.ProcessEnv = {
+      CODEBUDDY_HOME: "/home/user/.codebuddy",
+      CODEX_HOME: "/home/user/.codex",
+    };
+    mirrorLeaderCliIntoProcessEnv("codex", env);
+    assert.equal(env.CODEBUDDY_HOME, "/home/user/.codebuddy");
+    assert.equal(env.CODEX_HOME, "/home/user/.codex");
+    assert.equal(env.OMB_LEADER_CLI, "codex");
   });
 });
 
@@ -889,7 +1006,7 @@ describe("resolveWorkerSparkModel", () => {
   });
 
   it("reads low-complexity team model from config when codebuddyHomeOverride is provided", async () => {
-    const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codex-home-"));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codebuddy-home-"));
     try {
       await writeFile(
         join(codebuddyHome, ".omb-config.json"),
@@ -1159,6 +1276,35 @@ describe("resolveSetupScopeArg", () => {
     );
   });
 });
+
+describe("resolveSetupProviderArg", () => {
+  it("returns undefined when provider is omitted", () => {
+    assert.equal(resolveSetupProviderArg(["--dry-run"]), undefined);
+  });
+
+  it("parses --provider <value> form", () => {
+    assert.equal(resolveSetupProviderArg(["--provider", "codex"]), "codex");
+  });
+
+  it("parses --provider=<value> form", () => {
+    assert.equal(resolveSetupProviderArg(["--provider=both"]), "both");
+  });
+
+  it("throws on invalid provider value", () => {
+    assert.throws(
+      () => resolveSetupProviderArg(["--provider", "claude"]),
+      /Invalid setup provider: claude/,
+    );
+  });
+
+  it("throws when --provider value is missing", () => {
+    assert.throws(
+      () => resolveSetupProviderArg(["--provider"]),
+      /Missing setup provider value after --provider/,
+    );
+  });
+});
+
 describe("project launch scope helpers", () => {
   it("reads persisted setup scope when valid", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
@@ -1190,6 +1336,23 @@ describe("project launch scope helpers", () => {
     }
   });
 
+  it("reads persisted setup provider when present", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(
+        join(wd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "codex" }),
+      );
+      assert.deepEqual(readPersistedSetupPreferences(wd), {
+        scope: "project",
+        provider: "codex",
+      });
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("ignores malformed persisted setup scope", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
@@ -1215,6 +1378,43 @@ describe("project launch scope helpers", () => {
     }
   });
 
+  it("uses project CODEX_HOME for codex leader when provider is codex", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(
+        join(wd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "codex" }),
+      );
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "codex"), join(wd, ".codex"));
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "codebuddy"), join(wd, ".codebuddy"));
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("uses project .codex for codex leader when setup provider is missing (legacy project scope)", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(join(wd, ".omb", "setup-scope.json"), JSON.stringify({ scope: "project" }));
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "codex"), join(wd, ".codex"));
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("uses project .codex for codex leader when legacy project-local scope is used", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(join(wd, ".omb", "setup-scope.json"), JSON.stringify({ scope: "project-local" }));
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "codex"), join(wd, ".codex"));
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("keeps explicit CODEBUDDY_HOME override from env", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
@@ -1228,6 +1428,23 @@ describe("project launch scope helpers", () => {
           CODEBUDDY_HOME: "/tmp/explicit-codebuddy-home",
         }),
         "/tmp/explicit-codebuddy-home",
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps CODEBUDDY_HOME semantics and does not reuse CODEX_HOME for codebuddy leader", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(
+        join(wd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "codebuddy" }),
+      );
+      assert.equal(
+        resolveCodexHomeForLaunch(wd, { CODEX_HOME: "/tmp/explicit-codex-home" }, "codebuddy"),
+        join(wd, ".codebuddy"),
       );
     } finally {
       await rm(wd, { recursive: true, force: true });
@@ -1464,7 +1681,7 @@ describe("detached tmux new-session sequencing", () => {
       "'codex' '--model' 'gpt-5'",
       "'node' '/tmp/omb.js' 'hud' '--watch'",
       "--model gpt-5",
-      "/tmp/codex-home",
+      "/tmp/codebuddy-home",
       '{"active":true}',
     );
     assert.deepEqual(
@@ -1476,10 +1693,35 @@ describe("detached tmux new-session sequencing", () => {
     assert.equal(steps[1]?.args.includes("-P"), true);
     assert.equal(steps[1]?.args.includes("#{pane_id}"), true);
     assert.equal(steps[0]?.args.includes("-e"), true);
+    assert.equal(steps[0]?.args.includes("CODEBUDDY_HOME=/tmp/codebuddy-home"), true);
+    assert.equal(steps[0]?.args.includes("CODEX_HOME=/tmp/codebuddy-home"), false);
+    // Default leader CLI is codebuddy; OMB_LEADER_CLI must still be injected so
+    // downstream consumers detect the provider explicitly instead of guessing.
+    assert.equal(steps[0]?.args.includes("OMB_LEADER_CLI=codebuddy"), true);
     assert.equal(
       steps[0]?.args.includes('OMB_NOTIFY_TEMP_CONTRACT={\"active\":true}'),
       true,
     );
+  });
+
+  it("buildDetachedSessionBootstrapSteps forwards CODEX_HOME only for codex detached sessions", () => {
+    const steps = buildDetachedSessionBootstrapSteps(
+      "omb-demo",
+      "/tmp/project",
+      "'codex' '--model' 'gpt-5'",
+      "'node' '/tmp/omb.js' 'hud' '--watch'",
+      null,
+      "/tmp/codex-home",
+      null,
+      false,
+      undefined,
+      "codex",
+    );
+    assert.equal(steps[0]?.args.includes("CODEBUDDY_HOME=/tmp/codex-home"), false);
+    assert.equal(steps[0]?.args.includes("CODEX_HOME=/tmp/codex-home"), true);
+    // OMB_LEADER_CLI must be injected so nested agents-overlay / worker-bootstrap
+    // pick the matching AGENTS/home inside the detached session.
+    assert.equal(steps[0]?.args.includes("OMB_LEADER_CLI=codex"), true);
   });
 
   it("buildDetachedSessionBootstrapSteps forwards temp contract env to detached tmux session", () => {
@@ -1536,7 +1778,7 @@ describe("detached tmux new-session sequencing", () => {
       "'codex' '--dangerously-bypass-approvals-and-sandbox'",
       hudCmd,
       "--model gpt-5",
-      "C:/codex-home",
+      "C:/codebuddy-home",
       null,
       true,
     );
@@ -2260,6 +2502,22 @@ describe("injectModelInstructionsBypassArgs", () => {
       {},
     );
     assert.deepEqual(args, ["--help"]);
+  });
+
+  it("uses Codex config syntax when the selected leader CLI is Codex", () => {
+    const args = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      ["--model", "gpt-5"],
+      "codex",
+      {},
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(args, [
+      "--model",
+      "gpt-5",
+      "-c",
+      'model_instructions_file="/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md"',
+    ]);
   });
 });
 

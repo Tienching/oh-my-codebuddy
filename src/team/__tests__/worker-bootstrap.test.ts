@@ -35,6 +35,27 @@ function setMockCodebuddyHome(codebuddyHomePath: string): () => void {
   };
 }
 
+function setMockCodexHome(codexHomePath: string): () => void {
+  const previous = process.env.CODEX_HOME;
+  process.env.CODEX_HOME = codexHomePath;
+  return () => {
+    if (typeof previous === "string") process.env.CODEX_HOME = previous;
+    else delete process.env.CODEX_HOME;
+  };
+}
+
+function setMockLeaderCli(
+  leaderCli: "codebuddy" | "codex" | undefined,
+): () => void {
+  const previous = process.env.OMB_LEADER_CLI;
+  if (typeof leaderCli === "string") process.env.OMB_LEADER_CLI = leaderCli;
+  else delete process.env.OMB_LEADER_CLI;
+  return () => {
+    if (typeof previous === "string") process.env.OMB_LEADER_CLI = previous;
+    else delete process.env.OMB_LEADER_CLI;
+  };
+}
+
 describe("worker bootstrap", () => {
   it("worker skill lifecycle instructions are claim-safe (issue #448)", async () => {
     const workerSkill = await readFile(
@@ -602,6 +623,78 @@ describe("worker bootstrap", () => {
       assert.doesNotMatch(projectContent, /<!-- OMB:TEAM:WORKER:START -->/);
     } finally {
       restoreCodexHome();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("writeTeamWorkerInstructionsFile uses CODEBUDDY_HOME AGENTS only in CodeBuddy mode", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
+    const restoreCodebuddyHome = setMockCodebuddyHome(join(cwd, "home", ".codebuddy"));
+    const restoreCodexHome = setMockCodexHome(join(cwd, "home", ".codex"));
+    const restoreLeaderCli = setMockLeaderCli("codebuddy");
+    try {
+      await mkdir(join(cwd, "home", ".codebuddy"), { recursive: true });
+      await mkdir(join(cwd, "home", ".codex"), { recursive: true });
+      await writeFile(
+        join(cwd, "home", ".codebuddy", "AGENTS.md"),
+        "# CodeBuddy instructions\n",
+        "utf8",
+      );
+      await writeFile(
+        join(cwd, "home", ".codex", "AGENTS.md"),
+        "# Codex instructions\n",
+        "utf8",
+      );
+      const overlay = generateWorkerOverlay("mode-codebuddy-team");
+      const outPath = await writeTeamWorkerInstructionsFile(
+        "mode-codebuddy-team",
+        cwd,
+        overlay,
+      );
+      const content = await readFile(outPath, "utf8");
+
+      assert.match(content, /# CodeBuddy instructions/);
+      assert.doesNotMatch(content, /# Codex instructions/);
+    } finally {
+      restoreCodebuddyHome();
+      restoreCodexHome();
+      restoreLeaderCli();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("writeTeamWorkerInstructionsFile uses CODEX_HOME AGENTS when OMB_LEADER_CLI is codex", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
+    const restoreCodebuddyHome = setMockCodebuddyHome(join(cwd, "home", ".codebuddy"));
+    const restoreCodexHome = setMockCodexHome(join(cwd, "home", ".codex"));
+    const restoreLeaderCli = setMockLeaderCli("codex");
+    try {
+      await mkdir(join(cwd, "home", ".codebuddy"), { recursive: true });
+      await mkdir(join(cwd, "home", ".codex"), { recursive: true });
+      await writeFile(
+        join(cwd, "home", ".codebuddy", "AGENTS.md"),
+        "# CodeBuddy instructions\n",
+        "utf8",
+      );
+      await writeFile(
+        join(cwd, "home", ".codex", "AGENTS.md"),
+        "# Codex instructions\n",
+        "utf8",
+      );
+      const overlay = generateWorkerOverlay("mode-codex-team");
+      const outPath = await writeTeamWorkerInstructionsFile(
+        "mode-codex-team",
+        cwd,
+        overlay,
+      );
+      const content = await readFile(outPath, "utf8");
+
+      assert.doesNotMatch(content, /# CodeBuddy instructions/);
+      assert.match(content, /# Codex instructions/);
+    } finally {
+      restoreCodebuddyHome();
+      restoreCodexHome();
+      restoreLeaderCli();
       await rm(cwd, { recursive: true, force: true });
     }
   });

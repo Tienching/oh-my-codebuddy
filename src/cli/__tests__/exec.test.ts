@@ -142,4 +142,43 @@ describe('omb exec', () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
+
+  it('uses Codex exec subcommand and config injection when --leader-cli codex is selected', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-exec-codex-cli-'));
+    try {
+      const home = join(wd, 'home');
+      const fakeBin = join(wd, 'bin');
+      const fakeCodexPath = join(fakeBin, 'codex');
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      const fakePsPath = join(fakeBin, 'ps');
+
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(join(wd, 'AGENTS.md'), '# Project Instructions\n\nProject guidance.\n');
+      await writeFile(fakeCodexPath, '#!/bin/sh\nprintf \'fake-codex:%s\\n\' "$*"\n');
+      await chmod(fakeCodexPath, 0o755);
+      await writeFile(fakeCodebuddyPath, '#!/bin/sh\nprintf \'fake-codebuddy:%s\\n\' "$*"\n');
+      await chmod(fakeCodebuddyPath, 0o755);
+      await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
+      await chmod(fakePsPath, 0o755);
+
+      const result = runOmb(wd, ['exec', '--leader-cli', 'codex', '--json', 'say hi'], {
+        HOME: home,
+        CODEX_HOME: join(home, '.codex'),
+        NODE_OPTIONS: '',
+        PATH: `${fakeBin}:/usr/bin:/bin`,
+        OMB_AUTO_UPDATE: '0',
+        OMB_NOTIFY_FALLBACK: '0',
+        OMB_HOOK_DERIVED_SIGNALS: '0',
+      });
+
+      assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
+      assert.match(result.stdout, /fake-codex:exec --json say hi -c model_instructions_file="/);
+      assert.doesNotMatch(result.stdout, /fake-codebuddy/);
+      assert.doesNotMatch(result.stdout, /--print\b/);
+      assert.doesNotMatch(result.stdout, /--output-format\b/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
 });

@@ -1128,6 +1128,29 @@ describe('buildWorkerStartupCommand', () => {
     }
   });
 
+  it('injects OMB_LEADER_CLI matching the worker CLI so downstream consumers pick the right provider home', () => {
+    // Each worker needs to announce the provider actually driving it so that
+    // nested agents-overlay / worker-bootstrap flows inside the worker pick the
+    // matching AGENTS/home (CodeBuddy vs Codex).
+    const codebuddySpec = buildWorkerProcessLaunchSpec('alpha', 1, [], process.cwd(), {}, 'codebuddy');
+    assert.equal(codebuddySpec.env.OMB_LEADER_CLI, 'codebuddy');
+    const codexSpec = buildWorkerProcessLaunchSpec('alpha', 2, [], process.cwd(), {}, 'codex');
+    assert.equal(codexSpec.env.OMB_LEADER_CLI, 'codex');
+  });
+
+  it('keeps per-worker OMB_LEADER_CLI independent in mixed-provider teams ("1:codex,1:codebuddy")', () => {
+    // Product contract: when a team launches workers with different CLIs,
+    // each worker sees OMB_LEADER_CLI matching its own CLI — not the team
+    // leader's. worker-bootstrap.resolveWorkerUserHome reads this env to
+    // decide whether to source CodeBuddy or Codex AGENTS.md.
+    const codexWorker = buildWorkerProcessLaunchSpec('mix', 1, [], process.cwd(), {}, 'codex');
+    const codebuddyWorker = buildWorkerProcessLaunchSpec('mix', 2, [], process.cwd(), {}, 'codebuddy');
+    assert.equal(codexWorker.env.OMB_LEADER_CLI, 'codex');
+    assert.equal(codebuddyWorker.env.OMB_LEADER_CLI, 'codebuddy');
+    // The two specs must not leak each other's provider flag.
+    assert.notEqual(codexWorker.env.OMB_LEADER_CLI, codebuddyWorker.env.OMB_LEADER_CLI);
+  });
+
 
   it('uses per-worker OMB_MODEL_INSTRUCTIONS_FILE from extraEnv when building process launch spec', () => {
     const prevBypass = process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT;
@@ -1739,6 +1762,104 @@ describe('team worker launch mode helpers', () => {
       else delete process.env.CODEX_HOME;
       if (typeof prevProviderEnv === 'string') process.env.CUSTOM_PROVIDER_API_KEY = prevProviderEnv;
       else delete process.env.CUSTOM_PROVIDER_API_KEY;
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  it('buildWorkerProcessLaunchSpec does not read CODEX_HOME config for codebuddy workers', async () => {
+    const prevBypass = process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    const prevCodebuddyHome = process.env.CODEBUDDY_HOME;
+    const prevCodexHome = process.env.CODEX_HOME;
+    const prevProviderEnv = process.env.CODEX_ONLY_PROVIDER_API_KEY;
+    const codebuddyHome = await mkdtemp(join(tmpdir(), 'omb-team-provider-codebuddy-home-'));
+    const codexHome = await mkdtemp(join(tmpdir(), 'omb-team-provider-codex-home-'));
+    process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+    process.env.CODEBUDDY_HOME = codebuddyHome;
+    process.env.CODEX_HOME = codexHome;
+    process.env.CODEX_ONLY_PROVIDER_API_KEY = 'codex-only-secret';
+
+    try {
+      await writeFile(join(codexHome, 'config.toml'), [
+        'model_provider = "codex_only_provider"',
+        '',
+        '[model_providers.codex_only_provider]',
+        'name = "codex_only_provider"',
+        'base_url = "http://localhost:3000/v1"',
+        'wire_api = "responses"',
+        'requires_openai_auth = true',
+        'env_key = "CODEX_ONLY_PROVIDER_API_KEY"',
+        '',
+      ].join('\n'));
+
+      const spec = buildWorkerProcessLaunchSpec(
+        'eta-team',
+        1,
+        [],
+        '/tmp/workspace',
+        {},
+        'codebuddy',
+      );
+
+      assert.equal(spec.env.CODEX_ONLY_PROVIDER_API_KEY, undefined);
+    } finally {
+      if (typeof prevBypass === 'string') process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT;
+      if (typeof prevCodebuddyHome === 'string') process.env.CODEBUDDY_HOME = prevCodebuddyHome;
+      else delete process.env.CODEBUDDY_HOME;
+      if (typeof prevCodexHome === 'string') process.env.CODEX_HOME = prevCodexHome;
+      else delete process.env.CODEX_HOME;
+      if (typeof prevProviderEnv === 'string') process.env.CODEX_ONLY_PROVIDER_API_KEY = prevProviderEnv;
+      else delete process.env.CODEX_ONLY_PROVIDER_API_KEY;
+      await rm(codebuddyHome, { recursive: true, force: true });
+      await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  it('buildWorkerProcessLaunchSpec does not read CODEBUDDY_HOME config for codex workers', async () => {
+    const prevBypass = process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT;
+    const prevCodebuddyHome = process.env.CODEBUDDY_HOME;
+    const prevCodexHome = process.env.CODEX_HOME;
+    const prevProviderEnv = process.env.CODEBUDDY_ONLY_PROVIDER_API_KEY;
+    const codebuddyHome = await mkdtemp(join(tmpdir(), 'omb-team-provider-codebuddy-home-'));
+    const codexHome = await mkdtemp(join(tmpdir(), 'omb-team-provider-codex-home-'));
+    process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT = '0';
+    process.env.CODEBUDDY_HOME = codebuddyHome;
+    process.env.CODEX_HOME = codexHome;
+    process.env.CODEBUDDY_ONLY_PROVIDER_API_KEY = 'codebuddy-only-secret';
+
+    try {
+      await writeFile(join(codebuddyHome, 'config.toml'), [
+        'model_provider = "codebuddy_only_provider"',
+        '',
+        '[model_providers.codebuddy_only_provider]',
+        'name = "codebuddy_only_provider"',
+        'base_url = "http://localhost:3000/v1"',
+        'wire_api = "responses"',
+        'requires_openai_auth = true',
+        'env_key = "CODEBUDDY_ONLY_PROVIDER_API_KEY"',
+        '',
+      ].join('\n'));
+
+      const spec = buildWorkerProcessLaunchSpec(
+        'theta-team',
+        1,
+        [],
+        '/tmp/workspace',
+        {},
+        'codex',
+      );
+
+      assert.equal(spec.env.CODEBUDDY_ONLY_PROVIDER_API_KEY, undefined);
+    } finally {
+      if (typeof prevBypass === 'string') process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT = prevBypass;
+      else delete process.env.OMB_BYPASS_DEFAULT_SYSTEM_PROMPT;
+      if (typeof prevCodebuddyHome === 'string') process.env.CODEBUDDY_HOME = prevCodebuddyHome;
+      else delete process.env.CODEBUDDY_HOME;
+      if (typeof prevCodexHome === 'string') process.env.CODEX_HOME = prevCodexHome;
+      else delete process.env.CODEX_HOME;
+      if (typeof prevProviderEnv === 'string') process.env.CODEBUDDY_ONLY_PROVIDER_API_KEY = prevProviderEnv;
+      else delete process.env.CODEBUDDY_ONLY_PROVIDER_API_KEY;
+      await rm(codebuddyHome, { recursive: true, force: true });
       await rm(codexHome, { recursive: true, force: true });
     }
   });

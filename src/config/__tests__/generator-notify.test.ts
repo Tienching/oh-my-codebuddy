@@ -100,7 +100,8 @@ describe('config generator', () => {
       assert.match(toml, /^developer_instructions = "You have oh-my-codebuddy installed/m);
       assert.match(toml, /AGENTS\.md is your orchestration brain and the main orchestration surface/);
       assert.match(toml, /Use skill\/keyword routing like \$name plus spawned role-specialized subagents for specialized work/);
-      assert.match(toml, /Native subagents are available via \.codex\/agents/);
+      assert.match(toml, /Native subagents are available via the configured provider agents directory/);
+      assert.match(toml, /\.codebuddy\/agents by default, \.codex\/agents for Codex provider installs/);
       assert.match(toml, /Treat installed prompts as narrower internal execution surfaces under AGENTS\.md authority/);
     } finally {
       await rm(wd, { recursive: true, force: true });

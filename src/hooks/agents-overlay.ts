@@ -19,11 +19,13 @@ import { dirname, join } from "path";
 import { existsSync } from "fs";
 import {
   codebuddyHome,
+  codexHome,
   listInstalledSkillDirectories,
   ombNotepadPath,
   ombProjectMemoryPath,
   packageRoot,
 } from "../utils/paths.js";
+import { isOmbGeneratedAgentsMd } from "../utils/agents-md.js";
 import {
   isPlanningComplete,
   readPlanningArtifacts,
@@ -45,8 +47,25 @@ const START_MARKER = "<!-- OMB:RUNTIME:START -->";
 const END_MARKER = "<!-- OMB:RUNTIME:END -->";
 const WORKER_START_MARKER = "<!-- OMB:TEAM:WORKER:START -->";
 const WORKER_END_MARKER = "<!-- OMB:TEAM:WORKER:END -->";
+const WORKFLOW_FALLBACK_START_MARKER = "<!-- OMB:WORKFLOW-FALLBACK:START -->";
+const WORKFLOW_FALLBACK_END_MARKER = "<!-- OMB:WORKFLOW-FALLBACK:END -->";
+const LEADER_CLI_ENV = "OMB_LEADER_CLI";
 const MAX_OVERLAY_SIZE = 3500;
 const SKILL_REFERENCE_PATTERN = /\/skills\/([^/\s`]+)\/SKILL\.md\b/g;
+
+function resolveLeaderCliFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): "codebuddy" | "codex" | null {
+  const raw = String(env[LEADER_CLI_ENV] ?? "").trim().toLowerCase();
+  if (raw === "codex") return "codex";
+  if (raw === "codebuddy") return "codebuddy";
+  return null;
+}
+
+function resolveSessionUserHome(): string {
+  const leaderCli = resolveLeaderCliFromEnv();
+  return leaderCli === "codex" ? codexHome() : codebuddyHome();
+}
 
 // ── Lock helpers ─────────────────────────────────────────────────────────────
 
@@ -619,6 +638,28 @@ function dropShadowedSkillReferenceLines(
   return keptLines.join("\n");
 }
 
+function hasOmbWorkflowRouting(content: string): boolean {
+  return (
+    isOmbGeneratedAgentsMd(content) ||
+    content.includes("<keyword_detection>") ||
+    content.includes(WORKFLOW_FALLBACK_START_MARKER)
+  );
+}
+
+function minimalOmbWorkflowFallback(): string {
+  return [
+    WORKFLOW_FALLBACK_START_MARKER,
+    "<omb_workflow_fallback>",
+    "OMB workflow routing fallback:",
+    "- This session is running through OMB, but full OMB AGENTS.md workflow guidance was not found in user/project instructions.",
+    "- For `team`, `swarm`, or `coordinated team` requests, do not use CodeBuddy's native TeamCreate surface. Run `omb team ...` from the shell so OMB creates tmux worker panes and `.omb/state/team/...` coordination state.",
+    "- For other OMB workflow keywords (`ralph`, `autopilot`, `ralplan`, `ultrawork`, `ultraqa`, `ecomode`, `cancel`), prefer the matching `omb <workflow> ...` runtime command when available.",
+    "- CodeBuddy native subagents may help with bounded local work, but they do not replace OMB's tmux team runtime when the user asks for an OMB/team workflow.",
+    "</omb_workflow_fallback>",
+    WORKFLOW_FALLBACK_END_MARKER,
+  ].join("\n");
+}
+
 /**
  * Build a session-scoped AGENTS.md that combines user-level CODEBUDDY_HOME
  * instructions, project instructions (if any), and the runtime overlay,
@@ -633,8 +674,10 @@ export async function writeSessionModelInstructionsFile(
   await mkdir(dirname(sessionPath), { recursive: true });
 
   const baseParts: string[] = [];
-  const sourcePaths = [join(codebuddyHome(), "AGENTS.md"), join(cwd, "AGENTS.md")];
+  const userAgentsPath = join(resolveSessionUserHome(), "AGENTS.md");
+  const sourcePaths = [userAgentsPath, join(cwd, "AGENTS.md")];
   const seenPaths = new Set<string>();
+  let hasWorkflowRouting = false;
   const installedSkills = await listInstalledSkillDirectories(cwd);
   const projectSkillNames = new Set(
     installedSkills
@@ -647,8 +690,9 @@ export async function writeSessionModelInstructionsFile(
     seenPaths.add(sourcePath);
 
     let content = await readFile(sourcePath, "utf-8");
+    if (hasOmbWorkflowRouting(content)) hasWorkflowRouting = true;
     content = stripOverlayContent(content).trim();
-    if (sourcePath === join(codebuddyHome(), "AGENTS.md")) {
+    if (sourcePath === userAgentsPath) {
       content = dropShadowedSkillReferenceLines(
         content,
         projectSkillNames,
@@ -656,6 +700,10 @@ export async function writeSessionModelInstructionsFile(
     }
     if (!content) continue;
     baseParts.push(content);
+  }
+
+  if (!hasWorkflowRouting) {
+    baseParts.push(minimalOmbWorkflowFallback());
   }
 
   const base = baseParts.join("\n\n");

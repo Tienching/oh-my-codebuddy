@@ -10,10 +10,11 @@
 import {
   mkdir,
   copyFile,
+  lstat,
   readdir,
   readFile,
+  readlink,
   writeFile,
-  symlink,
   stat,
   rm,
 } from "fs/promises";
@@ -34,7 +35,10 @@ import {
   ombLogsDir,
 } from "../utils/paths.js";
 import { buildMergedConfig, getRootModelName } from "../config/generator.js";
-import { mergeManagedCodebuddyHooksConfig } from "../config/codebuddy-hooks.js";
+import {
+  mergeManagedCodebuddyHooksConfig,
+  mergeManagedCodexHooksConfig,
+} from "../config/codebuddy-hooks.js";
 import {
   getLegacyUnifiedMcpRegistryCandidate,
   getUnifiedMcpRegistryCandidates,
@@ -70,12 +74,13 @@ import {
   getLegacyScopeMigration,
   getLegacySetupModel,
 } from "../setup/compat-rules.js";
-import { CODEBUDDY_BIN } from "./constants.js";
+import { CODEBUDDY_BIN, CODEX_BIN } from "./constants.js";
 
 interface SetupOptions {
   codexVersionProbe?: () => string | null;
   force?: boolean;
   dryRun?: boolean;
+  provider?: SetupProvider;
   scope?: SetupScope;
   verbose?: boolean;
   agentsOverwritePrompt?: (destinationPath: string) => Promise<boolean>;
@@ -96,6 +101,9 @@ const LEGACY_SCOPE_MIGRATION: Record<string, "project"> = getLegacyScopeMigratio
 
 export const SETUP_SCOPES = ["user", "project"] as const;
 export type SetupScope = (typeof SETUP_SCOPES)[number];
+export const SETUP_PROVIDERS = ["codebuddy", "codex", "both"] as const;
+export type SetupProvider = (typeof SETUP_PROVIDERS)[number];
+type SetupTargetProvider = Exclude<SetupProvider, "both">;
 
 export interface ScopeDirectories {
   /** @deprecated Use homeDir instead */
@@ -174,8 +182,10 @@ export interface SkillFrontmatterMetadata {
   description: string;
 }
 
-const PROJECT_GITIGNORE_ENTRIES = [
+const PROJECT_GITIGNORE_BASE_ENTRIES = [
   ".omb/",
+] as const;
+const PROJECT_CODEBUDDY_GITIGNORE_ENTRIES = [
   ".codebuddy/*",
   "!.codebuddy/agents/",
   "!.codebuddy/agents/**",
@@ -185,20 +195,45 @@ const PROJECT_GITIGNORE_ENTRIES = [
   "!.codebuddy/prompts/",
   "!.codebuddy/prompts/**",
 ] as const;
+const PROJECT_CODEX_GITIGNORE_ENTRIES = [
+  ".codex/*",
+  "!.codex/agents/",
+  "!.codex/agents/**",
+  "!.codex/skills/",
+  "!.codex/skills/**",
+  ".codex/skills/.system/**",
+  "!.codex/prompts/",
+  "!.codex/prompts/**",
+] as const;
 const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/"] as const;
 
 function applyScopePathRewritesToAgentsTemplate(
   content: string,
   scope: SetupScope,
+  provider: SetupProvider,
 ): string {
-  if (scope !== "project") return content;
+  if (scope === "project") {
+    if (provider === "both") {
+      return content
+        .replaceAll("~/.codebuddy", "./.codebuddy")
+        .replaceAll("~/.codex", "./.codex");
+    }
+    const projectHome = provider === "codex" ? "./.codex" : "./.codebuddy";
+    return content
+      .replaceAll("~/.codebuddy", projectHome)
+      .replaceAll("~/.codex", projectHome);
+  }
+
+  if (provider === "both") return content;
+  const userHome = provider === "codex" ? "~/.codex" : "~/.codebuddy";
   return content
-    .replaceAll("~/.codebuddy", "./.codebuddy")
-    .replaceAll("~/.codex", "./.codebuddy");
+    .replaceAll("~/.codebuddy", userHome)
+    .replaceAll("~/.codex", userHome);
 }
 
 interface PersistedSetupScope {
   scope: SetupScope;
+  provider?: SetupProvider;
 }
 
 async function ensureScopedSettingsJson(
@@ -226,10 +261,23 @@ interface ResolvedSetupScope {
   source: "cli" | "persisted" | "prompt" | "default";
 }
 
+interface ResolvedSetupProvider {
+  provider: SetupProvider;
+  source: "cli" | "persisted" | "default";
+}
+
 const REQUIRED_TEAM_CLI_API_MARKERS = [
   "if (subcommand === 'api')",
   "executeTeamApiOperation",
   "TEAM_API_OPERATIONS",
+] as const;
+const LEGACY_CLAUDE_AGENTS_SIGNATURES = [
+  "# CLAUDE.md",
+  "Behavioral guidelines to reduce common LLM coding mistakes",
+  "## 1. Think Before Coding",
+  "## 2. Simplicity First",
+  "## 3. Surgical Changes",
+  "## 4. Goal-Driven Execution",
 ] as const;
 
 const DEFAULT_SETUP_SCOPE: SetupScope = "user";
@@ -256,6 +304,30 @@ function createEmptyRunSummary(): SetupRunSummary {
     agentsMd: createEmptyCategorySummary(),
     config: createEmptyCategorySummary(),
   };
+}
+
+function mergeCategorySummary(
+  target: SetupCategorySummary,
+  source: SetupCategorySummary,
+): void {
+  target.updated += source.updated;
+  target.unchanged += source.unchanged;
+  target.backedUp += source.backedUp;
+  target.skipped += source.skipped;
+  target.removed += source.removed;
+}
+
+function providerDisplayName(provider: SetupTargetProvider): string {
+  return provider === "codex" ? "Codex" : "CodeBuddy";
+}
+
+function setupProviderTargets(provider: SetupProvider): SetupTargetProvider[] {
+  return provider === "both" ? ["codebuddy", "codex"] : [provider];
+}
+
+function codexProviderHome(): string {
+  const explicit = String(process.env.CODEX_HOME ?? "").trim();
+  return explicit !== "" ? explicit : join(homedir(), ".codex");
 }
 
 async function ensureBackup(
@@ -389,12 +461,17 @@ export async function validateSkillFile(skillMdPath: string): Promise<void> {
 
 async function buildLegacySkillOverlapNotice(
   scope: SetupScope,
+  provider: SetupTargetProvider,
 ): Promise<LegacySkillOverlapNotice> {
   if (scope !== "user") {
     return { shouldWarn: false, message: "" };
   }
+  const providerName = providerDisplayName(provider);
 
-  const overlap = await detectLegacySkillRootOverlap();
+  const canonicalDir = provider === "codex"
+    ? join(codexProviderHome(), "skills")
+    : userSkillsDir();
+  const overlap = await detectLegacySkillRootOverlap(canonicalDir);
   if (!overlap.legacyExists) {
     return { shouldWarn: false, message: "" };
   }
@@ -403,7 +480,7 @@ async function buildLegacySkillOverlapNotice(
     return {
       shouldWarn: true,
       message:
-        `Legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) alongside canonical ${overlap.canonicalDir}. Codex may still discover both roots; archive or remove ~/.agents/skills if Enable/Disable Skills shows duplicates.`,
+        `Legacy ~/.agents/skills still exists (${overlap.legacySkillCount} skills) alongside canonical ${overlap.canonicalDir}. ${providerName} may still discover both roots; archive or remove ~/.agents/skills if Enable/Disable Skills shows duplicates.`,
     };
   }
 
@@ -413,7 +490,7 @@ async function buildLegacySkillOverlapNotice(
   return {
     shouldWarn: true,
     message:
-      `Detected ${overlap.overlappingSkillNames.length} overlapping skill names between canonical ${overlap.canonicalDir} and legacy ${overlap.legacyDir}.${mismatchSuffix} Remove or archive ~/.agents/skills after confirming ${overlap.canonicalDir} is the version you want Codex to load.`,
+      `Detected ${overlap.overlappingSkillNames.length} overlapping skill names between canonical ${overlap.canonicalDir} and legacy ${overlap.legacyDir}.${mismatchSuffix} Remove or archive ~/.agents/skills after confirming ${overlap.canonicalDir} is the version you want ${providerName} to load.`,
   };
 }
 
@@ -427,6 +504,21 @@ function logCategorySummary(name: string, summary: SetupCategorySummary): void {
 function isSetupScope(value: string): value is SetupScope {
   return SETUP_SCOPES.includes(value as SetupScope);
 }
+
+function isSetupProvider(value: string): value is SetupProvider {
+  return SETUP_PROVIDERS.includes(value as SetupProvider);
+}
+
+function isLegacyClaudeOnlyAgentsMd(content: string): boolean {
+  return (
+    !isOmbGeneratedAgentsMd(content) &&
+    !content.includes("<keyword_detection>") &&
+    LEGACY_CLAUDE_AGENTS_SIGNATURES.every((signature) =>
+      content.includes(signature),
+    )
+  );
+}
+
 function getScopeFilePath(projectRoot: string): string {
   return join(projectRoot, ".omb", "setup-scope.json");
 }
@@ -438,9 +530,25 @@ function getLegacyScopeFilePath(projectRoot: string): string {
 export function resolveScopeDirectories(
   scope: SetupScope,
   projectRoot: string,
+  provider: SetupProvider = "codebuddy",
 ): ScopeDirectories {
+  const concreteProvider = provider === "both" ? "codebuddy" : provider;
   if (scope === "project") {
-    const codexHomeDir = join(projectRoot, ".codebuddy");
+    const codexHomeDir = join(
+      projectRoot,
+      concreteProvider === "codex" ? ".codex" : ".codebuddy",
+    );
+    return {
+      codexConfigFile: join(codexHomeDir, "config.toml"),
+      codexHomeDir,
+      codexHooksFile: join(codexHomeDir, "hooks.json"),
+      nativeAgentsDir: join(codexHomeDir, "agents"),
+      promptsDir: join(codexHomeDir, "prompts"),
+      skillsDir: join(codexHomeDir, "skills"),
+    };
+  }
+  if (concreteProvider === "codex") {
+    const codexHomeDir = codexProviderHome();
     return {
       codexConfigFile: join(codexHomeDir, "config.toml"),
       codexHomeDir,
@@ -460,32 +568,39 @@ export function resolveScopeDirectories(
   };
 }
 
-async function ensureLegacyProjectCodexAlias(
+function resolveSetupTargetDirectories(
+  scope: SetupScope,
   projectRoot: string,
-  scopeDirs: ScopeDirectories,
+  provider: SetupProvider,
+): Array<{ provider: SetupTargetProvider; scopeDirs: ScopeDirectories }> {
+  return setupProviderTargets(provider).map((targetProvider) => ({
+    provider: targetProvider,
+    scopeDirs: resolveScopeDirectories(scope, projectRoot, targetProvider),
+  }));
+}
+
+async function removeManagedLegacyProjectCodexAlias(
+  projectRoot: string,
   options: Pick<SetupOptions, "dryRun" | "verbose">,
 ): Promise<void> {
   const legacyCodexDir = join(projectRoot, ".codex");
-  if (scopeDirs.codexHomeDir === legacyCodexDir || existsSync(legacyCodexDir)) {
-    return;
-  }
-  if (options.verbose) {
-    console.log(`  legacy project alias .codex -> ${scopeDirs.codexHomeDir}`);
-  }
-  if (options.dryRun) return;
+  if (!existsSync(legacyCodexDir)) return;
   try {
-    await symlink(".codebuddy", legacyCodexDir, "dir");
+    const linkStat = await lstat(legacyCodexDir);
+    if (!linkStat.isSymbolicLink()) return;
+    const linkTarget = await readlink(legacyCodexDir);
+    if (linkTarget !== ".codebuddy" && !linkTarget.endsWith("/.codebuddy")) {
+      return;
+    }
+    if (options.verbose) {
+      console.log(`  remove legacy project alias ${legacyCodexDir} -> ${linkTarget}`);
+    }
+    if (!options.dryRun) {
+      await rm(legacyCodexDir, { force: true });
+    }
   } catch {
-    // Best-effort compatibility alias only; setup should still succeed without it.
+    // Best-effort migration cleanup only; setup should still continue.
   }
-}
-
-function resolveLegacyProjectHooksFile(projectRoot: string, scopeDirs: ScopeDirectories): string | null {
-  const legacyCodexDir = join(projectRoot, ".codex");
-  const legacyHooksFile = join(legacyCodexDir, "hooks.json");
-  if (legacyHooksFile === scopeDirs.codexHooksFile) return null;
-  if (!existsSync(legacyCodexDir) && !existsSync(legacyHooksFile)) return null;
-  return legacyHooksFile;
 }
 
 async function readPersistedSetupPreferences(
@@ -510,6 +625,13 @@ async function readPersistedSetupPreferences(
           );
           persisted.scope = migrated;
         }
+      }
+      if (
+        parsed &&
+        typeof parsed.provider === "string" &&
+        isSetupProvider(parsed.provider)
+      ) {
+        persisted.provider = parsed.provider;
       }
       if (Object.keys(persisted).length > 0) {
         return persisted;
@@ -587,8 +709,9 @@ function semverGte(
   return version[2] >= minimum[2];
 }
 
-function probeInstalledCodeBuddyVersion(): string | null {
-  const { result } = spawnPlatformCommandSync(CODEBUDDY_BIN, ["--version"], {
+function probeInstalledCliVersion(provider: SetupTargetProvider): string | null {
+  const binary = provider === "codex" ? CODEX_BIN : CODEBUDDY_BIN;
+  const { result } = spawnPlatformCommandSync(binary, ["--version"], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -646,6 +769,20 @@ async function resolveSetupScope(
   return { scope: DEFAULT_SETUP_SCOPE, source: "default" };
 }
 
+async function resolveSetupProvider(
+  projectRoot: string,
+  requestedProvider?: SetupProvider,
+): Promise<ResolvedSetupProvider> {
+  if (requestedProvider) {
+    return { provider: requestedProvider, source: "cli" };
+  }
+  const persisted = await readPersistedSetupPreferences(projectRoot);
+  if (persisted?.provider) {
+    return { provider: persisted.provider, source: "persisted" };
+  }
+  return { provider: "codebuddy", source: "default" };
+}
+
 function hasGitignoreEntry(content: string, entry: string): boolean {
   return content
     .split(/\r?\n/)
@@ -672,8 +809,14 @@ async function ensureProjectGitignore(
   projectRoot: string,
   backupContext: SetupBackupContext,
   options: Pick<SetupOptions, "dryRun" | "verbose">,
+  provider: SetupProvider,
 ): Promise<"created" | "updated" | "unchanged"> {
   const gitignorePath = join(projectRoot, ".gitignore");
+  const projectGitignoreEntries = [
+    ...PROJECT_GITIGNORE_BASE_ENTRIES,
+    ...(provider === "codex" ? [] : PROJECT_CODEBUDDY_GITIGNORE_ENTRIES),
+    ...(provider === "codebuddy" ? [] : PROJECT_CODEX_GITIGNORE_ENTRIES),
+  ];
   const destinationExists = existsSync(gitignorePath);
   const existing = destinationExists
     ? await readFile(gitignorePath, "utf-8")
@@ -683,7 +826,7 @@ async function ensureProjectGitignore(
     LEGACY_PROJECT_GITIGNORE_ENTRIES,
   );
 
-  const missingEntries = PROJECT_GITIGNORE_ENTRIES.filter(
+  const missingEntries = projectGitignoreEntries.filter(
     (entry) => !hasGitignoreEntry(normalized.content, entry),
   );
 
@@ -693,7 +836,7 @@ async function ensureProjectGitignore(
 
   const nextContent = destinationExists
     ? `${normalized.content}${normalized.content.endsWith("\n") || normalized.content.length === 0 ? "" : "\n"}${missingEntries.join("\n")}${missingEntries.length > 0 ? "\n" : ""}`
-    : `${PROJECT_GITIGNORE_ENTRIES.join("\n")}\n`;
+    : `${projectGitignoreEntries.join("\n")}\n`;
 
   if (
     await ensureBackup(gitignorePath, destinationExists, backupContext, options)
@@ -723,6 +866,7 @@ async function ensureProjectGitignore(
 async function persistSetupScope(
   projectRoot: string,
   scope: SetupScope,
+  provider: SetupProvider,
   options: Pick<SetupOptions, "dryRun" | "verbose">,
 ): Promise<void> {
   const scopePath = getScopeFilePath(projectRoot);
@@ -731,7 +875,7 @@ async function persistSetupScope(
     return;
   }
   await mkdir(dirname(scopePath), { recursive: true });
-  const payload: PersistedSetupScope = { scope };
+  const payload: PersistedSetupScope = { scope, provider };
   await writeFile(scopePath, JSON.stringify(payload, null, 2) + "\n");
   if (options.verbose) console.log(`  Wrote ${scopePath}`);
 }
@@ -740,6 +884,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   const {
     force = false,
     dryRun = false,
+    provider: requestedProvider,
     scope: requestedScope,
     verbose = false,
     modelUpgradePrompt,
@@ -747,9 +892,22 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   const pkgRoot = getPackageRoot();
   const projectRoot = process.cwd();
   const resolvedScope = await resolveSetupScope(projectRoot, requestedScope);
-  const scopeDirs = resolveScopeDirectories(resolvedScope.scope, projectRoot);
+  const resolvedProvider = await resolveSetupProvider(
+    projectRoot,
+    requestedProvider,
+  );
+  const setupTargets = resolveSetupTargetDirectories(
+    resolvedScope.scope,
+    projectRoot,
+    resolvedProvider.provider,
+  );
+  const primaryTarget = setupTargets[0]!;
   const scopeSourceMessage =
     resolvedScope.source === "persisted" ? " (from .omb/setup-scope.json)" : "";
+  const providerSourceMessage =
+    resolvedProvider.source === "persisted"
+      ? " (from .omb/setup-scope.json)"
+      : "";
   const backupContext = buildSetupBackupContext(
     resolvedScope.scope,
     projectRoot,
@@ -760,37 +918,46 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   console.log(
     `Using setup scope: ${resolvedScope.scope}${scopeSourceMessage}\n`,
   );
+  console.log(
+    `Using setup provider: ${resolvedProvider.provider}${providerSourceMessage}\n`,
+  );
   if (verbose) {
     console.log(`Platform runtime: ${formatPlatformRuntime(detectPlatformRuntime())}\n`);
+  }
+
+  if (
+    resolvedScope.scope === "project" &&
+    resolvedProvider.provider !== "codebuddy"
+  ) {
+    await removeManagedLegacyProjectCodexAlias(projectRoot, {
+      dryRun,
+      verbose,
+    });
   }
 
   // Step 1: Ensure directories exist
   console.log("[1/8] Creating directories...");
   const dirs = [
-    scopeDirs.codexHomeDir,
-    scopeDirs.promptsDir,
-    scopeDirs.skillsDir,
-    scopeDirs.nativeAgentsDir,
+    ...setupTargets.flatMap((target) => [
+      target.scopeDirs.codexHomeDir,
+      target.scopeDirs.promptsDir,
+      target.scopeDirs.skillsDir,
+      target.scopeDirs.nativeAgentsDir,
+    ]),
     ombStateDir(projectRoot),
     ombPlansDir(projectRoot),
     ombLogsDir(projectRoot),
   ];
-  for (const dir of dirs) {
+  for (const dir of new Set(dirs)) {
     if (!dryRun) {
       await mkdir(dir, { recursive: true });
     }
     if (verbose) console.log(`  mkdir ${dir}`);
   }
-  await persistSetupScope(projectRoot, resolvedScope.scope, {
+  await persistSetupScope(projectRoot, resolvedScope.scope, resolvedProvider.provider, {
     dryRun,
     verbose,
   });
-  if (resolvedScope.scope === "project") {
-    await ensureLegacyProjectCodexAlias(projectRoot, scopeDirs, {
-      dryRun,
-      verbose,
-    });
-  }
   console.log("  Done.\n");
 
   if (resolvedScope.scope === "project") {
@@ -798,14 +965,21 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
       projectRoot,
       backupContext,
       { dryRun, verbose },
+      resolvedProvider.provider,
     );
+    const trackableProviderPaths =
+      resolvedProvider.provider === "codex"
+        ? ".codex agents, skills, and prompts"
+        : resolvedProvider.provider === "both"
+          ? ".codebuddy/.codex agents, skills, and prompts"
+          : ".codebuddy agents, skills, and prompts";
     if (gitignoreResult === "created") {
       console.log(
-        "  Created .gitignore with OMB project ignore rules so local runtime state stays out of source control while .codebuddy agents, skills, and prompts remain trackable.\n",
+        `  Created .gitignore with OMB project ignore rules so local runtime state stays out of source control while ${trackableProviderPaths} remain trackable.\n`,
       );
     } else if (gitignoreResult === "updated") {
       console.log(
-        "  Updated .gitignore with OMB project ignore rules so local runtime state stays out of source control while .codebuddy agents, skills, and prompts remain trackable.\n",
+        `  Updated .gitignore with OMB project ignore rules so local runtime state stays out of source control while ${trackableProviderPaths} remain trackable.\n`,
       );
     }
   }
@@ -817,31 +991,34 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   console.log("[2/8] Installing agent prompts...");
   {
     const promptsSrc = join(pkgRoot, "prompts");
-    const promptsDst = scopeDirs.promptsDir;
-    summary.prompts = await installPrompts(
-      promptsSrc,
-      promptsDst,
-      backupContext,
-      { force, dryRun, verbose },
-    );
-    const cleanedLegacyPromptShims = await cleanupLegacySkillPromptShims(
-      promptsSrc,
-      promptsDst,
-      {
-        dryRun,
-        verbose,
-      },
-    );
-    summary.prompts.removed += cleanedLegacyPromptShims;
-    if (cleanedLegacyPromptShims > 0) {
-      if (dryRun) {
-        console.log(
-          `  Would remove ${cleanedLegacyPromptShims} legacy skill prompt shim file(s).`,
-        );
-      } else {
-        console.log(
-          `  Removed ${cleanedLegacyPromptShims} legacy skill prompt shim file(s).`,
-        );
+    for (const target of setupTargets) {
+      const promptsDst = target.scopeDirs.promptsDir;
+      const targetSummary = await installPrompts(
+        promptsSrc,
+        promptsDst,
+        backupContext,
+        { force, dryRun, verbose },
+      );
+      mergeCategorySummary(summary.prompts, targetSummary);
+      const cleanedLegacyPromptShims = await cleanupLegacySkillPromptShims(
+        promptsSrc,
+        promptsDst,
+        {
+          dryRun,
+          verbose,
+        },
+      );
+      summary.prompts.removed += cleanedLegacyPromptShims;
+      if (cleanedLegacyPromptShims > 0) {
+        if (dryRun) {
+          console.log(
+            `  Would remove ${cleanedLegacyPromptShims} legacy skill prompt shim file(s) from ${promptsDst}.`,
+          );
+        } else {
+          console.log(
+            `  Removed ${cleanedLegacyPromptShims} legacy skill prompt shim file(s) from ${promptsDst}.`,
+          );
+        }
       }
     }
     if (catalogCounts) {
@@ -857,12 +1034,15 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   console.log("[3/8] Installing skills...");
   {
     const skillsSrc = join(pkgRoot, "skills");
-    const skillsDst = scopeDirs.skillsDir;
-    summary.skills = await installSkills(skillsSrc, skillsDst, backupContext, {
-      force,
-      dryRun,
-      verbose,
-    });
+    for (const target of setupTargets) {
+      const skillsDst = target.scopeDirs.skillsDir;
+      const targetSummary = await installSkills(skillsSrc, skillsDst, backupContext, {
+        force,
+        dryRun,
+        verbose,
+      });
+      mergeCategorySummary(summary.skills, targetSummary);
+    }
     if (catalogCounts) {
       console.log(
         `  Skill refresh complete (catalog baseline: ${catalogCounts.skills}).\n`,
@@ -875,19 +1055,23 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   // Step 4: Install native agent configs
   console.log("[4/8] Installing native agent configs...");
   {
-    summary.nativeAgents = await refreshNativeAgentConfigs(
-      pkgRoot,
-      scopeDirs.nativeAgentsDir,
-      backupContext,
-      {
-        force,
-        dryRun,
-        verbose,
-      },
-    );
-    console.log(
-      `  Native agent refresh complete (${scopeDirs.nativeAgentsDir}).\n`,
-    );
+    for (const target of setupTargets) {
+      const targetSummary = await refreshNativeAgentConfigs(
+        pkgRoot,
+        target.scopeDirs.nativeAgentsDir,
+        backupContext,
+        {
+          force,
+          dryRun,
+          verbose,
+        },
+      );
+      mergeCategorySummary(summary.nativeAgents, targetSummary);
+      console.log(
+        `  Native agent refresh complete (${target.scopeDirs.nativeAgentsDir}).`,
+      );
+    }
+    console.log();
   }
 
   // Step 5: Update config.toml
@@ -916,19 +1100,35 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   for (const warning of sharedMcpRegistry.warnings) {
     console.log(`  warning: ${warning}`);
   }
-  const managedConfig = await updateManagedConfig(
-    scopeDirs.codexConfigFile,
-    pkgRoot,
-    sharedMcpRegistry,
-    summary.config,
-    backupContext,
-    { codexVersionProbe: options.codexVersionProbe, dryRun, verbose, modelUpgradePrompt },
-  );
-  const resolvedConfig = managedConfig.finalConfig;
-  await ensureScopedSettingsJson(scopeDirs.codexHomeDir, resolvedConfig, {
-    dryRun,
-    verbose,
-  });
+  const managedConfigs = new Map<SetupTargetProvider, ManagedConfigResult>();
+  for (const target of setupTargets) {
+    const managedConfig = await updateManagedConfig(
+      target.scopeDirs.codexConfigFile,
+      pkgRoot,
+      sharedMcpRegistry,
+      summary.config,
+      backupContext,
+      {
+        codexVersionProbe: options.codexVersionProbe,
+        dryRun,
+        verbose,
+        modelUpgradePrompt,
+        setupProvider: target.provider,
+      },
+    );
+    managedConfigs.set(target.provider, managedConfig);
+    await ensureScopedSettingsJson(
+      target.scopeDirs.codexHomeDir,
+      managedConfig.finalConfig,
+      {
+        dryRun,
+        verbose,
+      },
+    );
+    console.log(
+      `  Config refresh complete (${target.scopeDirs.codexConfigFile}).`,
+    );
+  }
   if (resolvedScope.scope === "user") {
     await syncClaudeCodeMcpSettings(
       sharedMcpRegistry,
@@ -937,41 +1137,29 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
       { dryRun, verbose },
     );
   }
-  console.log(`  Config refresh complete (${scopeDirs.codexConfigFile}).\n`);
+  console.log();
 
-  const legacyProjectHooksFile = resolvedScope.scope === "project"
-    ? resolveLegacyProjectHooksFile(projectRoot, scopeDirs)
-    : null;
-  const existingHooksContent = existsSync(scopeDirs.codexHooksFile)
-    ? await readFile(scopeDirs.codexHooksFile, "utf-8")
-    : (legacyProjectHooksFile && existsSync(legacyProjectHooksFile)
-      ? await readFile(legacyProjectHooksFile, "utf-8")
-      : null);
-  const hooksConfig = mergeManagedCodebuddyHooksConfig(
-    existingHooksContent,
-    pkgRoot,
-  );
-  await syncManagedContent(
-    hooksConfig,
-    scopeDirs.codexHooksFile,
-    summary.config,
-    backupContext,
-    { dryRun, verbose },
-    `native hooks ${scopeDirs.codexHooksFile}`,
-  );
-  console.log(
-    `  Native CodeBuddy hooks refresh complete (${scopeDirs.codexHooksFile}).\n`,
-  );
-  if (legacyProjectHooksFile) {
+  for (const target of setupTargets) {
+    const existingHooksContent = existsSync(target.scopeDirs.codexHooksFile)
+      ? await readFile(target.scopeDirs.codexHooksFile, "utf-8")
+      : null;
+    const hooksConfig =
+      target.provider === "codex"
+        ? mergeManagedCodexHooksConfig(existingHooksContent, pkgRoot)
+        : mergeManagedCodebuddyHooksConfig(existingHooksContent, pkgRoot);
     await syncManagedContent(
       hooksConfig,
-      legacyProjectHooksFile,
+      target.scopeDirs.codexHooksFile,
       summary.config,
       backupContext,
       { dryRun, verbose },
-      `legacy native hooks ${legacyProjectHooksFile}`,
+      `native hooks ${target.scopeDirs.codexHooksFile}`,
+    );
+    console.log(
+      `  Native ${providerDisplayName(target.provider)} hooks refresh complete (${target.scopeDirs.codexHooksFile}).`,
     );
   }
+  console.log();
 
   // Step 5.5: Verify team CLI interop surface is available.
   console.log("[5.5/8] Verifying Team CLI API interop...");
@@ -987,105 +1175,123 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   // Step 6: Generate AGENTS.md
   console.log("[6/8] Generating AGENTS.md...");
   const agentsMdSrc = join(pkgRoot, "templates", "AGENTS.md");
-  const agentsMdDst =
-    resolvedScope.scope === "project"
-      ? join(projectRoot, "AGENTS.md")
-      : join(scopeDirs.codexHomeDir, "AGENTS.md");
-  const agentsMdExists = existsSync(agentsMdDst);
-
-  // Guard: refuse to overwrite project-root AGENTS.md during active session
-  const activeSession =
-    resolvedScope.scope === "project"
-      ? await readSessionState(projectRoot)
-      : null;
-  const sessionIsActive = activeSession && !isSessionStale(activeSession);
-
   if (existsSync(agentsMdSrc)) {
     const content = await readFile(agentsMdSrc, "utf-8");
-    const modelTableContext = resolveAgentsModelTableContext(resolvedConfig, {
-      codebuddyHomeOverride: scopeDirs.codexHomeDir,
-    });
-    const rewritten = upsertAgentsModelTable(
-      addGeneratedAgentsMarker(
-        applyScopePathRewritesToAgentsTemplate(content, resolvedScope.scope),
-      ),
-      modelTableContext,
-    );
-    let changed = true;
-    let canApplyManagedModelRefresh = false;
-    let managedRefreshContent = "";
-    if (agentsMdExists) {
-      const existing = await readFile(agentsMdDst, "utf-8");
-      changed = existing !== rewritten;
-      if (isOmbGeneratedAgentsMd(existing)) {
-        managedRefreshContent = upsertAgentsModelTable(
-          existing,
-          modelTableContext,
-        );
-        canApplyManagedModelRefresh = managedRefreshContent !== existing;
+    const agentsMdTargets =
+      resolvedScope.scope === "project"
+        ? [
+            {
+              destination: join(projectRoot, "AGENTS.md"),
+              provider: resolvedProvider.provider,
+              target: primaryTarget,
+            },
+          ]
+        : setupTargets.map((target) => ({
+            destination: join(target.scopeDirs.codexHomeDir, "AGENTS.md"),
+            provider: target.provider,
+            target,
+          }));
+
+    const activeSession =
+      resolvedScope.scope === "project"
+        ? await readSessionState(projectRoot)
+        : null;
+    const sessionIsActive = activeSession && !isSessionStale(activeSession);
+
+    for (const agentsTarget of agentsMdTargets) {
+      const agentsMdDst = agentsTarget.destination;
+      const agentsMdExists = existsSync(agentsMdDst);
+      const resolvedConfig =
+        managedConfigs.get(agentsTarget.target.provider)?.finalConfig ?? "";
+      const modelTableContext = resolveAgentsModelTableContext(resolvedConfig, {
+        codebuddyHomeOverride: agentsTarget.target.scopeDirs.codexHomeDir,
+      });
+      const rewritten = upsertAgentsModelTable(
+        addGeneratedAgentsMarker(
+          applyScopePathRewritesToAgentsTemplate(
+            content,
+            resolvedScope.scope,
+            agentsTarget.provider,
+          ),
+        ),
+        modelTableContext,
+      );
+      let changed = true;
+      let canApplyManagedModelRefresh = false;
+      let managedRefreshContent = "";
+      if (agentsMdExists) {
+        const existing = await readFile(agentsMdDst, "utf-8");
+        changed = existing !== rewritten;
+        if (isOmbGeneratedAgentsMd(existing)) {
+          managedRefreshContent = upsertAgentsModelTable(
+            existing,
+            modelTableContext,
+          );
+          canApplyManagedModelRefresh = managedRefreshContent !== existing;
+        }
       }
-    }
 
-    if (
-      resolvedScope.scope === "project" &&
-      sessionIsActive &&
-      agentsMdExists &&
-      changed
-    ) {
-      summary.agentsMd.skipped += 1;
-      console.log(
-        "  WARNING: Active omb session detected (pid " +
-          activeSession?.pid +
-          ").",
-      );
-      console.log(
-        "  Skipping AGENTS.md overwrite to avoid corrupting runtime overlay.",
-      );
-      console.log("  Stop the active session first, then re-run setup.");
-    } else if (canApplyManagedModelRefresh) {
-      await syncManagedContent(
-        managedRefreshContent,
-        agentsMdDst,
-        summary.agentsMd,
-        backupContext,
-        { dryRun, verbose },
-        `AGENTS model table ${agentsMdDst}`,
-      );
-      console.log(
-        resolvedScope.scope === "project"
-          ? "  Refreshed AGENTS.md model capability table in project root."
-          : `  Refreshed AGENTS.md model capability table in ${scopeDirs.codexHomeDir}.`,
-      );
-    } else {
-      const result = await syncManagedAgentsContent(
-        rewritten,
-        agentsMdDst,
-        summary.agentsMd,
-        backupContext,
-        {
-          agentsOverwritePrompt: options.agentsOverwritePrompt,
-          dryRun,
-          force,
-          verbose,
-        },
-      );
-
-      if (result === "updated") {
+      if (
+        resolvedScope.scope === "project" &&
+        sessionIsActive &&
+        agentsMdExists &&
+        changed
+      ) {
+        summary.agentsMd.skipped += 1;
+        console.log(
+          "  WARNING: Active omb session detected (pid " +
+            activeSession?.pid +
+            ").",
+        );
+        console.log(
+          "  Skipping AGENTS.md overwrite to avoid corrupting runtime overlay.",
+        );
+        console.log("  Stop the active session first, then re-run setup.");
+      } else if (canApplyManagedModelRefresh) {
+        await syncManagedContent(
+          managedRefreshContent,
+          agentsMdDst,
+          summary.agentsMd,
+          backupContext,
+          { dryRun, verbose },
+          `AGENTS model table ${agentsMdDst}`,
+        );
         console.log(
           resolvedScope.scope === "project"
-            ? "  Generated AGENTS.md in project root."
-            : `  Generated AGENTS.md in ${scopeDirs.codexHomeDir}.`,
+            ? "  Refreshed AGENTS.md model capability table in project root."
+            : `  Refreshed AGENTS.md model capability table in ${agentsTarget.target.scopeDirs.codexHomeDir}.`,
         );
-      } else if (result === "unchanged") {
-        console.log(
-          resolvedScope.scope === "project"
-            ? "  AGENTS.md already up to date in project root."
-            : `  AGENTS.md already up to date in ${scopeDirs.codexHomeDir}.`,
+      } else {
+        const result = await syncManagedAgentsContent(
+          rewritten,
+          agentsMdDst,
+          summary.agentsMd,
+          backupContext,
+          {
+            agentsOverwritePrompt: options.agentsOverwritePrompt,
+            dryRun,
+            force,
+            verbose,
+          },
         );
-      } else if (agentsMdExists) {
-        console.log(
-          `  Skipped AGENTS.md overwrite for ${agentsMdDst}. Re-run interactively to confirm or use --force.`,
-        );
+
+        if (result === "updated") {
+          console.log(
+            resolvedScope.scope === "project"
+              ? "  Generated AGENTS.md in project root."
+              : `  Generated AGENTS.md in ${agentsTarget.target.scopeDirs.codexHomeDir}.`,
+          );
+        } else if (result === "unchanged") {
+          console.log(
+            resolvedScope.scope === "project"
+              ? "  AGENTS.md already up to date in project root."
+              : `  AGENTS.md already up to date in ${agentsTarget.target.scopeDirs.codexHomeDir}.`,
+          );
+        } else if (agentsMdExists) {
+          console.log(
+            `  Skipped AGENTS.md overwrite for ${agentsMdDst}. Re-run interactively to confirm or use --force.`,
+          );
+        }
       }
     }
     if (resolvedScope.scope === "user") {
@@ -1115,7 +1321,10 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   } else {
     console.log("  HUD config already exists (use --force to overwrite).");
   }
-  if (managedConfig.ombManagesTui) {
+  const anyManagedTui = [...managedConfigs.values()].some(
+    (managedConfig) => managedConfig.ombManagesTui,
+  );
+  if (anyManagedTui) {
     console.log("  StatusLine configured in config.toml via [tui] section.");
   } else {
     console.log("  CodeBuddy/Codex CLI >= 0.107.0 manages [tui]; OMB left that section untouched.");
@@ -1130,9 +1339,20 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   logCategorySummary("config", summary.config);
   console.log();
 
-  const legacySkillOverlapNotice = await buildLegacySkillOverlapNotice(resolvedScope.scope);
-  if (legacySkillOverlapNotice.shouldWarn) {
-    console.log(`Migration hint: ${legacySkillOverlapNotice.message}`);
+  const setupProviders = resolvedProvider.provider === "both"
+    ? (setupProviderTargets(resolvedProvider.provider) as SetupTargetProvider[])
+    : [setupProviderTargets(resolvedProvider.provider)[0]!];
+  let legacySkillOverlapPrinted = false;
+  for (const targetProvider of setupProviders) {
+    const notice = await buildLegacySkillOverlapNotice(
+      resolvedScope.scope,
+      targetProvider,
+    );
+    if (!notice.shouldWarn) continue;
+    console.log(`Migration hint: ${notice.message}`);
+    legacySkillOverlapPrinted = true;
+  }
+  if (legacySkillOverlapPrinted) {
     console.log();
   }
 
@@ -1145,14 +1365,24 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
 
   console.log('Setup complete! Run "omb doctor" to verify installation.');
   console.log("\nNext steps:");
-  console.log("  1. Start CodeBuddy CLI in your project directory");
+  const cliLabel =
+    resolvedProvider.provider === "both"
+      ? "CodeBuddy or Codex CLI"
+      : `${providerDisplayName(setupProviderTargets(resolvedProvider.provider)[0]!)} CLI`;
+  const skillsPathLabel =
+    resolvedProvider.provider === "codex"
+      ? ".codex/agents/"
+      : resolvedProvider.provider === "both"
+        ? ".codebuddy/agents/ and .codex/agents/"
+        : ".codebuddy/agents/";
+  console.log(`  1. Start ${cliLabel} in your project directory`);
   console.log(
-    "  2. Use role/workflow keywords like $architect, $executor, and $plan in CodeBuddy",
+    `  2. Use role/workflow keywords like $architect, $executor, and $plan in ${cliLabel}`,
   );
   console.log("  3. Browse skills with /skills; AGENTS keyword routing can also activate them implicitly");
   console.log("  4. The AGENTS.md orchestration brain is loaded automatically");
   console.log(
-    "  5. Native agent defaults configured in config.toml [agents] and TOML files written to .codebuddy/agents/",
+    `  5. Native agent defaults configured in config.toml [agents] and TOML files written to ${skillsPathLabel}`,
   );
   console.log(
     '  6. "omb explore" and "omb sparkshell" can hydrate native release binaries on first use; the legacy `omb` alias still works, and source installs still allow repo-local fallbacks plus OMB_/OMB_ binary override env vars',
@@ -1301,13 +1531,15 @@ async function syncManagedAgentsContent(
     existing = await readFile(dstPath, "utf-8");
     changed = existing !== content;
   }
+  const legacyClaudeOnlyAgentsMd =
+    destinationExists && isLegacyClaudeOnlyAgentsMd(existing);
 
   if (!changed) {
     summary.unchanged += 1;
     return "unchanged";
   }
 
-  if (destinationExists && !options.force) {
+  if (destinationExists && !options.force && !legacyClaudeOnlyAgentsMd) {
     if (options.dryRun) {
       summary.skipped += 1;
       if (options.verbose) {
@@ -1330,6 +1562,11 @@ async function syncManagedAgentsContent(
       }
       return "skipped";
     }
+  }
+  if (legacyClaudeOnlyAgentsMd && options.verbose) {
+    console.log(
+      `  refreshing legacy CLAUDE.md-only AGENTS scaffold at ${dstPath}`,
+    );
   }
 
   if (await ensureBackup(dstPath, destinationExists, backupContext, options)) {
@@ -1676,7 +1913,7 @@ async function updateManagedConfig(
   options: Pick<
     SetupOptions,
     "codexVersionProbe" | "dryRun" | "verbose" | "modelUpgradePrompt"
-  >,
+  > & { setupProvider: SetupTargetProvider },
 ): Promise<ManagedConfigResult> {
   const existing = existsSync(configPath)
     ? await readFile(configPath, "utf-8")
@@ -1684,7 +1921,7 @@ async function updateManagedConfig(
   const currentModel = getRootModelName(existing);
   let modelOverride: string | undefined;
   const codexVersion =
-    options.codexVersionProbe?.() ?? probeInstalledCodeBuddyVersion();
+    options.codexVersionProbe?.() ?? probeInstalledCliVersion(options.setupProvider);
   const ombManagesTui = shouldOmbManageTuiFromCodexVersion(codexVersion);
 
   if (currentModel === LEGACY_SETUP_MODEL) {

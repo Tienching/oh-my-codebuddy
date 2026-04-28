@@ -31,7 +31,7 @@ describe('omb doctor invalid config detection', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-invalid-config-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
 
       await writeFile(

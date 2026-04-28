@@ -5,14 +5,17 @@ OMB supports an additive hooks extension point for user plugins under `.omb/hook
 Native CodeBuddy hook ownership is documented separately in
 [CodeBuddy native hook mapping](./codex-native-hooks.md). In short:
 
-- `CODEBUDDY_HOME/hooks.json` (`.codebuddy` primary, `.codex` compatibility alias) = native CodeBuddy hook registrations installed by `omb setup`
+- `CODEBUDDY_HOME/hooks.json` (`.codebuddy` for CodeBuddy installs; `.codex` only when `omb setup --provider codex` is used) = native hook registrations installed by `omb setup`
 - `.omb/hooks/*.mjs` = OMB plugin hooks dispatched by runtime/native events
 - `omb tmux-hook` / notify-hook / derived watcher = tmux/runtime fallback surfaces
 
 `omb setup` treats `hooks.json` as a shared-ownership file: it refreshes only the OMB-managed
-wrapper entries that invoke `dist/scripts/codebuddy-native-hook.js` and preserves user hook entries in the
-same file. `omb uninstall` removes only those OMB-managed wrappers (plus legacy `codex-native-hook.js`
-wrappers for compatibility) and leaves `hooks.json` in place when user hooks remain.
+wrapper entries that invoke the provider-specific native hook script
+(`dist/scripts/codebuddy-native-hook.js` for the CodeBuddy provider,
+`dist/scripts/codex-native-hook.js` for the Codex provider) and preserves user hook entries in
+the same file. `omb uninstall` removes only those OMB-managed wrappers (plus legacy wrappers
+from the other provider for compatibility) and leaves `hooks.json` in place when user hooks
+remain.
 
 > Compatibility guarantee: `omb tmux-hook` remains fully supported and unchanged.
 > The new `omb hooks` command group is additive and does **not** replace tmux-hook workflows.
@@ -51,7 +54,9 @@ export OMB_HOOK_PLUGIN_TIMEOUT_MS=1500
 Native/derived plugin events come from two places:
 
 1. Existing lifecycle/notify paths
-2. Native CodeBuddy hook entrypoint dispatch (`dist/scripts/codebuddy-native-hook.js`)
+2. Native CodeBuddy hook entrypoint dispatch — the provider-specific script:
+   `dist/scripts/codebuddy-native-hook.js` (CodeBuddy provider) or
+   `dist/scripts/codex-native-hook.js` (Codex provider)
 
 Current event vocabulary exposed to OMB plugins:
 

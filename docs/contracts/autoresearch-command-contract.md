@@ -1,12 +1,12 @@
 # `omb autoresearch` parity contract
 
-`omb autoresearch` is a thin supervisor that drives one CodeBuddy non-interactive session per iteration while OMB owns the durable keep/discard/reset loop.
+`omb autoresearch` is a thin supervisor that drives one selected leader CLI non-interactive session per iteration while OMB owns the durable keep/discard/reset loop. CodeBuddy is the default leader CLI; Codex can be selected with `--leader-cli codex` (legacy alias: `--cli codex`).
 
 ## CLI
 
 ```bash
-omb autoresearch <mission-dir> [codebuddy-args...]
-omb autoresearch --resume <run-id> [codebuddy-args...]
+omb autoresearch [--leader-cli codebuddy|codex] <mission-dir> [leader-cli-args...]
+omb autoresearch [--leader-cli codebuddy|codex] --resume <run-id> [leader-cli-args...]
 omb autoresearch --help
 ```
 
@@ -35,7 +35,7 @@ Fresh launch creates:
 Repo-root state responsibilities:
 - `.omb/state/autoresearch-state.json` = active-run pointer/lock only
 - `.omb/logs/autoresearch/<run-id>/manifest.json` = authoritative per-run state
-- `.omb/logs/autoresearch/<run-id>/candidate.json` = candidate handoff from the just-finished Codex session
+- `.omb/logs/autoresearch/<run-id>/candidate.json` = candidate handoff from the just-finished leader CLI session
 - `.omb/logs/autoresearch/<run-id>/iteration-ledger.json` = durable iteration history
 - `.omb/logs/autoresearch/<run-id>/latest-evaluator-result.json` = latest evaluator output
 

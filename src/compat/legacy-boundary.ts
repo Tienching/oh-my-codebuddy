@@ -1,9 +1,9 @@
 /**
  * Legacy alias boundary — single entry point for all legacy name resolution.
  *
- * Codex→CodeBuddy and OMB→OMB brand migrations left behind dual-named env
- * vars, directories, and binaries. This module centralises every legacy→canonical
- * mapping so that business modules never need to know about legacy names.
+ * Historical Codex/OMB names may still appear in old files and diagnostics.
+ * This module centralises the remaining alias metadata so business modules do
+ * not invent ad-hoc compatibility rules.
  *
  * Design rules:
  *  - Pure functions only — no side effects, no process mutations.
@@ -39,8 +39,8 @@ const ALIAS_REGISTRY: LegacyAlias[] = [
   {
     canonical: "CODEBUDDY_HOME",
     legacy: "CODEX_HOME",
-    status: "active_compat",
-    description: "CodeBuddy home directory override",
+    status: "removal_candidate",
+    description: "Historical CodeBuddy home alias; CODEX_HOME is no longer read as CodeBuddy home",
   },
 
   // Directory names
@@ -68,51 +68,26 @@ export function findAlias(name: string): LegacyAlias | undefined {
 
 // ── Resolution helpers ────────────────────────────────────────────────────
 
-/**
- * Resolve an env-var pair with canonical-first priority.
- * Returns the value of the canonical env var, falling back to the legacy env
- * var, and finally to `defaultPath`.
- */
-function resolveEnvPair(
-  canonical: string,
-  legacy: string,
-  defaultPath: string,
-  env?: NodeJS.ProcessEnv,
-): string {
-  const e = env ?? process.env;
-  const canonicalVal = String(e[canonical] ?? "").trim();
-  if (canonicalVal !== "") return canonicalVal;
-  const legacyVal = String(e[legacy] ?? "").trim();
-  if (legacyVal !== "") return legacyVal;
-  return defaultPath;
-}
-
 // ── Public boundary functions ─────────────────────────────────────────────
 
 /**
- * Resolve CODEBUDDY_HOME with CODEX_HOME fallback.
- * Priority: CODEBUDDY_HOME > CODEX_HOME > ~/.codebuddy
+ * Resolve CodeBuddy home.
+ * Priority: CODEBUDDY_HOME > ~/.codebuddy
  */
 export function resolveCanonicalCodebuddyHome(env?: NodeJS.ProcessEnv): string {
-  return resolveEnvPair(
-    "CODEBUDDY_HOME",
-    "CODEX_HOME",
-    join(homedir(), ".codebuddy"),
-    env,
-  );
+  const e = env ?? process.env;
+  const explicit = String(e.CODEBUDDY_HOME ?? "").trim();
+  return explicit !== "" ? explicit : join(homedir(), ".codebuddy");
 }
 
 /**
- * Resolve legacy Codex home (for compat read-through).
- * Priority: CODEX_HOME > CODEBUDDY_HOME > ~/.codex
+ * Resolve Codex home.
+ * Priority: CODEX_HOME > ~/.codex
  */
 export function resolveLegacyCodexHome(env?: NodeJS.ProcessEnv): string {
   const e = env ?? process.env;
-  const legacyVal = String(e.CODEX_HOME ?? "").trim();
-  if (legacyVal !== "") return legacyVal;
-  const canonicalVal = String(e.CODEBUDDY_HOME ?? "").trim();
-  if (canonicalVal !== "") return canonicalVal;
-  return join(homedir(), ".codex");
+  const explicit = String(e.CODEX_HOME ?? "").trim();
+  return explicit !== "" ? explicit : join(homedir(), ".codex");
 }
 
 /**

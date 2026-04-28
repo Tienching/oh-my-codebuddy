@@ -154,6 +154,60 @@ describe('parseTeamStartArgs', () => {
     assert.equal(result.parsed.teamName, 'fix-bug');
   });
 
+  it('treats provider-style agent type as an explicit team worker CLI plan', () => {
+    const result = parseTeamStartArgs(['2:codex', 'review', 'architecture']);
+    assert.equal(result.parsed.workerCount, 2);
+    assert.equal(result.parsed.agentType, 'executor');
+    assert.equal(result.parsed.explicitAgentType, false);
+    assert.deepEqual(result.parsed.workerCliPlan, ['codex', 'codex']);
+    assert.equal(result.parsed.task, 'review architecture');
+  });
+
+  it('supports provider plus role using N:provider:role syntax', () => {
+    const result = parseTeamStartArgs(['2:codebuddy:debugger', 'fix', 'tests']);
+    assert.equal(result.parsed.workerCount, 2);
+    assert.equal(result.parsed.agentType, 'debugger');
+    assert.equal(result.parsed.explicitAgentType, true);
+    assert.deepEqual(result.parsed.workerCliPlan, ['codebuddy', 'codebuddy']);
+  });
+
+  it('rejects role:role specs that would otherwise silently drop the third segment', () => {
+    assert.throws(
+      () => parseTeamStartArgs(['2:executor:debugger', 'fix', 'tests']),
+      /Use N:role or N:provider:role/,
+    );
+  });
+
+  it('supports oh-my-claudecode-style mixed provider specs', () => {
+    const result = parseTeamStartArgs(['1:codex,1:codebuddy', 'compare', 'implementations']);
+    assert.equal(result.parsed.workerCount, 2);
+    assert.deepEqual(result.parsed.workerCliPlan, ['codex', 'codebuddy']);
+    assert.equal(result.parsed.agentType, 'executor');
+    assert.equal(result.parsed.task, 'compare implementations');
+  });
+
+  it('trims whitespace around comma-separated mixed provider segments', () => {
+    // "1:codex, 1:codebuddy" (space after the comma) is a common copy/paste
+    // shape; the strict segment regex would reject it without trimming.
+    const result = parseTeamStartArgs(['1:codex, 1:codebuddy', 'compare']);
+    assert.equal(result.parsed.workerCount, 2);
+    assert.deepEqual(result.parsed.workerCliPlan, ['codex', 'codebuddy']);
+  });
+
+  it('rejects comma-separated non-provider specs instead of treating as task text', () => {
+    assert.throws(
+      () => parseTeamStartArgs(['1:executor,1:debugger', 'compare', 'implementations']),
+      /Invalid team worker spec "1:executor,1:debugger"/,
+    );
+  });
+
+  it('rejects comma-separated mixed provider-role specs because per-worker roles are not supported', () => {
+    assert.throws(
+      () => parseTeamStartArgs(['1:codex:executor,1:codebuddy:debugger', 'compare', 'implementations']),
+      /Comma-style team worker specs do not support per-worker roles/,
+    );
+  });
+
   it('keeps explicit --worktree detached mode as a legacy-compatible override', () => {
     const result = parseTeamStartArgs(['--worktree', '3:debugger', 'fix', 'bug']);
     assert.deepEqual(result.worktreeMode, { enabled: true, detached: true, name: null });

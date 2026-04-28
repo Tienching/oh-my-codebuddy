@@ -1,7 +1,7 @@
 /**
  * OpenClaw Configuration Reader
  *
- * Reads OpenClaw config from the notifications.openclaw key in ~/.codex/.omb-config.json.
+ * Reads OpenClaw config from the notifications.openclaw key in ~/.codebuddy/.omb-config.json.
  * Also supports generic alias shapes under notifications.custom_cli_command
  * and notifications.custom_webhook_command, normalized to OpenClaw runtime config.
  *
@@ -455,7 +455,7 @@ export function inspectOpenClawConfig(
  *
  * Config is read from:
  * 1. OMB_OPENCLAW_CONFIG / OMB_OPENCLAW_CONFIG env var path (separate file), if set
- * 2. notifications.openclaw key in ~/.codex/.omb-config.json
+ * 2. notifications.openclaw key in ~/.codebuddy/.omb-config.json
  * 3. notifications.custom_cli_command / notifications.custom_webhook_command aliases
  */
 export function getOpenClawConfig(): OpenClawConfig | null {

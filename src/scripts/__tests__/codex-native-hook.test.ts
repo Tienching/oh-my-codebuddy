@@ -68,7 +68,7 @@ describe("codex native hook config", () => {
     assert.equal(preToolUse.matcher, "Bash");
     assert.match(
       String(preToolUse.hooks?.[0]?.command || ""),
-      /codebuddy-native-hook\.js"?$/,
+      /codex-native-hook\.js"?$/,
     );
 
     const postToolUse = config.hooks.PostToolUse[0] as {
@@ -78,7 +78,7 @@ describe("codex native hook config", () => {
     assert.equal(postToolUse.matcher, undefined);
     assert.match(
       String(postToolUse.hooks?.[0]?.command || ""),
-      /codebuddy-native-hook\.js"?$/,
+      /codex-native-hook\.js"?$/,
     );
     assert.equal(postToolUse.hooks?.[0]?.statusMessage, "Running OMB tool review");
 
@@ -306,6 +306,81 @@ describe("codex native hook dispatch", () => {
       assert.equal(state.mode, "team");
       assert.equal(state.active, true);
       assert.equal(state.current_phase, "starting");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("activates web-clone skill from an explicit \\$web-clone UserPromptSubmit", async () => {
+    // Regression guard for the web-clone keyword registry gap: AGENTS.md has
+    // always documented $web-clone but the keyword-registry entry was missing
+    // until the 2026-04-27 audit, so the native hook never recorded
+    // SkillActiveState or emitted routing context. This end-to-end check
+    // proves the keyword now reaches the shared dispatchCodexNativeHook path
+    // (used by both CodeBuddy and Codex provider installs via
+    // codex-native-hook.js re-export). web-clone is not a stateful execution
+    // mode (no entry in STATEFUL_SKILL_SEED_CONFIG), so we assert the routing
+    // context shape rather than an `initialized_mode` state file.
+    const cwd = await mkdtemp(join(tmpdir(), "omb-native-hook-web-clone-"));
+    try {
+      await mkdir(join(cwd, ".omb", "state"), { recursive: true });
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "sess-wc-1",
+          thread_id: "thread-wc-1",
+          turn_id: "turn-wc-1",
+          prompt: "$web-clone https://example.com into ./mirror",
+        },
+        { cwd },
+      );
+
+      assert.equal(result.ombEventName, "keyword-detector");
+      assert.equal(result.skillState?.skill, "web-clone");
+      assert.ok(result.outputJson, "UserPromptSubmit should emit developer context for web-clone");
+      const outputText = JSON.stringify(result.outputJson);
+      assert.match(outputText, /workflow keyword \\"\$web-clone\\" -> web-clone/);
+      assert.match(outputText, /Follow AGENTS\.md routing/);
+
+      const statePath = join(cwd, ".omb", "state", "skill-active-state.json");
+      assert.equal(existsSync(statePath), true);
+      const state = JSON.parse(await readFile(statePath, "utf-8")) as {
+        skill?: string;
+        active?: boolean;
+      };
+      assert.equal(state.skill, "web-clone");
+      assert.equal(state.active, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("routes an explicit \\$ecomode prompt to ultrawork so the merged alias stays active", async () => {
+    // ecomode is a merged compatibility alias for ultrawork (DeprecatedModeName
+    // in src/modes/base.ts). Previously `$ecomode` produced no SkillActiveState
+    // because extractExplicitSkillInvocations only knew about `swarm` and `ulw`
+    // token normalisation. This regression test pins the alias -> ultrawork
+    // mapping at the shared native hook dispatch layer.
+    const cwd = await mkdtemp(join(tmpdir(), "omb-native-hook-ecomode-"));
+    try {
+      await mkdir(join(cwd, ".omb", "state"), { recursive: true });
+      const result = await dispatchCodexNativeHook(
+        {
+          hook_event_name: "UserPromptSubmit",
+          cwd,
+          session_id: "sess-eco-1",
+          thread_id: "thread-eco-1",
+          turn_id: "turn-eco-1",
+          prompt: "$ecomode run this batch with budget in mind",
+        },
+        { cwd },
+      );
+
+      assert.equal(result.ombEventName, "keyword-detector");
+      assert.equal(result.skillState?.skill, "ultrawork");
+      assert.ok(result.outputJson);
+      assert.match(JSON.stringify(result.outputJson), /skill: ultrawork activated/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

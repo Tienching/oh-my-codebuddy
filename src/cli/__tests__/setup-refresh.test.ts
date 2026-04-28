@@ -26,6 +26,18 @@ const EXPECTED_PROJECT_GITIGNORE = [
   "!.codebuddy/prompts/**",
 ].join("\n") + "\n";
 
+const EXPECTED_CODEX_PROJECT_GITIGNORE = [
+  ".omb/",
+  ".codex/*",
+  "!.codex/agents/",
+  "!.codex/agents/**",
+  "!.codex/skills/",
+  "!.codex/skills/**",
+  ".codex/skills/.system/**",
+  "!.codex/prompts/",
+  "!.codex/prompts/**",
+].join("\n") + "\n";
+
 async function runSetupWithCapturedLogs(
   cwd: string,
   options: Parameters<typeof setup>[0],
@@ -172,6 +184,20 @@ describe("omb setup refresh summary and dry-run behavior", () => {
       assert.equal(
         await readFile(join(wd, ".gitignore"), "utf-8"),
         EXPECTED_PROJECT_GITIGNORE,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("creates provider-specific .gitignore rules for Codex project-scoped setup", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
+    try {
+      await runSetupInTempDir(wd, { scope: "project", provider: "codex" });
+
+      assert.equal(
+        await readFile(join(wd, ".gitignore"), "utf-8"),
+        EXPECTED_CODEX_PROJECT_GITIGNORE,
       );
     } finally {
       await rm(wd, { recursive: true, force: true });

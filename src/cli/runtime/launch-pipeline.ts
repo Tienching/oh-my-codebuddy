@@ -15,6 +15,7 @@ import { constants as osConstants } from "os";
 import {
   MADMAX_FLAG,
   CODEBUDDY_BIN,
+  CODEX_BIN,
   CODEBUDDY_BYPASS_FLAG,
   CODEBUDDY_EFFORT_FLAG,
   CODEBUDDY_LEGACY_BYPASS_FLAG,
@@ -104,6 +105,7 @@ import type { ClassifiedError } from "./errors.js";
 import { classifyCliError } from "./errors.js";
 
 export type CodexLaunchPolicy = "inside-tmux" | "detached-tmux" | "direct";
+export type LeaderCli = "codebuddy" | "codex";
 
 export interface LaunchPipelineResult {
   exitCode: number;
@@ -116,6 +118,9 @@ const REASONING_KEY = "model_reasoning_effort";
 const MODEL_INSTRUCTIONS_FILE_KEY = "model_instructions_file";
 const TEAM_WORKER_LAUNCH_ARGS_ENV = "OMB_TEAM_WORKER_LAUNCH_ARGS";
 const TEAM_INHERIT_LEADER_FLAGS_ENV = "OMB_TEAM_INHERIT_LEADER_FLAGS";
+const LEADER_CLI_FLAG = "--leader-cli";
+const LEGACY_LEADER_CLI_FLAG = "--cli";
+const LEADER_CLI_ENV = "OMB_LEADER_CLI";
 const OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = "OMB_BYPASS_DEFAULT_SYSTEM_PROMPT";
 const OMB_MODEL_INSTRUCTIONS_FILE_ENV = "OMB_MODEL_INSTRUCTIONS_FILE";
 const OMB_RALPH_APPEND_INSTRUCTIONS_FILE_ENV = "OMB_RALPH_APPEND_INSTRUCTIONS_FILE";
@@ -229,6 +234,62 @@ export function ensureCodeBuddyAvailable(cwd: string, env: NodeJS.ProcessEnv = p
   }
 }
 
+// ── Leader CLI selection ──────────────────────────────────────────────────
+
+function parseLeaderCliValue(raw: string | undefined, source: string): LeaderCli {
+  const normalized = String(raw ?? "").trim().toLowerCase();
+  if (normalized === "" && source === LEADER_CLI_ENV) return "codebuddy";
+  if (normalized === "codebuddy" || normalized === "codex") return normalized;
+  throw new Error(`Invalid ${source} value "${raw ?? ""}". Expected: codebuddy, codex`);
+}
+
+function isLeaderCliFlag(arg: string): boolean {
+  return arg === LEADER_CLI_FLAG || arg === LEGACY_LEADER_CLI_FLAG;
+}
+
+function splitInlineLeaderCliFlag(arg: string): { flag: string; value: string } | null {
+  for (const flag of [LEADER_CLI_FLAG, LEGACY_LEADER_CLI_FLAG]) {
+    if (arg.startsWith(`${flag}=`)) {
+      return { flag, value: arg.slice(`${flag}=`.length) };
+    }
+  }
+  return null;
+}
+
+export function extractLeaderCliArgs(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+): { leaderCli: LeaderCli; remainingArgs: string[] } {
+  let leaderCli = parseLeaderCliValue(env[LEADER_CLI_ENV], LEADER_CLI_ENV);
+  const remainingArgs: string[] = [];
+  let passthroughOnly = false;
+
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (passthroughOnly) { remainingArgs.push(arg); continue; }
+    if (arg === "--") { passthroughOnly = true; remainingArgs.push(arg); continue; }
+    if (isLeaderCliFlag(arg)) {
+      const next = args[index + 1];
+      if (!next || next.startsWith("-")) throw new Error(`Missing value after ${arg}. Expected: codebuddy, codex`);
+      leaderCli = parseLeaderCliValue(next, arg);
+      index += 1;
+      continue;
+    }
+    const inlineLeaderCli = splitInlineLeaderCliFlag(arg);
+    if (inlineLeaderCli) {
+      leaderCli = parseLeaderCliValue(inlineLeaderCli.value, inlineLeaderCli.flag);
+      continue;
+    }
+    remainingArgs.push(arg);
+  }
+
+  return { leaderCli, remainingArgs };
+}
+
+function resolveLeaderCliBinary(leaderCli: LeaderCli): string {
+  return leaderCli === "codex" ? CODEX_BIN : CODEBUDDY_BIN;
+}
+
 // ── Run codex blocking ─────────────────────────────────────────────────────
 
 function runCodexBlocking(
@@ -238,6 +299,7 @@ function runCodexBlocking(
   codexEnv: NodeJS.ProcessEnv,
 ): void {
   if (binary === CODEBUDDY_BIN) ensureCodeBuddyAvailable(cwd, codexEnv);
+  const product = binary === CODEX_BIN ? "codex" : "codebuddy";
   const { result } = spawnPlatformCommandSync(binary, launchArgs, {
     cwd,
     stdio: "inherit",
@@ -248,11 +310,11 @@ function runCodexBlocking(
     const errno = result.error as NodeJS.ErrnoException;
     const kind = classifySpawnError(errno);
     if (kind === "missing") {
-      console.error("[omb] failed to launch codebuddy: executable not found in PATH");
+      console.error(`[omb] failed to launch ${product}: executable not found in PATH`);
     } else if (kind === "blocked") {
-      console.error(`[omb] failed to launch codebuddy: executable is present but blocked in the current environment (${errno.code || "blocked"})`);
+      console.error(`[omb] failed to launch ${product}: executable is present but blocked in the current environment (${errno.code || "blocked"})`);
     } else {
-      console.error(`[omb] failed to launch codebuddy: ${errno.message}`);
+      console.error(`[omb] failed to launch ${product}: ${errno.message}`);
     }
     throw result.error;
   }
@@ -261,7 +323,7 @@ function runCodexBlocking(
       ? result.status
       : resolveSignalExitCode(result.signal);
     if (result.signal) {
-      console.error(`[omb] codebuddy exited due to signal ${result.signal}`);
+      console.error(`[omb] ${product} exited due to signal ${result.signal}`);
     }
   }
 }
@@ -456,6 +518,67 @@ export function normalizeCodexLaunchArgs(args: string[]): string[] {
   return normalized;
 }
 
+export function normalizeCodexCliLaunchArgs(args: string[]): string[] {
+  const parsed = parseWorktreeMode(args);
+  const launchPolicyParsed = splitLeaderLaunchPolicyArgs(parsed.remainingArgs);
+  const normalized: string[] = [];
+  let wantsBypass = false;
+  let hasBypass = false;
+  let reasoningMode: ReasoningMode | null = null;
+  const deprecationWarnings: string[] = [];
+
+  for (let index = 0; index < launchPolicyParsed.remainingArgs.length; index++) {
+    const arg = launchPolicyParsed.remainingArgs[index];
+    if (arg === MADMAX_FLAG || arg === YOLO_FLAG || arg === CODEBUDDY_BYPASS_FLAG || arg === MADMAX_SPARK_FLAG) { wantsBypass = true; continue; }
+    if (arg === CODEBUDDY_LEGACY_BYPASS_FLAG) { wantsBypass = true; if (!hasBypass) { normalized.push(arg); hasBypass = true; } continue; }
+    if (arg === HIGH_REASONING_FLAG) { reasoningMode = "high"; deprecationWarnings.push(DEPRECATED_HIGH_REASONING_MSG); continue; }
+    if (arg === XHIGH_REASONING_FLAG) { reasoningMode = "xhigh"; deprecationWarnings.push(DEPRECATED_XHIGH_REASONING_MSG); continue; }
+    if (arg === EFFORT_FLAG) {
+      const next = launchPolicyParsed.remainingArgs[index + 1];
+      if (next && REASONING_MODE_SET.has(next)) { reasoningMode = next as ReasoningMode; index += 1; continue; }
+      normalized.push(arg);
+      if (next) { normalized.push(next); index += 1; }
+      continue;
+    }
+    if (arg === CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG) {
+      const next = launchPolicyParsed.remainingArgs[index + 1];
+      if (typeof next === "string" && next.trim() !== "") {
+        normalized.push(CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(next)}"`);
+        index += 1;
+        continue;
+      }
+      normalized.push(arg);
+      continue;
+    }
+    if (arg.startsWith(`${CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG}=`)) {
+      const value = arg.slice(`${CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG}=`.length).trim();
+      if (value !== "") {
+        normalized.push(CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(parseTomlStringValue(value))}"`);
+        continue;
+      }
+    }
+    if (arg === "--permission-mode" && launchPolicyParsed.remainingArgs[index + 1] === "bypassPermissions") {
+      wantsBypass = true;
+      index += 1;
+      continue;
+    }
+    if (arg === "--permission-mode=bypassPermissions") { wantsBypass = true; continue; }
+    if (arg === SPARK_FLAG) continue;
+    normalized.push(arg);
+  }
+
+  if (wantsBypass && !hasBypass) normalized.push(CODEBUDDY_LEGACY_BYPASS_FLAG);
+  if (reasoningMode) normalized.push(CONFIG_FLAG, `${REASONING_KEY}="${reasoningMode}"`);
+  for (const warning of deprecationWarnings) {
+    process.stderr.write(`[omb] ${warning}\n`);
+  }
+  return normalized;
+}
+
+export function normalizeLeaderLaunchArgs(args: string[], leaderCli: LeaderCli): string[] {
+  return leaderCli === "codex" ? normalizeCodexCliLaunchArgs(args) : normalizeCodexLaunchArgs(args);
+}
+
 export function translateCodeBuddyResumeArgs(args: string[]): string[] {
   if (args[0] !== "resume") return [...args];
   const rest = args.slice(1);
@@ -528,16 +651,38 @@ export function translateCodeBuddyExecArgs(args: string[]): string[] {
   return hasPrint ? translated : [CODEBUDDY_PRINT_FLAG, ...translated];
 }
 
-export function injectModelInstructionsBypassArgs(
+export function translateLeaderResumeArgs(args: string[], leaderCli: LeaderCli): string[] {
+  return leaderCli === "codex" ? [...args] : translateCodeBuddyResumeArgs(args);
+}
+
+export function translateLeaderExecArgs(args: string[], leaderCli: LeaderCli): string[] {
+  return leaderCli === "codex" ? ["exec", ...args] : translateCodeBuddyExecArgs(args);
+}
+
+export function injectLeaderModelInstructionsBypassArgs(
   cwd: string,
   args: string[],
+  leaderCli: LeaderCli,
   env: NodeJS.ProcessEnv = process.env,
   defaultFilePath?: string,
 ): string[] {
   if (args.includes("--help") || args.includes("-h")) return [...args];
   if (!shouldBypassDefaultSystemPrompt(env)) return [...args];
   if (hasModelInstructionsOverride(args)) return [...args];
-  return [...args, CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, resolveModelInstructionsFilePath(cwd, env, defaultFilePath)];
+  const modelInstructionsPath = resolveModelInstructionsFilePath(cwd, env, defaultFilePath);
+  if (leaderCli === "codex") {
+    return [...args, CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(modelInstructionsPath)}"`];
+  }
+  return [...args, CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, modelInstructionsPath];
+}
+
+export function injectModelInstructionsBypassArgs(
+  cwd: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  defaultFilePath?: string,
+): string[] {
+  return injectLeaderModelInstructionsBypassArgs(cwd, args, "codebuddy", env, defaultFilePath);
 }
 
 export function resolveWorkerSparkModel(args: string[], codexHomeOverride?: string): string | undefined {
@@ -569,17 +714,83 @@ export function buildNotifyTempStartupMessages(
 
 export function buildNotifyFallbackWatcherEnv(
   env: NodeJS.ProcessEnv = process.env,
-  options: { codexHomeOverride?: string; enableAuthority?: boolean; sessionId?: string } = {},
+  options: { codexHomeOverride?: string; enableAuthority?: boolean; sessionId?: string; leaderCli?: LeaderCli } = {},
 ): NodeJS.ProcessEnv {
   const nextEnv = { ...env };
   delete nextEnv.TMUX;
   delete nextEnv.TMUX_PANE;
+  const withProvider = buildProviderLeaderEnv(nextEnv, options.leaderCli ?? "codebuddy", options.codexHomeOverride);
   return {
-    ...nextEnv,
-    ...(options.codexHomeOverride ? { CODEBUDDY_HOME: options.codexHomeOverride, CODEX_HOME: options.codexHomeOverride } : {}),
+    ...withProvider,
     ...(options.sessionId ? { OMB_SESSION_ID: options.sessionId } : {}),
     OMB_HUD_AUTHORITY: options.enableAuthority ? "1" : "0",
   };
+}
+
+/**
+ * Mirror the resolved leader CLI into the current process' env so same-process
+ * consumers (agents-overlay, worker-bootstrap, any function that reads ambient
+ * OMB_LEADER_CLI) see the CLI actually driving this session. `--leader-cli` may
+ * arrive via argv rather than env, so the leader process must publish it.
+ *
+ * Provider home env (CODEBUDDY_HOME / CODEX_HOME) is intentionally left
+ * untouched: `resolveCodexHomeForLaunch` already resolved the intended home and
+ * child-process envs use `buildProviderLeaderEnv` to scrub opposite-provider
+ * home. We only touch OMB_LEADER_CLI here to keep the blast radius minimal.
+ */
+export function mirrorLeaderCliIntoProcessEnv(
+  leaderCli: LeaderCli,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  env[LEADER_CLI_ENV] = leaderCli;
+}
+
+function providerHomeEnv(
+  homeOverride: string | undefined,
+  leaderCli: LeaderCli,
+): NodeJS.ProcessEnv {
+  // Always emit OMB_LEADER_CLI so downstream consumers (agents-overlay, worker-bootstrap,
+  // nested team/autoresearch flows) can detect the active provider without guessing.
+  const env: NodeJS.ProcessEnv = { [LEADER_CLI_ENV]: leaderCli };
+  if (!homeOverride) return env;
+  if (leaderCli === "codex") {
+    env.CODEX_HOME = homeOverride;
+    // Clear opposite-provider home so CodeBuddy-only config can't leak into a Codex session.
+    env.CODEBUDDY_HOME = "";
+  } else {
+    env.CODEBUDDY_HOME = homeOverride;
+    env.CODEX_HOME = "";
+  }
+  return env;
+}
+
+/**
+ * Build a child-process env that unambiguously identifies the active leader CLI and its home.
+ * Use this anywhere we spawn child processes (launch, exec, detached bootstrap, watchers,
+ * autoresearch, team workers). Always call with the resolved `leaderCli` for the caller.
+ */
+export function buildProviderLeaderEnv(
+  baseEnv: NodeJS.ProcessEnv,
+  leaderCli: LeaderCli,
+  homeOverride?: string,
+): NodeJS.ProcessEnv {
+  const next: NodeJS.ProcessEnv = { ...baseEnv };
+  next[LEADER_CLI_ENV] = leaderCli;
+  if (homeOverride) {
+    if (leaderCli === "codex") {
+      next.CODEX_HOME = homeOverride;
+      delete next.CODEBUDDY_HOME;
+    } else {
+      next.CODEBUDDY_HOME = homeOverride;
+      delete next.CODEX_HOME;
+    }
+  } else {
+    // Still clear the opposite provider's home so a leaked ambient env doesn't confuse
+    // downstream consumers about which provider is active.
+    if (leaderCli === "codex") delete next.CODEBUDDY_HOME;
+    else delete next.CODEX_HOME;
+  }
+  return next;
 }
 
 export function shouldEnableNotifyFallbackWatcher(
@@ -877,15 +1088,21 @@ export function buildDetachedSessionBootstrapSteps(
   notifyTempContractRaw?: string | null,
   nativeWindows = false,
   sessionId?: string,
+  leaderCli: LeaderCli = "codebuddy",
 ): DetachedSessionTmuxStep[] {
   const detachedLeaderCmd = nativeWindows
     ? "powershell.exe"
     : buildDetachedSessionLeaderCommand(cwd, sessionName, codexCmd);
+  const providerHomeAssignments = Object.entries(
+    providerHomeEnv(codexHomeOverride, leaderCli),
+  )
+    .filter(([, value]) => value !== "")
+    .flatMap(([key, value]) => ["-e", `${key}=${value}`]);
   const newSessionArgs: string[] = [
     "new-session", "-d", "-P", "-F", "#{pane_id}", "-s", sessionName, "-c", cwd,
     ...(workerLaunchArgs ? ["-e", `${TEAM_WORKER_LAUNCH_ARGS_ENV}=${workerLaunchArgs}`] : []),
     ...(sessionId ? ["-e", `OMB_SESSION_ID=${sessionId}`, "-e", `OMB_SESSION_ID=${sessionId}`] : []),
-    ...(codexHomeOverride ? ["-e", `CODEBUDDY_HOME=${codexHomeOverride}`, "-e", `CODEX_HOME=${codexHomeOverride}`] : []),
+    ...providerHomeAssignments,
     ...(notifyTempContractRaw ? ["-e", `${OMB_NOTIFY_TEMP_CONTRACT_ENV}=${notifyTempContractRaw}`] : []),
     detachedLeaderCmd,
   ];
@@ -1068,7 +1285,7 @@ export async function reapStaleNotifyFallbackWatcher(
 
 async function startNotifyFallbackWatcher(
   cwd: string,
-  options: { codexHomeOverride?: string; enableAuthority?: boolean; sessionId?: string } = {},
+  options: { codexHomeOverride?: string; enableAuthority?: boolean; sessionId?: string; leaderCli?: LeaderCli } = {},
 ): Promise<void> {
   const { mkdir, writeFile } = await import("fs/promises");
   const pidPath = notifyFallbackPidPath(cwd);
@@ -1085,6 +1302,7 @@ async function startNotifyFallbackWatcher(
     codexHomeOverride: options.codexHomeOverride,
     enableAuthority: options.enableAuthority === true,
     sessionId: options.sessionId,
+    leaderCli: options.leaderCli,
   });
   let watcherPid: number | undefined;
   try {
@@ -1161,7 +1379,7 @@ async function stopHookDerivedWatcher(cwd: string): Promise<void> {
 
 async function flushNotifyFallbackOnce(
   cwd: string,
-  options: { codexHomeOverride?: string; enableAuthority?: boolean; sessionId?: string } = {},
+  options: { codexHomeOverride?: string; enableAuthority?: boolean; sessionId?: string; leaderCli?: LeaderCli } = {},
 ): Promise<void> {
   if (!shouldEnableNotifyFallbackWatcher(process.env, process.platform)) return;
   const { spawnSync } = await import("child_process");
@@ -1171,7 +1389,12 @@ async function flushNotifyFallbackOnce(
   if (!existsSync(watcherScript) || !existsSync(notifyScript)) return;
   spawnSync(process.execPath, [watcherScript, "--once", "--cwd", cwd, "--notify-script", notifyScript], {
     cwd, stdio: "ignore", timeout: 3000, windowsHide: true,
-    env: buildNotifyFallbackWatcherEnv(process.env, { codexHomeOverride: options.codexHomeOverride, enableAuthority: options.enableAuthority === true, sessionId: options.sessionId }),
+    env: buildNotifyFallbackWatcherEnv(process.env, {
+      codexHomeOverride: options.codexHomeOverride,
+      enableAuthority: options.enableAuthority === true,
+      sessionId: options.sessionId,
+      leaderCli: options.leaderCli,
+    }),
   });
 }
 
@@ -1457,7 +1680,12 @@ function killTmuxPane(paneId: string): void {
 
 // ── Codex home resolution ──────────────────────────────────────────────────
 
-import { SETUP_SCOPES, type SetupScope } from "../setup.js";
+import {
+  SETUP_PROVIDERS,
+  SETUP_SCOPES,
+  type SetupProvider,
+  type SetupScope,
+} from "../setup.js";
 
 const LEGACY_SCOPE_MIGRATION_SYNC: Record<string, SetupScope> = { "project-local": "project" };
 
@@ -1465,29 +1693,54 @@ export function readPersistedSetupScope(cwd: string): SetupScope | undefined {
   return readPersistedSetupPreferences(cwd)?.scope;
 }
 
-export function readPersistedSetupPreferences(cwd: string): Partial<{ scope: SetupScope }> | undefined {
+export function readPersistedSetupPreferences(
+  cwd: string,
+): Partial<{ provider: SetupProvider; scope: SetupScope }> | undefined {
   for (const scopePath of [join(cwd, ".omb", "setup-scope.json"), join(cwd, ".omb", "setup-scope.json")]) {
     if (!existsSync(scopePath)) continue;
     try {
-      const parsed = JSON.parse(readFileSync(scopePath, "utf-8")) as Partial<{ scope: string }>;
-      const persisted: Partial<{ scope: SetupScope }> = {};
+      const parsed = JSON.parse(readFileSync(scopePath, "utf-8")) as Partial<{ provider: string; scope: string }>;
+      const persisted: Partial<{ provider: SetupProvider; scope: SetupScope }> = {};
       if (typeof parsed.scope === "string") {
         if (SETUP_SCOPES.includes(parsed.scope as SetupScope)) persisted.scope = parsed.scope as SetupScope;
         const migrated = LEGACY_SCOPE_MIGRATION_SYNC[parsed.scope];
         if (migrated) persisted.scope = migrated;
       }
+      if (typeof parsed.provider === "string" && SETUP_PROVIDERS.includes(parsed.provider as SetupProvider)) persisted.provider = parsed.provider as SetupProvider;
       return Object.keys(persisted).length > 0 ? persisted : undefined;
     } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
   }
   return undefined;
 }
 
-export function resolveCodexHomeForLaunch(cwd: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-  if (env.CODEBUDDY_HOME && env.CODEBUDDY_HOME.trim() !== "") return env.CODEBUDDY_HOME;
-  if (env.CODEX_HOME && env.CODEX_HOME.trim() !== "") return env.CODEX_HOME;
-  const persistedScope = readPersistedSetupScope(cwd);
-  if (persistedScope === "project") return join(cwd, ".codebuddy");
+export function resolveCodexHomeForLaunch(
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+  leaderCli: LeaderCli = "codebuddy",
+): string | undefined {
+  if (leaderCli === "codex") {
+    if (env.CODEX_HOME && env.CODEX_HOME.trim() !== "") return env.CODEX_HOME;
+  } else if (env.CODEBUDDY_HOME && env.CODEBUDDY_HOME.trim() !== "") {
+    return env.CODEBUDDY_HOME;
+  }
+  const persisted = readPersistedSetupPreferences(cwd);
+  if (persisted?.scope === "project") {
+    if (leaderCli === "codex") return join(cwd, ".codex");
+    return join(cwd, ".codebuddy");
+  }
   return undefined;
+}
+
+export function resolveSetupProviderArg(args: string[]): SetupProvider | undefined {
+  let value: string | undefined;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--provider") { const next = args[index + 1]; if (!next || next.startsWith("-")) throw new Error(`Missing setup provider value after --provider. Expected one of: ${SETUP_PROVIDERS.join(", ")}`); value = next; index += 1; continue; }
+    if (arg.startsWith("--provider=")) value = arg.slice("--provider=".length);
+  }
+  if (!value) return undefined;
+  if (SETUP_PROVIDERS.includes(value as SetupProvider)) return value as SetupProvider;
+  throw new Error(`Invalid setup provider: ${value}. Expected one of: ${SETUP_PROVIDERS.join(", ")}`);
 }
 
 export function resolveSetupScopeArg(args: string[]): SetupScope | undefined {
@@ -1574,7 +1827,15 @@ async function preLaunch(
   notifyTempContract?: NotifyTempContract,
   codexHomeOverride?: string,
   enableNotifyFallbackAuthority: boolean = false,
+  leaderCli: LeaderCli = "codebuddy",
 ): Promise<void> {
+  // Ensure same-process consumers (agents-overlay, worker-bootstrap, and any
+  // function that reads ambient OMB_LEADER_CLI) see the CLI actually driving
+  // this session. `--leader-cli` may have arrived via argv rather than env,
+  // so mirror it into process.env up-front; we only set this key, leaving
+  // provider home env alone since resolveCodexHomeForLaunch has already
+  // resolved the intended home override.
+  mirrorLeaderCliIntoProcessEnv(leaderCli);
   // 1. Best-effort launch-safe orphan cleanup
   try {
     const cleanup = await cleanupLaunchOrphanedMcpProcesses();
@@ -1594,7 +1855,7 @@ async function preLaunch(
   await writeSessionStart(cwd, sessionId);
 
   // 4. Start notify fallback watcher (best effort)
-  try { await startNotifyFallbackWatcher(cwd, { codexHomeOverride, enableAuthority: enableNotifyFallbackAuthority, sessionId }); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
+  try { await startNotifyFallbackWatcher(cwd, { codexHomeOverride, enableAuthority: enableNotifyFallbackAuthority, sessionId, leaderCli }); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
 
   // 5. Start derived watcher (best effort, opt-in)
   try { await startHookDerivedWatcher(cwd); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
@@ -1630,27 +1891,28 @@ function runCodex(
   cwd: string,
   args: string[],
   sessionId: string,
+  leaderCli: LeaderCli,
   workerDefaultModel?: string,
   codexHomeOverride?: string,
   notifyTempContractRaw?: string | null,
   explicitLaunchPolicy?: CodexLaunchPolicy,
 ): void {
-  const launchArgs = injectModelInstructionsBypassArgs(cwd, args, process.env, sessionModelInstructionsPath(cwd, sessionId));
+  const launchArgs = injectLeaderModelInstructionsBypassArgs(cwd, args, leaderCli, process.env, sessionModelInstructionsPath(cwd, sessionId));
   const nativeWindows = isNativeWindows();
   const ombBin = resolveOmbCliEntryPath();
   if (!ombBin) throw new Error("Unable to resolve OMB launcher path for tmux HUD bootstrap");
   const hudCmd = nativeWindows ? buildWindowsPromptCommand("node", [ombBin, "hud", "--watch"]) : buildTmuxPaneCommand("node", [ombBin, "hud", "--watch"]);
   const inheritLeaderFlags = process.env[TEAM_INHERIT_LEADER_FLAGS_ENV] !== "0";
   const workerLaunchArgs = resolveTeamWorkerLaunchArgsEnv(process.env[TEAM_WORKER_LAUNCH_ARGS_ENV], launchArgs, inheritLeaderFlags, workerDefaultModel);
-  const codexBaseEnv = codexHomeOverride ? { ...process.env, CODEBUDDY_HOME: codexHomeOverride, CODEX_HOME: codexHomeOverride } : process.env;
+  const codexBaseEnv = buildProviderLeaderEnv(process.env, leaderCli, codexHomeOverride);
   const codexEnvWithSession = { ...codexBaseEnv, OMB_SESSION_ID: sessionId };
   const codexEnv = workerLaunchArgs ? { ...codexEnvWithSession, [TEAM_WORKER_LAUNCH_ARGS_ENV]: workerLaunchArgs } : codexEnvWithSession;
   const codexEnvWithNotify = notifyTempContractRaw ? { ...codexEnv, [OMB_NOTIFY_TEMP_CONTRACT_ENV]: notifyTempContractRaw } : codexEnv;
-  const translatedLaunchArgs = translateCodeBuddyResumeArgs(launchArgs);
-  const launchBinary = CODEBUDDY_BIN;
+  const translatedLaunchArgs = translateLeaderResumeArgs(launchArgs, leaderCli);
+  const launchBinary = resolveLeaderCliBinary(leaderCli);
   const launchPolicy = resolveCodexLaunchPolicy(process.env, process.platform, undefined, nativeWindows, undefined, undefined, explicitLaunchPolicy);
 
-  ensureCodeBuddyAvailable(cwd, codexEnvWithNotify);
+  if (leaderCli === "codebuddy") ensureCodeBuddyAvailable(cwd, codexEnvWithNotify);
 
   if (isCodexVersionRequest(translatedLaunchArgs)) { runCodexBlocking(cwd, launchBinary, translatedLaunchArgs, codexEnvWithNotify); return; }
 
@@ -1686,7 +1948,7 @@ function runCodex(
     let registeredHookName: string | null = null;
     let registeredClientAttachedHookName: string | null = null;
     try {
-      const bootstrapSteps = buildDetachedSessionBootstrapSteps(sessionName, cwd, codexCmd, hudCmd, workerLaunchArgs, codexHomeOverride, notifyTempContractRaw, nativeWindows, sessionId);
+      const bootstrapSteps = buildDetachedSessionBootstrapSteps(sessionName, cwd, codexCmd, hudCmd, workerLaunchArgs, codexHomeOverride, notifyTempContractRaw, nativeWindows, sessionId, leaderCli);
       for (const step of bootstrapSteps) {
         const output = execFileSync("tmux", step.args, { stdio: "pipe", encoding: "utf-8" });
         if (step.name === "new-session") { createdDetachedSession = true; parsePaneIdFromTmuxOutput(output || ""); }
@@ -1730,11 +1992,12 @@ async function postLaunch(
   sessionId: string,
   codexHomeOverride?: string,
   enableNotifyFallbackAuthority: boolean = false,
+  leaderCli: LeaderCli = "codebuddy",
 ): Promise<void> {
   let sessionStartedAt: string | undefined;
   try { const sessionState = await readSessionState(cwd); sessionStartedAt = sessionState?.started_at; } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
   await reapPostLaunchOrphanedMcpProcesses();
-  try { await flushNotifyFallbackOnce(cwd, { codexHomeOverride, enableAuthority: enableNotifyFallbackAuthority, sessionId }); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
+  try { await flushNotifyFallbackOnce(cwd, { codexHomeOverride, enableAuthority: enableNotifyFallbackAuthority, sessionId, leaderCli }); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
   try { await stopNotifyFallbackWatcher(cwd); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
   try { await flushHookDerivedWatcherOnce(cwd); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
   try { await stopHookDerivedWatcher(cwd); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
@@ -1789,14 +2052,19 @@ export async function launchWithHud(args: string[]): Promise<void> {
   }
 
   const launchCwd = process.cwd();
-  const parsedWorktree = parseWorktreeMode(args);
+  const leaderCliResult = extractLeaderCliArgs(args, process.env);
+  const parsedWorktree = parseWorktreeMode(leaderCliResult.remainingArgs);
   const notifyTempResult = resolveNotifyTempContract(parsedWorktree.remainingArgs, process.env);
   const explicitLaunchPolicy = resolveLeaderLaunchPolicyOverride(notifyTempResult.passthroughArgs);
-  const codexHomeOverride = resolveCodexHomeForLaunch(launchCwd, process.env);
+  const codexHomeOverride = resolveCodexHomeForLaunch(
+    launchCwd,
+    process.env,
+    leaderCliResult.leaderCli,
+  );
   const launchPolicy = resolveCodexLaunchPolicy(process.env, process.platform, undefined, isNativeWindows(), undefined, undefined, explicitLaunchPolicy);
   const enableNotifyFallbackAuthority = launchPolicy === "direct";
   const workerSparkModel = resolveWorkerSparkModel(notifyTempResult.passthroughArgs, codexHomeOverride);
-  const normalizedArgs = normalizeCodexLaunchArgs(notifyTempResult.passthroughArgs);
+  const normalizedArgs = normalizeLeaderLaunchArgs(notifyTempResult.passthroughArgs, leaderCliResult.leaderCli);
   let cwd = launchCwd;
   if (parsedWorktree.mode.enabled) {
     const planned = planWorktreeTarget({ cwd: launchCwd, scope: "launch", mode: parsedWorktree.mode });
@@ -1807,15 +2075,15 @@ export async function launchWithHud(args: string[]): Promise<void> {
 
   await preflight(cwd);
 
-  try { await preLaunch(cwd, sessionId, notifyTempResult.contract, codexHomeOverride, enableNotifyFallbackAuthority); } catch (err) {
+  try { await preLaunch(cwd, sessionId, notifyTempResult.contract, codexHomeOverride, enableNotifyFallbackAuthority, leaderCliResult.leaderCli); } catch (err) {
     console.error(`[omb] preLaunch warning: ${err instanceof Error ? err.message : err}`);
   }
 
   try {
     const notifyTempContractRaw = notifyTempResult.contract.active ? serializeNotifyTempContract(notifyTempResult.contract) : null;
-    runCodex(cwd, normalizedArgs, sessionId, workerSparkModel, codexHomeOverride, notifyTempContractRaw, explicitLaunchPolicy);
+    runCodex(cwd, normalizedArgs, sessionId, leaderCliResult.leaderCli, workerSparkModel, codexHomeOverride, notifyTempContractRaw, explicitLaunchPolicy);
   } finally {
-    await postLaunch(cwd, sessionId, codexHomeOverride, enableNotifyFallbackAuthority);
+    await postLaunch(cwd, sessionId, codexHomeOverride, enableNotifyFallbackAuthority, leaderCliResult.leaderCli);
   }
 }
 
@@ -1824,10 +2092,15 @@ export async function launchWithHud(args: string[]): Promise<void> {
  */
 export async function execWithOverlay(args: string[]): Promise<void> {
   const launchCwd = process.cwd();
-  const parsedWorktree = parseWorktreeMode(args);
+  const leaderCliResult = extractLeaderCliArgs(args, process.env);
+  const parsedWorktree = parseWorktreeMode(leaderCliResult.remainingArgs);
   const notifyTempResult = resolveNotifyTempContract(parsedWorktree.remainingArgs, process.env);
-  const codexHomeOverride = resolveCodexHomeForLaunch(launchCwd, process.env);
-  const normalizedArgs = normalizeCodexLaunchArgs(notifyTempResult.passthroughArgs);
+  const codexHomeOverride = resolveCodexHomeForLaunch(
+    launchCwd,
+    process.env,
+    leaderCliResult.leaderCli,
+  );
+  const normalizedArgs = normalizeLeaderLaunchArgs(notifyTempResult.passthroughArgs, leaderCliResult.leaderCli);
   let cwd = launchCwd;
 
   if (parsedWorktree.mode.enabled) {
@@ -1840,18 +2113,18 @@ export async function execWithOverlay(args: string[]): Promise<void> {
 
   await preflight(cwd);
 
-  try { await preLaunch(cwd, sessionId, notifyTempResult.contract, codexHomeOverride, true); } catch (err) {
+  try { await preLaunch(cwd, sessionId, notifyTempResult.contract, codexHomeOverride, true, leaderCliResult.leaderCli); } catch (err) {
     console.error(`[omb] preLaunch warning: ${err instanceof Error ? err.message : err}`);
   }
 
   try {
     const notifyTempContractRaw = notifyTempResult.contract.active ? serializeNotifyTempContract(notifyTempResult.contract) : null;
-    const codexArgs = injectModelInstructionsBypassArgs(cwd, translateCodeBuddyExecArgs(normalizedArgs), process.env, sessionModelInstructionsPath(cwd, sessionId));
-    const codexEnvBase = codexHomeOverride ? { ...process.env, CODEBUDDY_HOME: codexHomeOverride, CODEX_HOME: codexHomeOverride } : process.env;
+    const codexArgs = injectLeaderModelInstructionsBypassArgs(cwd, translateLeaderExecArgs(normalizedArgs, leaderCliResult.leaderCli), leaderCliResult.leaderCli, process.env, sessionModelInstructionsPath(cwd, sessionId));
+    const codexEnvBase = buildProviderLeaderEnv(process.env, leaderCliResult.leaderCli, codexHomeOverride);
     const codexEnv = notifyTempContractRaw ? { ...codexEnvBase, [OMB_NOTIFY_TEMP_CONTRACT_ENV]: notifyTempContractRaw } : codexEnvBase;
-    runCodexBlocking(cwd, CODEBUDDY_BIN, codexArgs, codexEnv);
+    runCodexBlocking(cwd, resolveLeaderCliBinary(leaderCliResult.leaderCli), codexArgs, codexEnv);
   } finally {
-    await postLaunch(cwd, sessionId, codexHomeOverride, true);
+    await postLaunch(cwd, sessionId, codexHomeOverride, true, leaderCliResult.leaderCli);
   }
 }
 

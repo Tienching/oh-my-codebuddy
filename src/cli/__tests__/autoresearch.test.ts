@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { autoresearchCommand, normalizeAutoresearchCodexArgs, parseAutoresearchArgs } from '../autoresearch.js';
+import { autoresearchCommand, normalizeAutoresearchCodeBuddyArgs, parseAutoresearchArgs } from '../autoresearch.js';
 
 function withMockedTty<T>(fn: () => Promise<T>): Promise<T> {
   const descriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
@@ -60,22 +60,22 @@ async function installFakePs(fakeBin: string): Promise<void> {
   execFileSync('chmod', ['+x', fakePsPath], { stdio: 'ignore' });
 }
 
-describe('normalizeAutoresearchCodexArgs', () => {
+describe('normalizeAutoresearchCodeBuddyArgs', () => {
   it('adds sandbox bypass by default for autoresearch workers', () => {
-    assert.deepEqual(normalizeAutoresearchCodexArgs(['--model', 'gpt-5']), ['--model', 'gpt-5', '--dangerously-skip-permissions']);
+    assert.deepEqual(normalizeAutoresearchCodeBuddyArgs(['--model', 'gpt-5']), ['--model', 'gpt-5', '--dangerously-skip-permissions']);
   });
 
   it('deduplicates explicit bypass flags', () => {
-    assert.deepEqual(normalizeAutoresearchCodexArgs(['--dangerously-bypass-approvals-and-sandbox']), ['--dangerously-skip-permissions']);
+    assert.deepEqual(normalizeAutoresearchCodeBuddyArgs(['--dangerously-bypass-approvals-and-sandbox']), ['--dangerously-skip-permissions']);
   });
 
   it('normalizes --madmax to the canonical bypass flag', () => {
-    assert.deepEqual(normalizeAutoresearchCodexArgs(['--madmax']), ['--dangerously-skip-permissions']);
+    assert.deepEqual(normalizeAutoresearchCodeBuddyArgs(['--madmax']), ['--dangerously-skip-permissions']);
   });
 
   it('translates known Codex config overrides to CodeBuddy flags', () => {
     assert.deepEqual(
-      normalizeAutoresearchCodexArgs(['-c', 'model_reasoning_effort="high"', '--config=model_instructions_file="/tmp/agents.md"']),
+      normalizeAutoresearchCodeBuddyArgs(['-c', 'model_reasoning_effort="high"', '--config=model_instructions_file="/tmp/agents.md"']),
       ['--effort', 'high', '--system-prompt-file', '/tmp/agents.md', '--dangerously-skip-permissions'],
     );
   });
@@ -101,6 +101,7 @@ describe('omb autoresearch', () => {
       assert.match(result.stdout, /Usage:[\s\S]*omb autoresearch run <mission-dir>/i);
       assert.match(result.stdout, /omb autoresearch init/i);
       assert.match(result.stdout, /--topic\/\.\.\./i);
+      assert.match(result.stdout, /--leader-cli C/i);
       assert.match(result.stdout, /deep-interview/i);
       assert.match(result.stdout, /human entrypoint/i);
       assert.doesNotMatch(result.stdout, /oh-my-codebuddy \(omb\) - Multi-agent orchestration for CodeBuddy CLI/i);
@@ -133,7 +134,7 @@ describe('omb autoresearch', () => {
   });
 
   it('treats top-level topic/evaluator flags as seeded deep-interview input', () => {
-    const parsed = parseAutoresearchArgs(['--topic', 'Improve docs', '--evaluator', 'node eval.js', '--slug', 'docs-run']);
+    const parsed = parseAutoresearchArgs(['--topic', 'Improve docs', '--evaluator', 'node eval.js', '--slug', 'docs-run'], {});
     assert.equal(parsed.guided, true);
     assert.equal(parsed.seedArgs?.topic, 'Improve docs');
     assert.equal(parsed.seedArgs?.evaluatorCommand, 'node eval.js');
@@ -141,25 +142,40 @@ describe('omb autoresearch', () => {
   });
 
   it('treats bare init as guided alias and init with flags as expert init args', () => {
-    const bare = parseAutoresearchArgs(['init']);
+    const bare = parseAutoresearchArgs(['init'], {});
     assert.equal(bare.guided, true);
     assert.deepEqual(bare.initArgs, []);
 
-    const flagged = parseAutoresearchArgs(['init', '--topic', 'Ship feature']);
+    const flagged = parseAutoresearchArgs(['init', '--topic', 'Ship feature'], {});
     assert.equal(flagged.guided, true);
     assert.deepEqual(flagged.initArgs, ['--topic', 'Ship feature']);
   });
 
   it('parses explicit run subcommand without breaking bare mission-dir execution', () => {
-    const runParsed = parseAutoresearchArgs(['run', 'missions/demo', '--model', 'gpt-5']);
+    const runParsed = parseAutoresearchArgs(['run', 'missions/demo', '--model', 'gpt-5'], {});
     assert.equal(runParsed.runSubcommand, true);
     assert.equal(runParsed.missionDir, 'missions/demo');
+    assert.equal(runParsed.leaderCli, 'codebuddy');
     assert.deepEqual(runParsed.codebuddyArgs, ['--model', 'gpt-5']);
 
-    const bareParsed = parseAutoresearchArgs(['missions/demo', '--model', 'gpt-5']);
+    const bareParsed = parseAutoresearchArgs(['missions/demo', '--model', 'gpt-5'], {});
     assert.equal(bareParsed.runSubcommand, undefined);
     assert.equal(bareParsed.missionDir, 'missions/demo');
+    assert.equal(bareParsed.leaderCli, 'codebuddy');
     assert.deepEqual(bareParsed.codebuddyArgs, ['--model', 'gpt-5']);
+  });
+
+  it('parses selected leader CLI flags without forwarding them to autoresearch turns', () => {
+    const canonical = parseAutoresearchArgs(['--leader-cli', 'codex', 'run', 'missions/demo', '--effort', 'high'], {});
+    assert.equal(canonical.runSubcommand, true);
+    assert.equal(canonical.missionDir, 'missions/demo');
+    assert.equal(canonical.leaderCli, 'codex');
+    assert.deepEqual(canonical.codebuddyArgs, ['--effort', 'high']);
+
+    const legacy = parseAutoresearchArgs(['--cli=codex', 'missions/demo', '--model', 'gpt-5'], {});
+    assert.equal(legacy.missionDir, 'missions/demo');
+    assert.equal(legacy.leaderCli, 'codex');
+    assert.deepEqual(legacy.codebuddyArgs, ['--model', 'gpt-5']);
   });
 
 
@@ -453,7 +469,7 @@ esac
       execFileSync('git', ['add', '.'], { cwd: repo, stdio: 'ignore' });
       execFileSync('git', ['commit', '-m', 'add autoresearch mission'], { cwd: repo, stdio: 'ignore' });
 
-      const fakeCodexPath = join(fakeBin, 'codebuddy');
+      const fakeCodexPath = join(fakeBin, 'codex');
       await writeFile(
         fakeCodexPath,
         `#!/bin/sh
@@ -474,6 +490,9 @@ perl -0pi -e "s/HEAD_PLACEHOLDER/$head_commit/g" "$candidate_file"
         'utf-8',
       );
       execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      await writeFile(fakeCodebuddyPath, '#!/bin/sh\nexit 98\n', 'utf-8');
+      execFileSync('chmod', ['+x', fakeCodebuddyPath], { stdio: 'ignore' });
       await installFakePs(fakeBin);
 
       const fakeTmuxPath = join(fakeBin, 'tmux');
@@ -534,8 +553,115 @@ esac
 
       const tmuxOutput = await readFile(tmuxLog, 'utf-8');
       assert.match(tmuxOutput, /split-window -h -t %9 -d -P -F #\{pane_id\} -c/);
-      assert.match(tmuxOutput, /'autoresearch' '\/tmp\/[^']+\/missions\/demo' '--model' 'gpt-5'/);
+      assert.match(tmuxOutput, /'autoresearch' '--leader-cli' 'codebuddy' '\/tmp\/[^']+\/missions\/demo' '--model' 'gpt-5'/);
       assert.doesNotMatch(tmuxOutput, /kill-pane -t %9/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  it('injects CODEX_HOME when launching Codex autoresearch in a split pane', async () => {
+    const repo = await initRepo();
+    const fakeBin = await mkdtemp(join(tmpdir(), 'omb-autoresearch-split-codex-home-bin-'));
+    try {
+      const missionDir = join(repo, 'missions', 'demo');
+      const tmuxLog = join(repo, 'tmux.log');
+      await mkdir(missionDir, { recursive: true });
+      await mkdir(join(repo, 'scripts'), { recursive: true });
+      await writeFile(join(missionDir, 'mission.md'), '# Mission\nSplit pane CODEX_HOME test.\n', 'utf-8');
+      await writeFile(
+        join(missionDir, 'sandbox.md'),
+        '---\nevaluator:\n  command: node scripts/eval.js\n  format: json\n  keep_policy: pass_only\n---\nStay inside the mission boundary.\n',
+        'utf-8',
+      );
+      await writeFile(join(repo, 'scripts', 'eval.js'), "process.stdout.write(JSON.stringify({ pass: true }));\n", 'utf-8');
+      execFileSync('git', ['add', '.'], { cwd: repo, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', 'add codex split pane mission'], { cwd: repo, stdio: 'ignore' });
+
+      const fakeCodexPath = join(fakeBin, 'codex');
+      await writeFile(
+        fakeCodexPath,
+        `#!/bin/sh
+candidate_file=$(find "$OMB_TEST_REPO_ROOT/.omb/logs/autoresearch" -name candidate.json | head -n 1)
+head_commit=$(git rev-parse HEAD)
+printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit": "%s",\\n  "description": "split launch test",\\n  "notes": ["fake codex pane"],\\n  "created_at": "2026-03-18T00:00:00.000Z"\\n}\\n' "$head_commit" >"$candidate_file"
+`,
+        'utf-8',
+      );
+      execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      await writeFile(fakeCodebuddyPath, '#!/bin/sh\nexit 98\n', 'utf-8');
+      execFileSync('chmod', ['+x', fakeCodebuddyPath], { stdio: 'ignore' });
+      await installFakePs(fakeBin);
+
+      const fakeTmuxPath = join(fakeBin, 'tmux');
+      await writeFile(
+        fakeTmuxPath,
+        `#!/bin/sh
+printf '%s\n' "$*" >>"${tmuxLog}"
+case "$1" in
+  -V)
+    printf 'tmux 3.4\n'
+    exit 0
+    ;;
+  display-message)
+    case "$*" in
+      *"#{pane_id}"*) printf '%%7\n' ;;
+      *"#{pane_current_path}"*) printf '${repo}\n' ;;
+      *"#S"*) printf 'devsess\n' ;;
+      *) printf '0\n' ;;
+    esac
+    exit 0
+    ;;
+  list-panes)
+    printf '%%7\tzsh\tomb autoresearch\n'
+    exit 0
+    ;;
+  split-window)
+    last=""
+    for arg in "$@"; do
+      last="$arg"
+    done
+    if printf '%s' "$last" | grep -q 'hud --watch'; then
+      printf '%%3\n'
+      exit 0
+    fi
+    printf '%%2\n'
+    /bin/sh -lc "$last"
+    exit 0
+    ;;
+  set-option|select-pane)
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+`,
+        'utf-8',
+      );
+      execFileSync('chmod', ['+x', fakeTmuxPath], { stdio: 'ignore' });
+
+      const result = runOmb(
+        repo,
+        ['autoresearch', '--leader-cli', 'codex', 'run', missionDir, '--model', 'gpt-5'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          OMB_TEST_REPO_ROOT: repo,
+          TMUX: '/tmp/fake-tmux,12345,0',
+          TMUX_PANE: '%7',
+          CODEX_HOME: '/tmp/codex-split-home',
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const tmuxOutput = await readFile(tmuxLog, 'utf-8');
+      assert.match(tmuxOutput, /CODEX_HOME=\/tmp\/codex-split-home/);
+      assert.match(tmuxOutput, /'autoresearch' '--leader-cli' 'codex'/);
+      // OMB_LEADER_CLI must be injected into the split-pane command so nested
+      // overlay/worker consumers don't default to CodeBuddy.
+      assert.match(tmuxOutput, /OMB_LEADER_CLI=codex/);
     } finally {
       await rm(repo, { recursive: true, force: true });
       await rm(fakeBin, { recursive: true, force: true });
@@ -785,6 +911,172 @@ printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit"
 
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(result.stderr, /fake-codebuddy:--print --dangerously-skip-permissions/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  it('injects CODEBUDDY_HOME for direct CodeBuddy autoresearch turns', async () => {
+    const repo = await initRepo();
+    const fakeBin = await mkdtemp(join(tmpdir(), 'omb-autoresearch-fake-codebuddy-home-bin-'));
+    try {
+      const missionDir = join(repo, 'missions', 'demo');
+      await mkdir(missionDir, { recursive: true });
+      await mkdir(join(repo, 'scripts'), { recursive: true });
+      await writeFile(join(missionDir, 'mission.md'), '# Mission\nCapture CODEBUDDY_HOME in direct turn.\n', 'utf-8');
+      await writeFile(
+        join(missionDir, 'sandbox.md'),
+        '---\nevaluator:\n  command: node scripts/eval.js\n  format: json\n  keep_policy: pass_only\n---\nStay inside the mission boundary.\n',
+        'utf-8',
+      );
+      await writeFile(join(repo, 'scripts', 'eval.js'), "process.stdout.write(JSON.stringify({ pass: true }));\n", 'utf-8');
+      execFileSync('git', ['add', '.'], { cwd: repo, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', 'add direct codebuddy home turn mission'], { cwd: repo, stdio: 'ignore' });
+
+      const fakeCodexPath = join(fakeBin, 'codebuddy');
+      await writeFile(
+        fakeCodexPath,
+        `#!/bin/sh
+printf 'CODEBUDDY_HOME=%s\\n' \"$CODEBUDDY_HOME\" >&2
+printf 'CODEX_HOME=%s\\n' \"$CODEX_HOME\" >&2
+printf 'OMB_LEADER_CLI=%s\\n' \"$OMB_LEADER_CLI\" >&2
+candidate_file=$(find "$OMB_TEST_REPO_ROOT/.omb/logs/autoresearch" -name candidate.json | head -n 1)
+head_commit=$(git rev-parse HEAD)
+printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit": "%s",\\n  "description": "stop after first codebuddy direct-home turn",\\n  "notes": ["fake codebuddy home"],\\n  "created_at": "2026-03-15T00:00:00.000Z"\\n}\\n' "$head_commit" >"$candidate_file"
+`,
+        'utf-8',
+      );
+      execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
+      await installFakePs(fakeBin);
+
+      const result = runOmb(
+        repo,
+        ['autoresearch', missionDir, '--dangerously-skip-permissions'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          OMB_TEST_REPO_ROOT: repo,
+          CODEBUDDY_HOME: '/tmp/codebuddy-home',
+          CODEX_HOME: '/tmp/other-codex-home',
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stderr, /CODEBUDDY_HOME=\/tmp\/codebuddy-home/);
+      assert.match(result.stderr, /OMB_LEADER_CLI=codebuddy/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  it('injects CODEX_HOME for direct Codex autoresearch turns', async () => {
+    const repo = await initRepo();
+    const fakeBin = await mkdtemp(join(tmpdir(), 'omb-autoresearch-fake-codex-home-bin-'));
+    try {
+      const missionDir = join(repo, 'missions', 'demo');
+      await mkdir(missionDir, { recursive: true });
+      await mkdir(join(repo, 'scripts'), { recursive: true });
+      await writeFile(join(missionDir, 'mission.md'), '# Mission\nCapture CODEX_HOME in direct turn.\n', 'utf-8');
+      await writeFile(
+        join(missionDir, 'sandbox.md'),
+        '---\nevaluator:\n  command: node scripts/eval.js\n  format: json\n  keep_policy: pass_only\n---\nStay inside the mission boundary.\n',
+        'utf-8',
+      );
+      await writeFile(join(repo, 'scripts', 'eval.js'), "process.stdout.write(JSON.stringify({ pass: true }));\n", 'utf-8');
+      execFileSync('git', ['add', '.'], { cwd: repo, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', 'add direct codex home turn mission'], { cwd: repo, stdio: 'ignore' });
+
+      const fakeCodexPath = join(fakeBin, 'codex');
+      await writeFile(
+        fakeCodexPath,
+        `#!/bin/sh
+printf 'fake-codex:%s\\n' "$*" >&2
+printf 'CODEX_HOME=%s\\n' \"$CODEX_HOME\" >&2
+printf 'CODEBUDDY_HOME=%s\\n' \"$CODEBUDDY_HOME\" >&2
+printf 'OMB_LEADER_CLI=%s\\n' \"$OMB_LEADER_CLI\" >&2
+candidate_file=$(find "$OMB_TEST_REPO_ROOT/.omb/logs/autoresearch" -name candidate.json | head -n 1)
+head_commit=$(git rev-parse HEAD)
+printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit": "%s",\\n  "description": "stop after first codex direct-home turn",\\n  "notes": ["fake codex home"],\\n  "created_at": "2026-03-15T00:00:00.000Z"\\n}\\n' "$head_commit" >"$candidate_file"
+`,
+        'utf-8',
+      );
+      execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
+      await installFakePs(fakeBin);
+
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      await writeFile(fakeCodebuddyPath, '#!/bin/sh\nexit 98\n', 'utf-8');
+      execFileSync('chmod', ['+x', fakeCodebuddyPath], { stdio: 'ignore' });
+      await installFakePs(fakeBin);
+
+      const result = runOmb(
+        repo,
+        ['autoresearch', '--leader-cli', 'codex', missionDir, '--effort', 'high'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          OMB_TEST_REPO_ROOT: repo,
+          CODEX_HOME: '/tmp/codex-home',
+          CODEBUDDY_HOME: '/tmp/codebuddy-ignored',
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stderr, /CODEX_HOME=\/tmp\/codex-home/);
+      assert.match(result.stderr, /fake-codex/);
+      assert.doesNotMatch(result.stderr, /fake-codebuddy/);
+      assert.doesNotMatch(result.stderr, /CODEBUDDY_HOME=\/tmp\/codebuddy-ignored/);
+      assert.match(result.stderr, /OMB_LEADER_CLI=codex/);
+    } finally {
+      await rm(repo, { recursive: true, force: true });
+      await rm(fakeBin, { recursive: true, force: true });
+    }
+  });
+
+  it('launches Codex exec for autoresearch turns when --leader-cli codex is selected', async () => {
+    const repo = await initRepo();
+    const fakeBin = await mkdtemp(join(tmpdir(), 'omb-autoresearch-fake-codex-bin-'));
+    try {
+      const missionDir = join(repo, 'missions', 'demo');
+      await mkdir(missionDir, { recursive: true });
+      await mkdir(join(repo, 'scripts'), { recursive: true });
+      await writeFile(join(missionDir, 'mission.md'), '# Mission\nWrite a noop candidate artifact.\n', 'utf-8');
+      await writeFile(
+        join(missionDir, 'sandbox.md'),
+        '---\nevaluator:\n  command: node scripts/eval.js\n  format: json\n  keep_policy: pass_only\n---\nStay inside the mission boundary.\n',
+        'utf-8',
+      );
+      await writeFile(join(repo, 'scripts', 'eval.js'), "process.stdout.write(JSON.stringify({ pass: true }));\n", 'utf-8');
+      execFileSync('git', ['add', '.'], { cwd: repo, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', 'add autoresearch mission'], { cwd: repo, stdio: 'ignore' });
+
+      const fakeCodexPath = join(fakeBin, 'codex');
+      await writeFile(
+        fakeCodexPath,
+        `#!/bin/sh
+printf 'fake-codex:%s\\n' "$*" >&2
+candidate_file=$(find "$OMB_TEST_REPO_ROOT/.omb/logs/autoresearch" -name candidate.json | head -n 1)
+head_commit=$(git rev-parse HEAD)
+printf '{\\n  "status": "abort",\\n  "candidate_commit": null,\\n  "base_commit": "%s",\\n  "description": "stop after first codex exec",\\n  "notes": ["fake codex exec"],\\n  "created_at": "2026-03-15T00:00:00.000Z"\\n}\\n' "$head_commit" >"$candidate_file"
+`,
+        'utf-8',
+      );
+      execFileSync('chmod', ['+x', fakeCodexPath], { stdio: 'ignore' });
+
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      await writeFile(fakeCodebuddyPath, '#!/bin/sh\nprintf "unexpected codebuddy invocation\\n" >&2\nexit 98\n', 'utf-8');
+      execFileSync('chmod', ['+x', fakeCodebuddyPath], { stdio: 'ignore' });
+      await installFakePs(fakeBin);
+
+      const result = runOmb(
+        repo,
+        ['autoresearch', '--leader-cli', 'codex', missionDir, '--effort', 'high'],
+        { PATH: `${fakeBin}:${process.env.PATH || ''}`, OMB_TEST_REPO_ROOT: repo },
+      );
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stderr, /fake-codex:exec -c model_reasoning_effort="high" --dangerously-bypass-approvals-and-sandbox/);
+      assert.doesNotMatch(result.stderr, /--print\b/);
+      assert.doesNotMatch(result.stderr, /unexpected codebuddy invocation/);
     } finally {
       await rm(repo, { recursive: true, force: true });
       await rm(fakeBin, { recursive: true, force: true });

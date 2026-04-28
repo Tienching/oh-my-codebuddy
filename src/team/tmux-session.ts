@@ -29,7 +29,7 @@ import {
   resolveCommandPathForPlatform,
   spawnPlatformCommandSync,
 } from '../utils/platform-command.js';
-import { resolveOmbCliEntryPath } from '../utils/paths.js';
+import { codebuddyHome, codexHome, resolveOmbCliEntryPath } from '../utils/paths.js';
 
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
@@ -973,12 +973,14 @@ export function buildWorkerProcessLaunchSpec(
     return cliLaunchArgs;
   })();
   const workerCliHomeOverride = workerCli === 'codebuddy'
-    ? (typeof effectiveEnv.CODEBUDDY_HOME === 'string'
+    ? (typeof effectiveEnv.CODEBUDDY_HOME === 'string' && effectiveEnv.CODEBUDDY_HOME.trim() !== ''
         ? effectiveEnv.CODEBUDDY_HOME.trim()
-        : (typeof effectiveEnv.CODEX_HOME === 'string' ? effectiveEnv.CODEX_HOME.trim() : undefined))
-    : (typeof effectiveEnv.CODEX_HOME === 'string'
-        ? effectiveEnv.CODEX_HOME.trim()
-        : (typeof effectiveEnv.CODEBUDDY_HOME === 'string' ? effectiveEnv.CODEBUDDY_HOME.trim() : undefined));
+        : codebuddyHome())
+    : workerCli === 'codex'
+      ? (typeof effectiveEnv.CODEX_HOME === 'string' && effectiveEnv.CODEX_HOME.trim() !== ''
+          ? effectiveEnv.CODEX_HOME.trim()
+          : codexHome())
+      : undefined;
   const providerLookupHome = workerCliHomeOverride
     ? (isAbsolute(workerCliHomeOverride) ? workerCliHomeOverride : resolve(cwd, workerCliHomeOverride))
     : undefined;
@@ -991,6 +993,11 @@ export function buildWorkerProcessLaunchSpec(
     OMB_TEAM_WORKER: `${teamName}/worker-${workerIndex}`,
     [OMB_LEADER_NODE_PATH_ENV]: resolveLeaderNodePath(),
     [OMB_LEADER_CLI_PATH_ENV]: resolvedCliPath,
+    // Identify the CLI actually driving this worker so downstream consumers
+    // (agents-overlay, worker-bootstrap) pick the matching AGENTS/home.
+    ...((workerCli === 'codex' || workerCli === 'codebuddy')
+      ? { OMB_LEADER_CLI: workerCli }
+      : {}),
     ...((workerCli === 'codex' || workerCli === 'codebuddy')
       ? readActiveProviderEnvOverrides(
           effectiveEnv,

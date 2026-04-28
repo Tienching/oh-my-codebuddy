@@ -8,6 +8,29 @@ import { setup } from '../setup.js';
 import { addGeneratedAgentsMarker } from '../../utils/agents-md.js';
 import { resolveAgentsModelTableContext, upsertAgentsModelTable } from '../../utils/agents-model-table.js';
 
+const LEGACY_CLAUDE_ONLY_AGENTS = [
+  '# CLAUDE.md',
+  '',
+  'Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.',
+  '',
+  '## 1. Think Before Coding',
+  '',
+  "Don't assume.",
+  '',
+  '## 2. Simplicity First',
+  '',
+  'Minimum code that solves the problem.',
+  '',
+  '## 3. Surgical Changes',
+  '',
+  'Touch only what you must.',
+  '',
+  '## 4. Goal-Driven Execution',
+  '',
+  'Define success criteria.',
+  '',
+].join('\n');
+
 function setMockTty(value: boolean): () => void {
   Object.defineProperty(process.stdin, 'isTTY', {
     value,
@@ -27,7 +50,7 @@ function setMockHome(home: string): () => void {
   const previousHome = process.env.HOME;
   const previousCodexHome = process.env.CODEBUDDY_HOME;
   process.env.HOME = home;
-  process.env.CODEBUDDY_HOME = join(home, '.codex');
+  process.env.CODEBUDDY_HOME = join(home, '.codebuddy');
   return () => {
     if (typeof previousHome === 'string') process.env.HOME = previousHome;
     else delete process.env.HOME;
@@ -88,11 +111,11 @@ describe('omb setup AGENTS refresh behavior', () => {
         scope: 'user',
       });
 
-      assert.match(output, /Generated AGENTS\.md in .*home\/\.codex\./);
+      assert.match(output, /Generated AGENTS\.md in .*home\/\.codebuddy\./);
       assert.match(output, /User scope leaves project AGENTS\.md unchanged\./);
       assert.match(output, /agents_md: updated=1, unchanged=0, backed_up=0, skipped=0, removed=0/);
       assert.equal(await readFile(join(wd, 'AGENTS.md'), 'utf-8'), existing);
-      assert.equal(existsSync(join(home, '.codex', 'AGENTS.md')), true);
+      assert.equal(existsSync(join(home, '.codebuddy', 'AGENTS.md')), true);
       assert.equal(existsSync(join(wd, '.omb', 'backups', 'setup')), false);
     } finally {
       restoreHome();
@@ -109,7 +132,7 @@ describe('omb setup AGENTS refresh behavior', () => {
     const existing = '# old agents file\n';
     try {
       await mkdir(join(wd, '.omb', 'state'), { recursive: true });
-      await mkdir(join(home, '.codex'), { recursive: true });
+      await mkdir(join(home, '.codebuddy'), { recursive: true });
       await writeFile(join(wd, 'AGENTS.md'), existing);
 
       const output = await runSetupWithCapturedLogs(wd, {
@@ -145,7 +168,7 @@ describe('omb setup AGENTS refresh behavior', () => {
     const template = readFileSync(join(process.cwd(), 'templates', 'AGENTS.md'), 'utf-8');
     try {
       await mkdir(join(wd, '.omb', 'state'), { recursive: true });
-      await mkdir(join(home, '.codex'), { recursive: true });
+      await mkdir(join(home, '.codebuddy'), { recursive: true });
       const existing = upsertAgentsModelTable(
         addGeneratedAgentsMarker(template),
         {
@@ -162,8 +185,8 @@ describe('omb setup AGENTS refresh behavior', () => {
 
       const agentsContent = await readFile(join(wd, 'AGENTS.md'), 'utf-8');
       const expectedContext = resolveAgentsModelTableContext(
-        await readFile(join(wd, '.codex', 'settings.json'), 'utf-8'),
-        { codebuddyHomeOverride: join(wd, '.codex') },
+        await readFile(join(wd, '.codebuddy', 'settings.json'), 'utf-8'),
+        { codebuddyHomeOverride: join(wd, '.codebuddy') },
       );
 
       assert.match(output, /Refreshed AGENTS\.md model capability table in project root\./);
@@ -189,6 +212,41 @@ describe('omb setup AGENTS refresh behavior', () => {
     }
   });
 
+  it('replaces legacy CLAUDE.md-only AGENTS scaffold without interactive confirmation', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-setup-agents-'));
+    const restoreTty = setMockTty(false);
+    const home = join(wd, 'home');
+    const restoreHome = setMockHome(home);
+    try {
+      await mkdir(join(wd, '.omb', 'state'), { recursive: true });
+      await mkdir(join(home, '.codebuddy'), { recursive: true });
+      await writeFile(join(home, '.codebuddy', 'AGENTS.md'), LEGACY_CLAUDE_ONLY_AGENTS);
+
+      const output = await runSetupWithCapturedLogs(wd, {
+        scope: 'user',
+      });
+
+      const agentsContent = await readFile(join(home, '.codebuddy', 'AGENTS.md'), 'utf-8');
+      assert.match(output, /Generated AGENTS\.md in .*home\/\.codebuddy\./);
+      assert.match(output, /agents_md: updated=1, unchanged=0, backed_up=1, skipped=0, removed=0/);
+      assert.match(agentsContent, /<!-- omb:generated:agents-md -->/);
+      assert.match(agentsContent, /# oh-my-codebuddy - Intelligent Multi-Agent Orchestration/);
+      assert.match(agentsContent, /<keyword_detection>/);
+      assert.doesNotMatch(agentsContent, /^# CLAUDE\.md/m);
+
+      const backupsRoot = join(home, '.codebuddy', 'backups', 'setup');
+      assert.equal(existsSync(backupsRoot), true);
+      const timestamps = await readdir(backupsRoot);
+      assert.equal(timestamps.length, 1);
+      const backupContent = await readFile(join(backupsRoot, timestamps[0], '.codebuddy', 'AGENTS.md'), 'utf-8');
+      assert.equal(backupContent, LEGACY_CLAUDE_ONLY_AGENTS);
+    } finally {
+      restoreHome();
+      restoreTty();
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it('skips overwrite when confirmation is declined', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-setup-agents-'));
     const restoreTty = setMockTty(true);
@@ -197,7 +255,7 @@ describe('omb setup AGENTS refresh behavior', () => {
     const existing = '# keep this agents file\n';
     try {
       await mkdir(join(wd, '.omb', 'state'), { recursive: true });
-      await mkdir(join(home, '.codex'), { recursive: true });
+      await mkdir(join(home, '.codebuddy'), { recursive: true });
       await writeFile(join(wd, 'AGENTS.md'), existing);
 
       const output = await runSetupWithCapturedLogs(wd, {
@@ -225,7 +283,7 @@ describe('omb setup AGENTS refresh behavior', () => {
     try {
       const pidStartTicks = await readCurrentLinuxStartTicks();
       await mkdir(join(wd, '.omb', 'state'), { recursive: true });
-      await mkdir(join(home, '.codex'), { recursive: true });
+      await mkdir(join(home, '.codebuddy'), { recursive: true });
       await writeFile(join(wd, 'AGENTS.md'), existing);
       await writeFile(
         join(wd, '.omb', 'state', 'session.json'),

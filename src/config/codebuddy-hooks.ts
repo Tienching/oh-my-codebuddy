@@ -59,10 +59,11 @@ function buildCommandHook(
   };
 }
 
-export function buildManagedCodebuddyHooksConfig(
+function buildManagedHooksConfig(
   pkgRoot: string,
+  scriptName: "codebuddy-native-hook.js" | "codex-native-hook.js",
 ): ManagedCodebuddyHooksConfig {
-  const hookScript = join(pkgRoot, "dist", "scripts", "codebuddy-native-hook.js");
+  const hookScript = join(pkgRoot, "dist", "scripts", scriptName);
   const command = `node "${hookScript}"`;
 
   return {
@@ -98,7 +99,17 @@ export function buildManagedCodebuddyHooksConfig(
   };
 }
 
-export const buildManagedCodexHooksConfig = buildManagedCodebuddyHooksConfig;
+export function buildManagedCodebuddyHooksConfig(
+  pkgRoot: string,
+): ManagedCodebuddyHooksConfig {
+  return buildManagedHooksConfig(pkgRoot, "codebuddy-native-hook.js");
+}
+
+export function buildManagedCodexHooksConfig(
+  pkgRoot: string,
+): ManagedCodexHooksConfig {
+  return buildManagedHooksConfig(pkgRoot, "codex-native-hook.js");
+}
 
 export function parseCodebuddyHooksConfig(
   content: string,
@@ -163,11 +174,10 @@ function serializeCodebuddyHooksConfig(root: JsonObject): string {
   return JSON.stringify(root, null, 2) + "\n";
 }
 
-export function mergeManagedCodebuddyHooksConfig(
+function mergeManagedHooksConfig(
   existingContent: string | null | undefined,
-  pkgRoot: string,
+  managedConfig: ManagedCodebuddyHooksConfig,
 ): string {
-  const managedConfig = buildManagedCodebuddyHooksConfig(pkgRoot);
   const parsed =
     typeof existingContent === "string"
       ? parseCodebuddyHooksConfig(existingContent)
@@ -204,7 +214,25 @@ export function mergeManagedCodebuddyHooksConfig(
   return serializeCodebuddyHooksConfig(nextRoot);
 }
 
-export const mergeManagedCodexHooksConfig = mergeManagedCodebuddyHooksConfig;
+export function mergeManagedCodebuddyHooksConfig(
+  existingContent: string | null | undefined,
+  pkgRoot: string,
+): string {
+  return mergeManagedHooksConfig(
+    existingContent,
+    buildManagedCodebuddyHooksConfig(pkgRoot),
+  );
+}
+
+export function mergeManagedCodexHooksConfig(
+  existingContent: string | null | undefined,
+  pkgRoot: string,
+): string {
+  return mergeManagedHooksConfig(
+    existingContent,
+    buildManagedCodexHooksConfig(pkgRoot),
+  );
+}
 
 export function removeManagedCodebuddyHooks(
   existingContent: string,

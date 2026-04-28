@@ -22,7 +22,7 @@ function runOmb(
     encoding: 'utf-8',
     env: {
       ...process.env,
-      ...(resolvedHome && !envOverrides.CODEX_HOME ? { CODEX_HOME: join(resolvedHome, '.codex') } : {}),
+      ...(resolvedHome && !envOverrides.CODEBUDDY_HOME ? { CODEBUDDY_HOME: join(resolvedHome, '.codebuddy') } : {}),
       ...envOverrides,
     },
   });
@@ -194,7 +194,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildOmbConfig());
       await writeFile(
@@ -223,7 +223,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildOmbConfig());
       await writeFile(
@@ -256,12 +256,45 @@ describe('omb uninstall', () => {
     }
   });
 
+  it('uninstalls both provider homes when persisted provider is both', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-both-'));
+    try {
+      const home = join(wd, 'home');
+      await mkdir(home, { recursive: true });
+      const setupRes = runOmb(wd, ['setup', '--scope=project', '--provider=both'], {
+        HOME: home,
+      });
+      if (shouldSkipForSpawnPermissions(setupRes.error)) return;
+      assert.equal(setupRes.status, 0, setupRes.stderr || setupRes.stdout);
+
+      const res = runOmb(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /Resolved provider: both/);
+      assert.match(res.stdout, /Cleaned 2 hooks artifact\(s\)\./);
+
+      for (const providerDir of ['.codebuddy', '.codex']) {
+        const config = await readFile(join(wd, providerDir, 'config.toml'), 'utf-8');
+        assert.doesNotMatch(config, /oh-my-codebuddy \(OMB\) Configuration/);
+        assert.doesNotMatch(config, /omb_state/);
+        assert.doesNotMatch(config, /\[agents\.executor\]/);
+        assert.equal(existsSync(join(wd, providerDir, 'hooks.json')), false);
+        assert.equal(existsSync(join(wd, providerDir, 'prompts', 'executor.md')), false);
+        assert.equal(existsSync(join(wd, providerDir, 'agents', 'executor.toml')), false);
+        assert.equal(existsSync(join(wd, providerDir, 'skills', 'team', 'SKILL.md')), false);
+      }
+      assert.equal(existsSync(join(wd, 'AGENTS.md')), false);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
 
   it('preserves user config entries when removing OMB', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildMixedConfig());
 
@@ -290,7 +323,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildOmbConfig());
       await writeFile(
@@ -333,7 +366,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildConfigWithSeededModelContext());
 
@@ -358,7 +391,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildOmbConfig());
 
@@ -407,7 +440,7 @@ describe('omb uninstall', () => {
 
       // Create project-scoped setup
       const ombDir = join(wd, '.omb');
-      const codexDir = join(wd, '.codex');
+      const codexDir = join(wd, '.codebuddy');
       await mkdir(ombDir, { recursive: true });
       await mkdir(join(codexDir, 'prompts'), { recursive: true });
       await writeFile(join(ombDir, 'setup-scope.json'), JSON.stringify({ scope: 'project' }));
@@ -447,7 +480,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildOmbConfig());
 
@@ -469,7 +502,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       const canonicalHelp = join(codexDir, 'skills', 'help');
       const legacyHelp = join(home, '.agents', 'skills', 'help');
       await mkdir(canonicalHelp, { recursive: true });
@@ -478,6 +511,35 @@ describe('omb uninstall', () => {
       await writeFile(join(legacyHelp, 'SKILL.md'), '# legacy help\n');
 
       const res = runOmb(wd, ['uninstall', '--keep-config'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Warning: 1 overlapping skill names remain between .*\.codebuddy[\\/]+skills and .*\.agents[\\/]+skills; 1 differ in SKILL\.md content\. omb uninstall only removes the active canonical skill root; archive or remove ~\/\.agents\/skills if CodeBuddy still shows duplicates/,
+      );
+      assert.equal(existsSync(canonicalHelp), false, 'canonical OMB skill should be removed');
+      assert.equal(existsSync(join(home, '.agents', 'skills')), true, 'legacy skill root should remain for manual cleanup');
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('warns with Codex wording when --provider codex is used', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
+    try {
+      const home = join(wd, 'home');
+      const codexDir = join(home, '.codex');
+      const canonicalHelp = join(codexDir, 'skills', 'help');
+      const legacyHelp = join(home, '.agents', 'skills', 'help');
+      await mkdir(canonicalHelp, { recursive: true });
+      await mkdir(legacyHelp, { recursive: true });
+      await writeFile(join(canonicalHelp, 'SKILL.md'), '# canonical help\n');
+      await writeFile(join(legacyHelp, 'SKILL.md'), '# legacy help\n');
+
+      const res = runOmb(wd, ['uninstall', '--provider', 'codex', '--keep-config'], {
+        HOME: home,
+        CODEX_HOME: codexDir,
+      });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(
@@ -495,7 +557,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       const canonicalHelp = join(codexDir, 'skills', 'help');
       const legacyDoctor = join(home, '.agents', 'skills', 'doctor');
       await mkdir(canonicalHelp, { recursive: true });
@@ -508,10 +570,45 @@ describe('omb uninstall', () => {
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(
         res.stdout,
-        /Warning: legacy ~\/\.agents\/skills still exists \(1 skills\)\. omb uninstall does not remove that historical root automatically; archive or remove ~\/\.agents\/skills if Codex still shows stale or duplicate skills/,
+        /Warning: legacy ~\/\.agents\/skills still exists \(1 skills\)\. omb uninstall does not remove that historical root automatically; archive or remove ~\/\.agents\/skills if CodeBuddy still shows stale or duplicate skills/,
       );
       assert.equal(existsSync(canonicalHelp), false, 'canonical OMB skill should be removed');
       assert.equal(existsSync(join(home, '.agents', 'skills')), true, 'legacy skill root should remain for manual cleanup');
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('warns for both providers when --provider both is used', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-both-provider-warning-'));
+    try {
+      const home = join(wd, 'home');
+      const codexHome = join(home, '.codex');
+      const codebuddyHome = join(home, '.codebuddy');
+      const cbHelp = join(codebuddyHome, 'skills', 'help');
+      const cbLegacyHelp = join(home, '.agents', 'skills', 'help');
+      const codexHelp = join(codexHome, 'skills', 'help');
+      await mkdir(cbHelp, { recursive: true });
+      await mkdir(cbLegacyHelp, { recursive: true });
+      await mkdir(codexHelp, { recursive: true });
+      await writeFile(join(cbHelp, 'SKILL.md'), '# cb canonical help\n');
+      await writeFile(join(cbLegacyHelp, 'SKILL.md'), '# legacy help\n');
+      await writeFile(join(codexHelp, 'SKILL.md'), '# codex canonical help\n');
+
+      const res = runOmb(wd, ['uninstall', '--provider', 'both', '--keep-config'], {
+        HOME: home,
+        CODEX_HOME: codexHome,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Warning: 1 overlapping skill names remain between .*\.codebuddy[\\/]skills and .*\.agents[\\/]skills; 1 differ in SKILL\.md content\. omb uninstall only removes the active canonical skill root; archive or remove ~\/\.agents\/skills if CodeBuddy still shows duplicates/,
+      );
+      assert.match(
+        res.stdout,
+        /Warning: 1 overlapping skill names remain between .*\.codex[\\/]skills and .*\.agents[\\/]skills; 1 differ in SKILL\.md content\. omb uninstall only removes the active canonical skill root; archive or remove ~\/\.agents\/skills if Codex still shows duplicates/,
+      );
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
@@ -521,7 +618,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       const canonicalHelp = join(codexDir, 'skills', 'help');
       await mkdir(canonicalHelp, { recursive: true });
       await writeFile(join(canonicalHelp, 'SKILL.md'), '# canonical help\n');
@@ -540,7 +637,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const projectSkillsHelp = join(wd, '.codex', 'skills', 'help');
+      const projectSkillsHelp = join(wd, '.codebuddy', 'skills', 'help');
       const legacyHelp = join(home, '.agents', 'skills', 'help');
       await mkdir(projectSkillsHelp, { recursive: true });
       await mkdir(legacyHelp, { recursive: true });
@@ -564,7 +661,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-legacy-link-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       const canonicalSkillsRoot = join(codexDir, 'skills');
       const canonicalSkill = join(canonicalSkillsRoot, 'doctor');
       const legacyRoot = join(home, '.agents', 'skills');
@@ -577,7 +674,7 @@ describe('omb uninstall', () => {
         process.platform === 'win32' ? 'junction' : 'dir',
       );
 
-      const res = runOmb(wd, ['uninstall', '--keep-config'], { HOME: home, CODEX_HOME: codexDir });
+      const res = runOmb(wd, ['uninstall', '--keep-config'], { HOME: home, CODEBUDDY_HOME: codexDir });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.doesNotMatch(res.stdout, /legacy ~\/\.agents\/skills/);
@@ -614,7 +711,7 @@ describe('omb uninstall', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(join(codexDir, 'config.toml'), buildOmbConfig());
 
@@ -653,14 +750,14 @@ describe('omb uninstall', () => {
     }
   });
 
-  it('removes managed user-scope AGENTS.md from CODEX_HOME', async () => {
+  it('removes managed user-scope AGENTS.md from CODEX_HOME when provider is codex', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));
     try {
       const home = join(wd, 'home');
       const codexHome = join(home, '.codex');
       await mkdir(codexHome, { recursive: true });
       await mkdir(join(wd, '.omb'), { recursive: true });
-      await writeFile(join(wd, '.omb', 'setup-scope.json'), JSON.stringify({ scope: 'user' }));
+      await writeFile(join(wd, '.omb', 'setup-scope.json'), JSON.stringify({ scope: 'user', provider: 'codex' }));
       await writeFile(
         join(codexHome, 'AGENTS.md'),
         '<!-- AUTONOMY DIRECTIVE — DO NOT REMOVE -->\n'

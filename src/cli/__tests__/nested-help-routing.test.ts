@@ -30,7 +30,7 @@ describe('nested help routing', () => {
     [['hooks', '--help'], /Usage:\s*\n\s*omb hooks init/i],
     [['state', '--help'], /Usage:\s*omb state <read\|write\|clear\|list-active\|get-status>/i],
     [['tmux-hook', '--help'], /Usage:\s*\n\s*omb tmux-hook init/i],
-    [['ralph', '--help'], /omb ralph - Launch CodeBuddy with ralph persistence mode active/i],
+    [['ralph', '--help'], /omb ralph - Launch the selected leader CLI with ralph persistence mode active/i],
   ] satisfies Array<[string[], RegExp]>) {
     it(`routes ${argv.join(' ')} to command-local help`, async () => {
       const cwd = await mkdtemp(join(tmpdir(), 'omb-nested-help-'));

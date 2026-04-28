@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { updateModeState, startMode, readModeState } from '../modes/base.js';
 import { monitorTeam, resumeTeam, shutdownTeam, startTeam, type TeamRuntime, type TeamSnapshot } from '../team/runtime.js';
 import { DEFAULT_MAX_WORKERS } from '../team/state.js';
-import { sanitizeTeamName } from '../team/tmux-session.js';
+import { sanitizeTeamName, type TeamWorkerCli } from '../team/tmux-session.js';
 import { readTeamEvents, waitForTeamEvent } from '../team/state/events.js';
 import type { TeamEvent } from '../team/state.js';
 import { parseWorktreeMode, type WorktreeMode } from '../team/worktree.js';
@@ -35,6 +35,7 @@ interface ParsedTeamArgs {
   agentType: string;
   explicitAgentType: boolean;
   explicitWorkerCount: boolean;
+  workerCliPlan?: TeamWorkerCli[];
   task: string;
   teamName: string;
 }
@@ -122,6 +123,8 @@ const MIN_WORKER_COUNT = 1;
 const DEFAULT_SPARKSHELL_TAIL_LINES = 400;
 const MIN_SPARKSHELL_TAIL_LINES = 100;
 const MAX_SPARKSHELL_TAIL_LINES = 1000;
+const TEAM_WORKER_CLI_PROVIDERS = new Set<TeamWorkerCli>(['codebuddy', 'codex', 'claude', 'gemini']);
+const TEAM_WORKER_CLI_MAP_ENV = 'OMB_TEAM_WORKER_CLI_MAP';
 
 function isTerminalModePhase(phase: string): boolean {
   return ['complete', 'failed', 'cancelled'].includes(phase);
@@ -143,6 +146,9 @@ Notes:
 
 Examples:
   omb team 3:executor "fix failing tests"
+  omb team 2:codex "review architecture"
+  omb team 2:codebuddy:debugger "debug failing tests"
+  omb team 1:codex,1:codebuddy "compare implementations"
   omb team status my-team
   omb team status my-team --json
   omb team status my-team --tail-lines 600
@@ -877,13 +883,52 @@ function parseTeamArgs(args: string[], cwd: string = process.cwd()): ParsedTeamA
   let agentType = 'executor';
   let explicitAgentType = false;
   let explicitWorkerCount = false;
+  let workerCliPlan: TeamWorkerCli[] | undefined;
 
   if (tokens[0]?.toLowerCase() === 'ralph') {
     throw new Error('Deprecated usage: `omb team ralph ...` has been removed. Use `omb team ...` or run `omb ralph ...` separately (legacy `omb` alias still works).');
   }
 
   const first = tokens[0] || '';
-  const match = first.match(/^(\d+)(?::([a-z][a-z0-9-]*))?$/i);
+  const workerSpecRe = /^(\d+)(?::([a-z][a-z0-9-]*)(?::([a-z][a-z0-9-]*))?)?$/i;
+  if (first.includes(',')) {
+    // Trim whitespace around each comma-separated segment so inputs like
+    // "1:codex, 1:codebuddy" (copy/pasted with a space after the comma) still
+    // parse. Regex below is strict, so un-trimmed segments would otherwise fail.
+    const segments = first.split(',').map((segment) => segment.trim());
+    const parsedSegments: Array<{ count: number; cli: TeamWorkerCli; role?: string }> = [];
+    let hasPerWorkerRoles = false;
+    for (const segment of segments) {
+      const match = segment.match(workerSpecRe);
+      const maybeCli = match?.[2]?.toLowerCase();
+      if (!match || !maybeCli || !TEAM_WORKER_CLI_PROVIDERS.has(maybeCli as TeamWorkerCli)) {
+        throw new Error(`Invalid team worker spec "${first}". Use comma-separated N:provider specs, e.g. "1:codex,1:codebuddy", or a single N:agent-type spec.`);
+      }
+      const count = Number.parseInt(match[1], 10);
+      if (!Number.isFinite(count) || count < MIN_WORKER_COUNT || count > DEFAULT_MAX_WORKERS) {
+        throw new Error(`Invalid worker count "${match[1]}". Expected ${MIN_WORKER_COUNT}-${DEFAULT_MAX_WORKERS}.`);
+      }
+      if (match[3]) {
+        hasPerWorkerRoles = true;
+      }
+      parsedSegments.push({ count, cli: maybeCli as TeamWorkerCli, role: match[3] });
+    }
+
+    if (hasPerWorkerRoles) {
+      throw new Error('Comma-style team worker specs do not support per-worker roles. Use N:provider or a single N:provider:role.');
+    }
+
+    const total = parsedSegments.reduce((sum, segment) => sum + segment.count, 0);
+    if (total > DEFAULT_MAX_WORKERS) {
+      throw new Error(`Total worker count ${total} exceeds maximum ${DEFAULT_MAX_WORKERS}.`);
+    }
+    workerCount = total;
+    explicitWorkerCount = true;
+    workerCliPlan = parsedSegments.flatMap((segment) => Array.from({ length: segment.count }, () => segment.cli));
+    tokens.shift();
+  }
+
+  const match = workerCliPlan ? null : first.match(workerSpecRe);
   if (match) {
     const count = Number.parseInt(match[1], 10);
     if (!Number.isFinite(count) || count < MIN_WORKER_COUNT || count > DEFAULT_MAX_WORKERS) {
@@ -892,8 +937,20 @@ function parseTeamArgs(args: string[], cwd: string = process.cwd()): ParsedTeamA
     workerCount = count;
     explicitWorkerCount = true;
     if (match[2]) {
-      agentType = match[2];
-      explicitAgentType = true;
+      const normalizedType = match[2].toLowerCase();
+      if (TEAM_WORKER_CLI_PROVIDERS.has(normalizedType as TeamWorkerCli)) {
+        workerCliPlan = Array.from({ length: workerCount }, () => normalizedType as TeamWorkerCli);
+        if (match[3]) {
+          agentType = match[3];
+          explicitAgentType = true;
+        }
+      } else {
+        if (match[3]) {
+          throw new Error('Invalid team worker spec. Use N:role or N:provider:role where provider is codebuddy|codex|claude|gemini.');
+        }
+        agentType = match[2];
+        explicitAgentType = true;
+      }
     }
     tokens.shift();
   }
@@ -917,7 +974,7 @@ function parseTeamArgs(args: string[], cwd: string = process.cwd()): ParsedTeamA
   }
 
   const teamName = sanitizeTeamName(slugifyTask(effectiveTask));
-  return { workerCount, agentType, explicitAgentType, explicitWorkerCount, task: effectiveTask, teamName };
+  return { workerCount, agentType, explicitAgentType, explicitWorkerCount, workerCliPlan, task: effectiveTask, teamName };
 }
 
 export function parseTeamStartArgs(args: string[]): ParsedTeamStartArgs {
@@ -1232,6 +1289,15 @@ function distributeTasksToWorkers(
   return allocateTasksToWorkers(tasks, workers).map(({ allocation_reason: _allocationReason, ...task }) => task);
 }
 
+function resolveWorkerCliMapForCount(plan: TeamWorkerCli[] | undefined, workerCount: number): string | undefined {
+  if (!plan || plan.length === 0) return undefined;
+  const selected = plan.slice(0, workerCount);
+  if (selected.length !== workerCount) {
+    throw new Error(`worker CLI plan length ${selected.length} does not match worker count ${workerCount}`);
+  }
+  return selected.join(',');
+}
+
 async function ensureTeamModeState(
   parsed: ParsedTeamArgs,
   tasks?: Array<{ role?: string }>,
@@ -1261,6 +1327,7 @@ async function ensureTeamModeState(
       team_name: parsed.teamName,
       agent_count: parsed.workerCount,
       agent_types: roleDistribution,
+      worker_cli_map: resolveWorkerCliMapForCount(parsed.workerCliPlan, parsed.workerCount),
       available_agent_types: availableAgentTypes,
       staffing_summary: staffingPlan.staffingSummary,
       staffing_allocations: staffingPlan.allocations,
@@ -1276,6 +1343,7 @@ async function ensureTeamModeState(
     team_name: parsed.teamName,
     agent_count: parsed.workerCount,
     agent_types: roleDistribution,
+    worker_cli_map: resolveWorkerCliMapForCount(parsed.workerCliPlan, parsed.workerCount),
     available_agent_types: availableAgentTypes,
     staffing_summary: staffingPlan.staffingSummary,
     staffing_allocations: staffingPlan.allocations,
@@ -1608,24 +1676,33 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
     parsed.explicitWorkerCount,
   );
   const tasks = executionPlan.tasks;
+  const effectiveWorkerCliPlan = parsed.workerCliPlan?.slice(0, executionPlan.workerCount);
   const effectiveParsed = executionPlan.workerCount === parsed.workerCount
-    ? parsed
-    : { ...parsed, workerCount: executionPlan.workerCount };
+    ? { ...parsed, workerCliPlan: effectiveWorkerCliPlan }
+    : { ...parsed, workerCount: executionPlan.workerCount, workerCliPlan: effectiveWorkerCliPlan };
   const availableAgentTypes = await resolveAvailableAgentTypes(cwd);
   const staffingPlan = buildFollowupStaffingPlan('team', parsed.task, availableAgentTypes, {
     workerCount: executionPlan.workerCount,
     fallbackRole: resolveImplicitTeamFallbackRole(parsed.agentType, parsed.explicitAgentType),
   });
-  const runtime = await startTeam(
-    parsed.teamName,
-    parsed.task,
-    parsed.agentType,
-    executionPlan.workerCount,
-    tasks,
-    cwd,
-    { worktreeMode },
-  );
+  const workerCliMap = resolveWorkerCliMapForCount(effectiveWorkerCliPlan, executionPlan.workerCount);
+  const previousWorkerCliMap = process.env[TEAM_WORKER_CLI_MAP_ENV];
+  try {
+    if (workerCliMap) process.env[TEAM_WORKER_CLI_MAP_ENV] = workerCliMap;
+    const runtime = await startTeam(
+      parsed.teamName,
+      parsed.task,
+      parsed.agentType,
+      executionPlan.workerCount,
+      tasks,
+      cwd,
+      { worktreeMode },
+    );
 
-  await ensureTeamModeState(effectiveParsed, tasks);
-  await renderStartSummary(runtime, staffingPlan);
+    await ensureTeamModeState(effectiveParsed, tasks);
+    await renderStartSummary(runtime, staffingPlan);
+  } finally {
+    if (typeof previousWorkerCliMap === 'string') process.env[TEAM_WORKER_CLI_MAP_ENV] = previousWorkerCliMap;
+    else delete process.env[TEAM_WORKER_CLI_MAP_ENV];
+  }
 }

@@ -37,7 +37,7 @@ describe('omb doctor onboarding warning copy', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-copy-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(
         join(codexDir, 'settings.json'),
@@ -52,7 +52,7 @@ describe('omb doctor onboarding warning copy', () => {
 
       const res = runOmb(wd, ['doctor'], {
         HOME: home,
-        CODEBUDDY_HOME: join(home, '.codex'),
+        CODEBUDDY_HOME: join(home, '.codebuddy'),
       });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
@@ -74,7 +74,7 @@ describe('omb doctor onboarding warning copy', () => {
     try {
       await withPackagedExploreHarnessHidden(async () => {
         const home = join(wd, 'home');
-        const codexDir = join(home, '.codex');
+        const codexDir = join(home, '.codebuddy');
         const fakeBin = join(wd, 'bin');
         await mkdir(codexDir, { recursive: true });
         await mkdir(fakeBin, { recursive: true });
@@ -83,7 +83,7 @@ describe('omb doctor onboarding warning copy', () => {
 
         const res = runOmb(wd, ['doctor'], {
           HOME: home,
-          CODEBUDDY_HOME: join(home, '.codex'),
+          CODEBUDDY_HOME: join(home, '.codebuddy'),
           PATH: fakeBin,
         });
         if (shouldSkipForSpawnPermissions(res.error)) return;
@@ -103,7 +103,7 @@ describe('omb doctor onboarding warning copy', () => {
       const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-explore-binary-'));
       try {
         const home = join(wd, 'home');
-        const codexDir = join(home, '.codex');
+        const codexDir = join(home, '.codebuddy');
         const fakeBin = join(wd, 'bin');
         const packageBinDir = join(process.cwd(), 'bin');
         const packagedBinary = join(packageBinDir, process.platform === 'win32' ? 'omb-explore-harness.exe' : 'omb-explore-harness');
@@ -126,7 +126,7 @@ describe('omb doctor onboarding warning copy', () => {
         try {
           const res = runOmb(wd, ['doctor'], {
             HOME: home,
-            CODEBUDDY_HOME: join(home, '.codex'),
+            CODEBUDDY_HOME: join(home, '.codebuddy'),
             PATH: fakeBin,
           });
           if (shouldSkipForSpawnPermissions(res.error)) return;
@@ -158,7 +158,7 @@ describe('omb doctor onboarding warning copy', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-explore-routing-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       await mkdir(codexDir, { recursive: true });
       await writeFile(
         join(codexDir, 'settings.json'),
@@ -171,7 +171,7 @@ describe('omb doctor onboarding warning copy', () => {
 
       const res = runOmb(wd, ['doctor'], {
         HOME: home,
-        CODEBUDDY_HOME: join(home, '.codex'),
+        CODEBUDDY_HOME: join(home, '.codebuddy'),
       });
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
@@ -188,7 +188,7 @@ describe('omb doctor onboarding warning copy', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-skill-overlap-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       const canonicalHelp = join(codexDir, 'skills', 'help');
       const canonicalPlan = join(codexDir, 'skills', 'plan');
       const legacyHelp = join(home, '.agents', 'skills', 'help');
@@ -207,6 +207,36 @@ describe('omb doctor onboarding warning copy', () => {
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(
         res.stdout,
+        /Legacy skill roots: 1 overlapping skill names between .*\.codebuddy[\\/]+skills and .*\.agents[\\/]+skills; 1 differ in SKILL\.md content; CodeBuddy Enable\/Disable Skills may show duplicates until ~\/\.agents\/skills is cleaned up/,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('warns with Codex wording when overlap is reported for Codex provider', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-skill-overlap-codex-'));
+    try {
+      const home = join(wd, 'home');
+      const codexHome = join(home, '.codex');
+      const canonicalHelp = join(codexHome, 'skills', 'help');
+      const canonicalPlan = join(codexHome, 'skills', 'plan');
+      const legacyHelp = join(home, '.agents', 'skills', 'help');
+      await mkdir(canonicalHelp, { recursive: true });
+      await mkdir(canonicalPlan, { recursive: true });
+      await mkdir(legacyHelp, { recursive: true });
+      await writeFile(join(canonicalHelp, 'SKILL.md'), '# canonical help\n');
+      await writeFile(join(canonicalPlan, 'SKILL.md'), '# canonical plan\n');
+      await writeFile(join(legacyHelp, 'SKILL.md'), '# legacy help\n');
+
+      const res = runOmb(wd, ['doctor', '--provider', 'codex'], {
+        HOME: home,
+        CODEX_HOME: codexHome,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
         /Legacy skill roots: 1 overlapping skill names between .*\.codex[\\/]+skills and .*\.agents[\\/]+skills; 1 differ in SKILL\.md content; Codex Enable\/Disable Skills may show duplicates until ~\/\.agents\/skills is cleaned up/,
       );
     } finally {
@@ -218,7 +248,7 @@ describe('omb doctor onboarding warning copy', () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-skill-link-'));
     try {
       const home = join(wd, 'home');
-      const codexDir = join(home, '.codex');
+      const codexDir = join(home, '.codebuddy');
       const canonicalSkillsRoot = join(codexDir, 'skills');
       const canonicalHelp = join(canonicalSkillsRoot, 'help');
       const legacyRoot = join(home, '.agents', 'skills');
@@ -239,7 +269,7 @@ describe('omb doctor onboarding warning copy', () => {
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(
         res.stdout,
-        /Legacy skill roots: ~\/\.agents\/skills links to canonical .*\.codex[\\/]+skills; treating both paths as one shared skill root/,
+        /Legacy skill roots: ~\/\.agents\/skills links to canonical .*\.codebuddy[\\/]+skills; treating both paths as one shared skill root/,
       );
       assert.doesNotMatch(res.stdout, /\[!!\] Legacy skill roots:/);
     } finally {

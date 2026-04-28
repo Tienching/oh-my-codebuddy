@@ -310,6 +310,59 @@ describe('intentful bare workflow invocation support', () => {
     assert.ok(match);
     assert.equal(match.skill, 'ralplan');
   });
+
+  it('routes ecomode aliases to ultrawork with intent ("$ecomode run")', () => {
+    // ecomode is a merged compatibility alias for ultrawork; explicit $ecomode
+    // must activate ultrawork so native hooks pick up SkillActiveState.
+    const match = detectPrimaryKeyword('please $ecomode run this');
+    assert.ok(match);
+    assert.equal(match.skill, 'ultrawork');
+  });
+
+  it('routes "eco mode" prose to ultrawork', () => {
+    const match = detectPrimaryKeyword('switch to eco mode for this batch');
+    assert.ok(match);
+    assert.equal(match.skill, 'ultrawork');
+  });
+
+  it('does NOT activate ecomode for unrelated eco/budget prose without intent', () => {
+    // "eco-friendly", "budget constraints" etc. are common in normal text;
+    // without an explicit $ecomode / eco mode / budget mode phrasing we must
+    // stay quiet to avoid spinning up ultrawork on stray sentences.
+    assert.equal(
+      detectPrimaryKeyword('we need an eco-friendly design within the project budget'),
+      null,
+    );
+    assert.equal(
+      detectPrimaryKeyword('budget constraints forced an earlier review'),
+      null,
+    );
+  });
+
+  it('triggers web-clone from an explicit $web-clone request', () => {
+    const match = detectPrimaryKeyword('please $web-clone https://example.com');
+    assert.ok(match);
+    assert.equal(match.skill, 'web-clone');
+  });
+
+  it('triggers web-clone from "clone site" / "copy webpage" phrasing', () => {
+    const cloneSite = detectPrimaryKeyword('please clone site at https://example.com');
+    assert.ok(cloneSite);
+    assert.equal(cloneSite.skill, 'web-clone');
+    const cloneWebsite = detectPrimaryKeyword('please clone website for me');
+    assert.ok(cloneWebsite);
+    assert.equal(cloneWebsite.skill, 'web-clone');
+    const copyWebpage = detectPrimaryKeyword('please copy webpage to disk');
+    assert.ok(copyWebpage);
+    assert.equal(copyWebpage.skill, 'web-clone');
+  });
+
+  it('does NOT activate web-clone for unrelated "clone" prose without intent', () => {
+    // Generic cloning talk (git clone, test doubles, etc.) must not spin up
+    // the web-clone pipeline.
+    assert.equal(detectPrimaryKeyword('please git clone that repository'), null);
+    assert.equal(detectPrimaryKeyword('the fake clone test double still fails'), null);
+  });
 });
 
 describe('keyword registry coverage', () => {
@@ -327,6 +380,25 @@ describe('keyword registry coverage', () => {
     assert.ok(registryKeywords.has("don't assume"));
     assert.ok(registryKeywords.has('interview me'));
     assert.ok(registryKeywords.has('autoresearch'));
+  });
+
+  it('registers web-clone activation keywords so clone pipeline can fire from prose', () => {
+    // web-clone is an active skill per catalog/manifest.json, so the
+    // keyword-detector must recognise its AGENTS-documented triggers;
+    // otherwise native-hook UserPromptSubmit never activates web-clone state.
+    const registryKeywords = new Set(KEYWORD_TRIGGER_DEFINITIONS.map((v) => v.keyword.toLowerCase()));
+    for (const trigger of ['web-clone', 'clone site', 'clone website', 'copy webpage']) {
+      assert.ok(
+        registryKeywords.has(trigger),
+        `expected registry to include web-clone trigger "${trigger}"`,
+      );
+    }
+    const webCloneSkills = KEYWORD_TRIGGER_DEFINITIONS
+      .filter((entry) => ['web-clone', 'clone site', 'clone website', 'copy webpage'].includes(entry.keyword))
+      .map((entry) => entry.skill);
+    for (const skill of webCloneSkills) {
+      assert.equal(skill, 'web-clone', 'web-clone triggers must route to the web-clone skill');
+    }
   });
 });
 

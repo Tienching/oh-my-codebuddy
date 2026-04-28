@@ -13,12 +13,27 @@ import type { TeamReminderDirective } from "./reminder-intents.js";
 
 const TEAM_OVERLAY_START = "<!-- OMB:TEAM:WORKER:START -->";
 const TEAM_OVERLAY_END = "<!-- OMB:TEAM:WORKER:END -->";
+const LEADER_CLI_ENV = "OMB_LEADER_CLI";
 const SKILL_REFERENCE_PATTERN = /\/skills\/([^/\s`]+)\/SKILL\.md\b/g;
 const AGENTS_LOCK_PATH = [".omb", "state", "agents-md.lock"];
 const LOCK_OWNER_FILE = "owner.json";
 const LOCK_TIMEOUT_MS = 5000;
 const LOCK_POLL_INTERVAL_MS = 100;
 const LOCK_STALE_MS = 30_000;
+
+function resolveLeaderCliFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): "codebuddy" | "codex" | null {
+  const raw = String(env[LEADER_CLI_ENV] ?? "").trim().toLowerCase();
+  if (raw === "codex") return "codex";
+  if (raw === "codebuddy") return "codebuddy";
+  return null;
+}
+
+function resolveWorkerUserHome(env: NodeJS.ProcessEnv = process.env): string {
+  const leaderCli = resolveLeaderCliFromEnv(env);
+  return leaderCli === "codex" ? codexHome() : codebuddyHome();
+}
 
 interface WorkerRootAgentsOptions {
   teamName: string;
@@ -436,7 +451,7 @@ function dropShadowedSkillReferenceLines(
 
 /**
  * Write a team-scoped model instructions file that composes user-level
- * CODEBUDDY_HOME AGENTS.md (with CODEX_HOME compatibility fallback), the
+ * CODEBUDDY_HOME AGENTS.md, the
  * project's AGENTS.md (if any), and the worker overlay. This avoids mutating
  * the source AGENTS.md files directly.
  *
@@ -448,9 +463,8 @@ export async function writeTeamWorkerInstructionsFile(
   overlay: string,
 ): Promise<string> {
   const baseParts: string[] = [];
-  const primaryUserAgentsPath = join(codebuddyHome(), "AGENTS.md");
-  const legacyUserAgentsPath = join(codexHome(), "AGENTS.md");
-  const sourcePaths = [primaryUserAgentsPath, legacyUserAgentsPath, join(cwd, "AGENTS.md")];
+  const userAgentsPath = join(resolveWorkerUserHome(), "AGENTS.md");
+  const sourcePaths = [userAgentsPath, join(cwd, "AGENTS.md")];
   const seenPaths = new Set<string>();
   const installedSkills = await listInstalledSkillDirectories(cwd);
   const projectSkillNames = new Set(
@@ -471,7 +485,7 @@ export async function writeTeamWorkerInstructionsFile(
     }
 
     content = stripOverlayFromContent(content).trim();
-    if (sourcePath === primaryUserAgentsPath || sourcePath === legacyUserAgentsPath) {
+    if (sourcePath === userAgentsPath) {
       content = dropShadowedSkillReferenceLines(
         content,
         projectSkillNames,

@@ -40,8 +40,8 @@ function runOmb(
     encoding: "utf-8",
     env: {
       ...process.env,
-      ...(resolvedHome && !envOverrides.CODEX_HOME
-        ? { CODEX_HOME: join(resolvedHome, ".codex") }
+      ...(resolvedHome && !envOverrides.CODEBUDDY_HOME
+        ? { CODEBUDDY_HOME: join(resolvedHome, ".codebuddy") }
         : {}),
       ...envOverrides,
     },
@@ -99,7 +99,7 @@ describe("omb setup/uninstall shared ownership for native hooks", () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-hooks-existing-user-file-"));
     try {
       const home = join(wd, "home");
-      const codexDir = join(wd, ".codex");
+      const codexDir = join(wd, ".codebuddy");
       await mkdir(home, { recursive: true });
       await mkdir(codexDir, { recursive: true });
 
@@ -157,7 +157,7 @@ describe("omb setup/uninstall shared ownership for native hooks", () => {
       if (shouldSkipForSpawnPermissions(initial.error)) return;
       assert.equal(initial.status, 0, initial.stderr || initial.stdout);
 
-      const hooksPath = join(wd, ".codex", "hooks.json");
+      const hooksPath = join(wd, ".codebuddy", "hooks.json");
       const generated = await readHooksJson(hooksPath);
       const generatedSessionStart = generated.hooks?.SessionStart ?? [];
       assert.ok(generatedSessionStart.length > 0, "setup should generate managed SessionStart hooks");
@@ -229,7 +229,7 @@ describe("omb setup/uninstall shared ownership for native hooks", () => {
       if (shouldSkipForSpawnPermissions(initial.error)) return;
       assert.equal(initial.status, 0, initial.stderr || initial.stdout);
 
-      const hooksPath = join(wd, ".codex", "hooks.json");
+      const hooksPath = join(wd, ".codebuddy", "hooks.json");
       const generated = await readHooksJson(hooksPath);
 
       await writeHooksJson(hooksPath, {

@@ -2,7 +2,7 @@
  * Legacy alias regression test matrix (E1-T05).
  *
  * Table-driven tests covering every canonical↔legacy alias pair:
- *   - CODEBUDDY_HOME vs CODEX_HOME priority
+ *   - CODEBUDDY_HOME vs CODEX_HOME provider separation
  *   - .codebuddy vs .codex directory detection
  *   - canonical OMB command has no legacy binary alias
  *   - OMB_* env var priority
@@ -53,10 +53,10 @@ async function cleanupTmpDir(): Promise<void> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// SECTION 1: CODEBUDDY_HOME vs CODEX_HOME priority
+// SECTION 1: CODEBUDDY_HOME vs CODEX_HOME provider separation
 // ══════════════════════════════════════════════════════════════════════════
 
-describe("E1-T05: CODEBUDDY_HOME vs CODEX_HOME priority matrix", () => {
+describe("E1-T05: CODEBUDDY_HOME vs CODEX_HOME provider-home matrix", () => {
   interface HomeTestCase {
     name: string;
     env: Record<string, string>;
@@ -69,12 +69,12 @@ describe("E1-T05: CODEBUDDY_HOME vs CODEX_HOME priority matrix", () => {
       name: "canonical only",
       env: { CODEBUDDY_HOME: "/cb" },
       expectCanonical: "/cb",
-      expectLegacy: "/cb",
+      expectLegacy: "default",
     },
     {
       name: "legacy only",
       env: { CODEX_HOME: "/codex" },
-      expectCanonical: "/codex",
+      expectCanonical: "default",
       expectLegacy: "/codex",
     },
     {
@@ -90,16 +90,16 @@ describe("E1-T05: CODEBUDDY_HOME vs CODEX_HOME priority matrix", () => {
       expectLegacy: "default",
     },
     {
-      name: "canonical empty string — falls to legacy",
+      name: "canonical empty string — falls to default",
       env: { CODEBUDDY_HOME: "", CODEX_HOME: "/codex" },
-      expectCanonical: "/codex",
+      expectCanonical: "default",
       expectLegacy: "/codex",
     },
     {
-      name: "legacy empty string — falls to canonical",
+      name: "legacy empty string — falls to default for Codex",
       env: { CODEX_HOME: "", CODEBUDDY_HOME: "/cb" },
       expectCanonical: "/cb",
-      expectLegacy: "/cb",
+      expectLegacy: "default",
     },
     {
       name: "both empty — default",
@@ -315,9 +315,9 @@ describe("E1-T05: Setup scope migration rules", () => {
     assert.equal(rule.to, ".omb");
   });
 
-  it("legacy-codex-dir rule has autoFix=true", () => {
+  it("legacy-codex-dir rule has autoFix=false", () => {
     const rule = COMPAT_RULES.find((r) => r.id === "legacy-codex-dir");
-    assert.equal(rule?.autoFix, true);
+    assert.equal(rule?.autoFix, false);
   });
 
   it("legacy-omb-state rule has autoFix=false", () => {
@@ -328,6 +328,11 @@ describe("E1-T05: Setup scope migration rules", () => {
   it("legacy-omb-state is deprecated", () => {
     const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
     assert.equal(rule?.status, "deprecated");
+  });
+
+  it("legacy-codex-dir is a removal candidate", () => {
+    const rule = COMPAT_RULES.find((r) => r.id === "legacy-codex-dir");
+    assert.equal(rule?.status, "removal_candidate");
   });
 
   it("legacy-codex-dir condition detects .codex directory", async () => {

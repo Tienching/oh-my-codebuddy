@@ -123,4 +123,40 @@ describe('omb resume', () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
+
+  it('uses Codex resume subcommand when --leader-cli codex is selected', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-resume-cli-codex-'));
+    try {
+      const home = join(wd, 'home');
+      const fakeBin = join(wd, 'bin');
+      const fakeCodexPath = join(fakeBin, 'codex');
+      const fakeCodebuddyPath = join(fakeBin, 'codebuddy');
+      const fakePsPath = join(fakeBin, 'ps');
+
+      await mkdir(home, { recursive: true });
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(fakeCodexPath, '#!/bin/sh\nprintf \'fake-codex:%s\\n\' "$*"\n');
+      await chmod(fakeCodexPath, 0o755);
+      await writeFile(fakeCodebuddyPath, '#!/bin/sh\nprintf \'fake-codebuddy:%s\\n\' "$*"\n');
+      await chmod(fakeCodebuddyPath, 0o755);
+      await writeFile(fakePsPath, '#!/bin/sh\nexit 0\n');
+      await chmod(fakePsPath, 0o755);
+
+      const result = runOmb(wd, ['resume', '--leader-cli', 'codex', '--last'], {
+        HOME: home,
+        PATH: fakeBin,
+        OMB_AUTO_UPDATE: '0',
+        OMB_NOTIFY_FALLBACK: '0',
+        OMB_HOOK_DERIVED_SIGNALS: '0',
+      });
+
+      assert.equal(result.status, 0, result.error || result.stderr || result.stdout);
+      assert.match(result.stdout, /fake-codex:resume --last\b/);
+      assert.match(result.stdout, /-c model_instructions_file="/);
+      assert.doesNotMatch(result.stdout, /fake-codebuddy/);
+      assert.doesNotMatch(result.stdout, /--continue\b/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
 });

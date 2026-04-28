@@ -814,7 +814,7 @@ function resolveWorkerLaunchArgsForScaling(
   preferredReasoning?: TeamReasoningEffort,
 ): string[] {
   const inheritedArgs: string[] = [];
-  const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEBUDDY_HOME ?? env.CODEX_HOME);
+  const fallbackModel = resolveAgentDefaultModel(agentType, env.CODEBUDDY_HOME);
 
   return resolveTeamWorkerLaunchArgs({
     existingRaw: env.OMB_TEAM_WORKER_LAUNCH_ARGS ?? env.OMB_TEAM_WORKER_LAUNCH_ARGS,

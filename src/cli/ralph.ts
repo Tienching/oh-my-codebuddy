@@ -8,24 +8,27 @@ import {
   resolveAvailableAgentTypes,
 } from '../team/followup-planner.js';
 import { formatCliText } from './brand.js';
+import { extractLeaderCliArgs, type LeaderCli } from './runtime/launch-pipeline.js';
 
 export function getRalphHelp(): string {
-  return formatCliText(`{cmd} ralph - Launch {product} with ralph persistence mode active
+  return formatCliText(`{cmd} ralph - Launch the selected leader CLI with ralph persistence mode active
 
 Usage:
   {cmd} ralph [task text...]
   {cmd} ralph --prd "<task text>"
-  {cmd} ralph [ralph-options] [codebuddy-args...] [task text...]
+  {cmd} ralph [ralph-options] [leader-cli-args...] [task text...]
 
 Options:
   --help, -h           Show this help message
   --prd <task text>    PRD mode shortcut: mark the task text explicitly
   --prd=<task text>    Same as --prd "<task text>"
+  --leader-cli <name>  Select leader CLI runtime: codebuddy (default) | codex
+                       (--cli is kept as a compatibility alias)
   --no-deslop         Skip the final ai-slop-cleaner pass
 
 PRD mode:
   Ralph initializes persistence artifacts in .omb/ so PRD and progress
-  state can survive across CodeBuddy sessions. Provide task text either as
+  state can survive across leader CLI sessions. Provide task text either as
   positional words or with --prd.
 
 Common patterns:
@@ -36,7 +39,7 @@ Common patterns:
 `);
 }
 
-const VALUE_TAKING_FLAGS = new Set(['--model', '--provider', '--config', '-c', '-i', '--images-dir']);
+const VALUE_TAKING_FLAGS = new Set(['--model', '--provider', '--config', '-c', '-i', '--images-dir', '--leader-cli', '--cli']);
 const RALPH_OMB_FLAGS = new Set(['--prd', '--no-deslop']);
 const RALPH_APPEND_ENV = 'OMB_RALPH_APPEND_INSTRUCTIONS_FILE';
 
@@ -132,7 +135,7 @@ export function buildRalphAppendInstructions(
     'You are in OMB Ralph persistence mode.',
     `Primary task: ${task}`,
     'Parallelism guidance:',
-    '- Prefer CodeBuddy native subagents for independent parallel subtasks.',
+    '- Prefer native subagents from the selected leader CLI for independent parallel subtasks.',
     '- Treat `.omb/state/subagent-tracking.json` as the native subagent activity ledger for this session.',
     '- Do not declare the task complete, and do not transition into final verification/completion, while active native subagent threads are still running.',
     '- Before closing a verification wave, confirm that active native subagent threads have drained.',
@@ -149,6 +152,10 @@ export function buildRalphAppendInstructions(
       : '- Step 7.6 must rerun the current tests/build/lint verification after ai-slop-cleaner; if regression fails, roll back cleaner changes or fix and retry before completion.',
     '</ralph_native_subagents>',
   ].join('\n');
+}
+
+function leaderCliDisplayName(leaderCli: LeaderCli): string {
+  return leaderCli === 'codex' ? 'Codex' : 'CodeBuddy';
 }
 
 async function writeRalphSessionFiles(
@@ -175,6 +182,7 @@ export async function ralphCommand(args: string[]): Promise<void> {
     console.log(getRalphHelp());
     return;
   }
+  const { leaderCli } = extractLeaderCliArgs(normalizedArgs, process.env);
   const artifacts = await ensureCanonicalRalphArtifacts(cwd);
   const approvedHint = readApprovedExecutionLaunchHint(cwd, 'ralph');
   const explicitTask = extractRalphTaskDescription(normalizedArgs);
@@ -188,11 +196,12 @@ export async function ralphCommand(args: string[]): Promise<void> {
     current_phase: 'starting',
     canonical_progress_path: artifacts.canonicalProgressPath,
     available_agent_types: availableAgentTypes,
+    leader_cli: leaderCli,
     staffing_summary: staffingPlan.staffingSummary,
     staffing_allocations: staffingPlan.allocations,
     native_subagents_enabled: true,
     native_subagent_tracking_path: '.omb/state/subagent-tracking.json',
-    native_subagent_policy: 'Parallel Codex subagents are allowed for independent work, but phase completion must wait for active native subagent threads to finish.',
+    native_subagent_policy: 'Parallel native subagents from the selected leader CLI are allowed for independent work, but phase completion must wait for active native subagent threads to finish.',
     deslop_enabled: !noDeslop,
     deslop_opt_out: noDeslop,
     deslop_changed_files_path: sessionFiles.changedFilesPath,
@@ -208,7 +217,7 @@ export async function ralphCommand(args: string[]): Promise<void> {
   if (artifacts.migratedProgress) {
     console.log('[ralph] Migrated legacy progress -> ' + artifacts.canonicalProgressPath);
   }
-  console.log('[ralph] Ralph persistence mode active. Launching CodeBuddy...');
+  console.log(`[ralph] Ralph persistence mode active. Launching ${leaderCliDisplayName(leaderCli)}...`);
   console.log(`[ralph] available_agent_types: ${staffingPlan.rosterSummary}`);
   console.log(`[ralph] staffing_plan: ${staffingPlan.staffingSummary}`);
   const { launchWithHud } = await import('./index.js');

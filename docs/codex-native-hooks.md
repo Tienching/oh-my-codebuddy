@@ -6,21 +6,23 @@ This page is the canonical answer to:
 
 ## Install surface
 
-`omb setup` now owns both of these native hook artifacts in the resolved CodeBuddy home:
+`omb setup` now owns both of these native hook artifacts in the resolved provider home:
 
-- `config.toml` (`.codebuddy/config.toml` primary, legacy `.codex/config.toml` compatible) → enables `[features].codex_hooks = true`
-- `hooks.json` (`.codebuddy/hooks.json` primary, legacy `.codex/hooks.json` compatible) → registers the OMB-managed native hook command while preserving non-OMB hook entries already in the file
+- CodeBuddy provider: `.codebuddy/config.toml` and `.codebuddy/hooks.json`
+- Codex provider (`--provider codex` or `--provider both`): `.codex/config.toml` and `.codex/hooks.json`
+
+`config.toml` enables `[features].codex_hooks = true`; `hooks.json` registers the OMB-managed native hook command while preserving non-OMB hook entries already in the file.
 
 For project scope, `.gitignore` keeps generated hook state out of source control.
 `omb uninstall` removes only the OMB-managed wrapper entries from `hooks.json`; if user hooks remain, the file stays in place.
 
 ## Ownership split
 
-- **Native CodeBuddy hooks**: `CODEBUDDY_HOME/hooks.json` (`.codebuddy` primary, `.codex` compatible)
+- **Native CodeBuddy hooks**: `CODEBUDDY_HOME/hooks.json`
 - **OMB plugin hooks**: `.omb/hooks/*.mjs`
 - **tmux/runtime fallbacks**: `omb tmux-hook`, notify-hook, derived watcher, idle/session-end reporters
 
-OMB only owns the wrapper entries that invoke `dist/scripts/codebuddy-native-hook.js`; uninstall also cleans up legacy `codex-native-hook.js` wrappers for compatibility. User-managed hook entries in the same `hooks.json` file are preserved across `omb setup` refreshes and `omb uninstall`.
+OMB only owns the wrapper entries that invoke the provider-specific native hook script (`dist/scripts/codebuddy-native-hook.js` for the CodeBuddy provider, `dist/scripts/codex-native-hook.js` for the Codex provider); uninstall also cleans up legacy wrappers from the other provider for compatibility. User-managed hook entries in the same `hooks.json` file are preserved across `omb setup` refreshes and `omb uninstall`.
 
 ## Mapping matrix
 
@@ -50,9 +52,9 @@ OMB only owns the wrapper entries that invoke `dist/scripts/codebuddy-native-hoo
 
 When validating hooks, keep the proof boundary explicit:
 
-1. **Native CodeBuddy hook proof**
-   - `omb setup` wrote the resolved `hooks.json` in the CodeBuddy home (`.codebuddy` primary, `.codex` compatibility alias)
-   - native hook execution invoked `dist/scripts/codebuddy-native-hook.js`
+1. **Native provider hook proof**
+   - `omb setup` wrote the resolved `hooks.json` in the active provider home (`.codebuddy` for CodeBuddy, `.codex` for Codex)
+   - native hook execution invoked the provider-specific script: `dist/scripts/codebuddy-native-hook.js` (CodeBuddy provider) or `dist/scripts/codex-native-hook.js` (Codex provider)
 2. **OMB plugin proof**
    - plugin dispatch/log evidence exists under `.omb/logs/hooks-*.jsonl`
 3. **Fallback proof**

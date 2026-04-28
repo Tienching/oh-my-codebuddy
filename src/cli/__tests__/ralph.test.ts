@@ -22,6 +22,11 @@ describe('extractRalphTaskDescription', () => {
   it('excludes --model value from task text', () => {
     assert.equal(extractRalphTaskDescription(['--model', 'gpt-5', 'fix', 'the', 'bug']), 'fix the bug');
   });
+  it('excludes leader CLI selector values from task text', () => {
+    assert.equal(extractRalphTaskDescription(['--leader-cli', 'codex', 'fix', 'the', 'bug']), 'fix the bug');
+    assert.equal(extractRalphTaskDescription(['--cli', 'codex', 'fix', 'the', 'bug']), 'fix the bug');
+    assert.equal(extractRalphTaskDescription(['--leader-cli=codex', 'fix', 'the', 'bug']), 'fix the bug');
+  });
   it('supports -- separator', () => {
     assert.equal(extractRalphTaskDescription(['--model', 'gpt-5', '--', 'fix', '--weird-name']), 'fix --weird-name');
   });
@@ -72,6 +77,8 @@ describe('ralph deslop launch wiring', () => {
       noDeslop: false,
       approvedHint: null,
     });
+    assert.match(instructions, /selected leader CLI/i);
+    assert.doesNotMatch(instructions, /CodeBuddy native subagents/i);
     assert.match(instructions, /ai-slop-cleaner/i);
     assert.match(instructions, /changed files only/i);
     assert.match(instructions, /\.omb\/ralph\/changed-files\.txt/);

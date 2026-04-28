@@ -19,7 +19,7 @@ status, earliest removal version, and migration path.
 
 | Canonical | Legacy | Status | Earliest Removal | Migration |
 |-----------|--------|--------|-----------------|-----------|
-| `CODEBUDDY_HOME` | `CODEX_HOME` | active_compat | v2.0 | Set `CODEBUDDY_HOME` instead of `CODEX_HOME` |
+| `CODEBUDDY_HOME` | `CODEX_HOME` | removal_candidate | v0.13 | Set `CODEBUDDY_HOME`; `CODEX_HOME` is only for Codex provider homes |
 | `OMB_ENTRY_PATH` | `OMB_ENTRY_PATH` | active_compat | v2.0 | Set `OMB_ENTRY_PATH` instead of `OMB_ENTRY_PATH` |
 | `OMB_RUNTIME_BRIDGE` | `OMB_RUNTIME_BRIDGE` | active_compat | v2.0 | Set `OMB_RUNTIME_BRIDGE` instead of `OMB_RUNTIME_BRIDGE` |
 | `OMB_RUNTIME_BINARY` | `OMB_RUNTIME_BINARY` | active_compat | v2.0 | Set `OMB_RUNTIME_BINARY` instead of `OMB_RUNTIME_BINARY` |
@@ -51,15 +51,22 @@ status, earliest removal version, and migration path.
 
 ## Resolution Priority
 
-All alias pairs follow the same resolution priority:
+CodeBuddy and Codex provider homes no longer cross-fallback to each other:
 
-1. **Canonical name** (e.g. `CODEBUDDY_HOME`, `OMB_ENTRY_PATH`)
-2. **Legacy name** (e.g. `CODEX_HOME`, `OMB_ENTRY_PATH`)
-3. **Default value** (e.g. `~/.codebuddy`, `null`)
+- CodeBuddy home: `CODEBUDDY_HOME` → `~/.codebuddy`
+- Codex home: `CODEX_HOME` → `~/.codex`
 
-For directory reads, canonical path is tried first; legacy path is a
-read-through fallback. For writes, canonical path is always written; legacy
-path is written only when alias status is `active_compat`.
+Other remaining alias pairs that are still marked `active_compat` follow the
+same resolution priority:
+
+1. **Canonical name** (for example `OMB_ENTRY_PATH`)
+2. **Legacy name** (for example an older `OMB_*` alias)
+3. **Default value** (for example `null`)
+
+For directory reads, canonical path is tried first only for alias pairs that
+remain active. Legacy paths are not read as fallbacks once their alias status is
+`removal_candidate`. For writes, canonical path is always written; legacy path
+is written only when alias status is `active_compat`.
 
 ## Dual-Write Gate
 
@@ -70,7 +77,7 @@ Legacy paths receive writes only when the corresponding alias has status
 
 ## Deprecation Timeline
 
-- **v0.12** (current): All aliases at `active_compat` or `read_only`
+- **v0.12** (current): CodeBuddy no longer reads `CODEX_HOME` as a home fallback; remaining aliases are `active_compat`, `read_only`, or `removal_candidate`
 - **v1.0**: `.codex` directory transitions from `read_only` to `write_disabled`
 - **v1.14**: `.codex` directory becomes `removal_candidate`; symlink creation stops
 - **v2.0**: All legacy aliases removed; `omb` binary symlink removed
@@ -82,16 +89,20 @@ When a legacy alias status changes, add a deprecation entry to CHANGELOG:
 ```markdown
 ### Deprecated
 
-- **CODEX_HOME** env var: status changed from `active_compat` to `warn_only`.
-  Use `CODEBUDDY_HOME` instead. Will be removed in v2.0.
+- **OMB_LEGACY_EXAMPLE** env var: status changed from `active_compat` to `warn_only`.
+  Use `OMB_CANONICAL_EXAMPLE` instead. Will be removed in v2.0.
   ([alias registry](./docs/deprecation-policy.md))
 
 ### Removed
 
-- **~/.codex** directory: no longer read as fallback.
-  Migrate to `~/.codebuddy` before upgrading.
+- **~/.legacy-example** directory: no longer read as fallback.
+  Migrate to `~/.canonical-example` before upgrading.
   ([alias registry](./docs/deprecation-policy.md))
 ```
+
+> Example uses placeholder names so the format doesn't drift as individual
+> aliases in the live matrix change status. For the current per-alias status,
+> see the matrix at the top of this file.
 
 ### Entry Guidelines
 

@@ -5,7 +5,7 @@
  * minimum interval between dispatches. Similar to idle-cooldown.ts but
  * specifically for dispatch-related notifications.
  *
- * Config key : notifications.dispatchCooldownSeconds in ~/.codex/.omb-config.json
+ * Config key : notifications.dispatchCooldownSeconds in ~/.codebuddy/.omb-config.json
  * Env var    : OMB_DISPATCH_COOLDOWN_SECONDS  (overrides config)
  * State file : .omb/state/dispatch-notif-cooldown.json
  *              (session-scoped when sessionId is available)
@@ -25,7 +25,7 @@ const SESSION_ID_SAFE_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/;
  *
  * Resolution order:
  *   1. OMB_DISPATCH_COOLDOWN_SECONDS env var
- *   2. notifications.dispatchCooldownSeconds in ~/.codex/.omb-config.json
+ *   2. notifications.dispatchCooldownSeconds in ~/.codebuddy/.omb-config.json
  *   3. Default: 60 seconds
  */
 export function getDispatchNotificationCooldownSeconds(): number {

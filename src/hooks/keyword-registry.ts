@@ -18,6 +18,14 @@ export const KEYWORD_TRIGGER_DEFINITIONS: readonly KeywordTriggerDefinition[] = 
   { keyword: 'ultrawork', skill: 'ultrawork', priority: 10, guidance: 'Activate ultrawork parallel execution mode' },
   { keyword: 'ulw', skill: 'ultrawork', priority: 10, guidance: 'Activate ultrawork parallel execution mode' },
   { keyword: 'parallel', skill: 'ultrawork', priority: 10, guidance: 'Activate ultrawork parallel execution mode' },
+  // `ecomode`/`eco`/`budget` are compatibility aliases: the ecomode skill was
+  // merged into ultrawork (`src/modes/base.ts` DeprecatedModeName). They still
+  // need registry entries so native hooks activate `ultrawork` SkillActiveState
+  // when prose mentions them; otherwise AGENTS.md documents triggers that
+  // runtime never records.
+  { keyword: 'ecomode', skill: 'ultrawork', priority: 9, guidance: 'Activate ultrawork parallel execution mode (ecomode is a merged compatibility alias)' },
+  { keyword: 'eco', skill: 'ultrawork', priority: 9, guidance: 'Activate ultrawork parallel execution mode (eco is a merged compatibility alias)' },
+  { keyword: 'budget', skill: 'ultrawork', priority: 9, guidance: 'Activate ultrawork parallel execution mode (budget is a merged compatibility alias)' },
   { keyword: 'ultraqa', skill: 'ultraqa', priority: 8, guidance: 'Activate UltraQA cycling workflow' },
   { keyword: 'analyze', skill: 'analyze', priority: 7, guidance: 'Activate deep analysis workflow' },
   { keyword: 'investigate', skill: 'analyze', priority: 7, guidance: 'Activate deep analysis workflow' },
@@ -56,6 +64,11 @@ export const KEYWORD_TRIGGER_DEFINITIONS: readonly KeywordTriggerDefinition[] = 
   { keyword: 'review code', skill: 'code-review', priority: 6, guidance: 'Activate code-review workflow' },
   { keyword: 'security review', skill: 'security-review', priority: 6, guidance: 'Activate security-review workflow' },
   { keyword: 'autoresearch', skill: 'autoresearch', priority: 8, guidance: 'Activate autoresearch workflow' },
+
+  { keyword: 'web-clone', skill: 'web-clone', priority: 7, guidance: 'Activate web-clone pipeline' },
+  { keyword: 'clone site', skill: 'web-clone', priority: 7, guidance: 'Activate web-clone pipeline' },
+  { keyword: 'clone website', skill: 'web-clone', priority: 7, guidance: 'Activate web-clone pipeline' },
+  { keyword: 'copy webpage', skill: 'web-clone', priority: 7, guidance: 'Activate web-clone pipeline' },
 ] as const;
 
 export function compareKeywordMatches(a: { priority: number; keyword: string }, b: { priority: number; keyword: string }): number {

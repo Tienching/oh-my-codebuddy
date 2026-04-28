@@ -128,37 +128,20 @@ Specialists remain available through skill/keyword routing when the task clearly
 ---
 
 <keyword_detection>
-When the user message contains a mapped keyword, activate the corresponding skill immediately.
-Do not ask for confirmation.
+Keyword routing is implemented primarily by native `UserPromptSubmit` hooks and the generated keyword registry. Treat hook-injected routing context as authoritative for the current turn, then load the named `SKILL.md` or prompt file as instructed.
 
-Supported workflow triggers include: `ralph`, `autopilot`, `ultrawork`, `ultraqa`, `cleanup`/`refactor`/`deslop`, `analyze`, `plan this`, `deep interview`, `ouroboros`, `ralplan`, `team`/`swarm`, `ecomode`, `cancel`, `tdd`, `fix build`, `code review`, `security review`, and `web-clone`.
-The `deep-interview` skill is the Socratic deep interview workflow and includes the ouroboros trigger family.
-
-| Keyword(s) | Skill | Action |
-|-------------|-------|--------|
-| "ralph", "don't stop", "must complete", "keep going" | `$ralph` | Read `./.codex/skills/ralph/SKILL.md`, execute persistence loop |
-| "autopilot", "build me", "I want a" | `$autopilot` | Read `./.codex/skills/autopilot/SKILL.md`, execute autonomous pipeline |
-| "ultrawork", "ulw", "parallel" | `$ultrawork` | Read `./.codex/skills/ultrawork/SKILL.md`, execute parallel agents |
-| "ultraqa" | `$ultraqa` | Read `./.codex/skills/ultraqa/SKILL.md`, run QA cycling workflow |
-| "analyze", "investigate" | `$analyze` | Read `./.codex/skills/analyze/SKILL.md`, run deep analysis |
-| "plan this", "plan the", "let's plan" | `$plan` | Read `./.codex/skills/plan/SKILL.md`, start planning workflow |
-| "interview", "deep interview", "gather requirements", "interview me", "don't assume", "ouroboros" | `$deep-interview` | Read `./.codex/skills/deep-interview/SKILL.md`, run Ouroboros-inspired Socratic ambiguity-gated interview workflow |
-| "ralplan", "consensus plan" | `$ralplan` | Read `./.codex/skills/ralplan/SKILL.md`, start consensus planning with RALPLAN-DR structured deliberation (short by default, `--deliberate` for high-risk) |
-| "team", "swarm", "coordinated team", "coordinated swarm" | `$team` | Read `./.codex/skills/team/SKILL.md`, start team orchestration (swarm compatibility alias) |
-| "ecomode", "eco", "budget" | `$ecomode` | Read `./.codex/skills/ecomode/SKILL.md`, enable token-efficient mode |
-| "cancel", "stop", "abort" | `$cancel` | Read `./.codex/skills/cancel/SKILL.md`, cancel active modes |
-| "tdd", "test first" | `$tdd` | Read `./.codex/skills/tdd/SKILL.md`, start test-driven workflow |
-| "fix build", "type errors" | `$build-fix` | Read `./.codex/skills/build-fix/SKILL.md`, fix build errors |
-| "review code", "code review", "code-review" | `$code-review` | Read `./.codex/skills/code-review/SKILL.md`, run code review |
-| "security review" | `$security-review` | Read `./.codex/skills/security-review/SKILL.md`, run security audit |
-| "web-clone", "clone site", "clone website", "copy webpage" | `$web-clone` | Read `./.codex/skills/web-clone/SKILL.md`, start website cloning pipeline |
-
-Detection rules:
-- Keywords are case-insensitive and match anywhere in the user message.
-- Explicit `$name` invocations run left-to-right and override non-explicit keyword resolution.
-- If multiple non-explicit keywords match, use the most specific match.
-- If the user explicitly invokes `$name`, run those explicit invocations left-to-right before considering non-explicit keyword routing.
+Fallback behavior when hook context is unavailable:
+- Explicit `$name` invocations run left-to-right and override implicit keywords.
+- Bare skill names do not activate skills by themselves; skill-name activation requires explicit `$skill` invocation. Natural-language routing phrases may still map to a workflow when they are not just the bare skill name. Examples: `analyze` / `investigate` → `$analyze` for read-only deep analysis; `deep interview`, `interview`, `don't assume`, or `ouroboros` → `$deep-interview`; `ralplan` / `consensus plan` → `$ralplan`; `cancel`, `stop`, or `abort` → `$cancel`; `web-clone`, `clone site`, `clone website`, or `copy webpage` → `$web-clone`; `ecomode`, `eco`, or `budget` → routes to `$ultrawork` as a merged compatibility alias.
+- Keep the detailed keyword list in `src/hooks/keyword-registry.ts`; do not duplicate that table here. Provider-specific install paths live in `src/config/codebuddy-hooks.ts` (CodeBuddy: `codebuddy-native-hook.js`) and `src/scripts/codex-native-hook.ts` (Codex: thin re-export of the CodeBuddy implementation).
+- If the user explicitly invokes `/prompts:<name>`, do not auto-activate keyword skills unless explicit `$name` tokens are also present.
+- Keywords are case-insensitive and match anywhere in the user message; if multiple non-explicit keywords match, use the most specific.
 - The rest of the user message becomes the task description.
+
+Runtime availability gate:
+- Treat `autopilot`, `ralph`, `ultrawork`, `ultraqa`, `team`/`swarm`, and `ecomode` as **OMB runtime workflows**, not generic prompt aliases.
+- Auto-activate those runtime workflows only when the current session is actually running under OMB CLI/runtime (for example, launched via `omb`, with OMB session overlay/runtime state available, or when the user explicitly asks to run `omb ...` in the shell; `omb ...` remains the compatibility alias).
+- In CodeBuddy App or plain CodeBuddy sessions without OMB runtime, do **not** treat those keywords alone as activation. Explain that they require OMB CLI runtime support, and continue with the nearest App-safe surface (`deep-interview`, `ralplan`, `plan`, `/prompts:*`, or native subagents) unless the user explicitly wants you to launch OMB from the shell.
 
 Ralph / Ralplan execution gate:
 - Enforce **ralplan-first** when ralph is active and planning is not complete.
@@ -172,6 +155,7 @@ Ralph / Ralplan execution gate:
 Skills are workflow commands.
 Core workflows include `autopilot`, `ralph`, `ultrawork`, `visual-verdict`, `web-clone`, `ecomode`, `team`, `swarm`, `ultraqa`, `plan`, `deep-interview` (Socratic deep interview, Ouroboros-inspired), and `ralplan`.
 Utilities include `cancel`, `note`, `doctor`, `help`, and `trace`.
+Installed SKILL.md files live under `./.codebuddy/skills/<skill>/SKILL.md` (project scope) or `~/.codebuddy/skills/<skill>/SKILL.md` (user scope); role prompts live under `./.codebuddy/prompts/<role>.md` or `~/.codebuddy/prompts/<role>.md`.
 </skills>
 
 ---

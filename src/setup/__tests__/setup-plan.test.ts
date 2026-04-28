@@ -9,14 +9,14 @@
  *   - Scope migration needed
  *   - Idempotency (running twice produces same plan)
  *   - Dry-run golden output (no files created)
- *   - Migration regression: .codex dir → symlink action
+ *   - Migration regression: .codex dir no longer creates symlink actions
  *   - Migration regression: .omb state dir → compat warning
  *   - Apply with dryRun=true leaves all actions as 'skipped'
  */
 
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -129,6 +129,231 @@ describe("generateSetupPlan", () => {
     }
   });
 
+  it("uses only Codex paths for project scope with provider codex", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-plan-codex-project-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+      const pkgCodexSkill = join(pkgRoot, "skills", "help");
+      await mkdir(pkgCodexSkill, { recursive: true });
+      await writeFile(join(pkgCodexSkill, "SKILL.md"), "# Help\n");
+
+      const plan = await generateSetupPlan({
+        scope: "project",
+        projectRoot: wd,
+        pkgRoot,
+        provider: "codex",
+      });
+
+      const promptActions = plan.actions.filter((action) =>
+        action.description.startsWith("Install prompt ")
+          || action.description.startsWith("Prompt ")
+      );
+      assert.equal(
+        promptActions.some((action) =>
+          action.destination.includes(join(wd, ".codex", "prompts")),
+        ),
+        true,
+      );
+      assert.equal(
+        promptActions.some((action) =>
+          action.destination.includes(join(wd, ".codebuddy", "prompts")),
+        ),
+        false,
+      );
+
+      const skillActions = plan.actions.filter((action) =>
+        action.description.startsWith("Install skill ")
+      );
+      assert.equal(
+        skillActions.some((action) =>
+          action.destination.includes(join(wd, ".codex", "skills")),
+        ),
+        true,
+      );
+      assert.equal(
+        skillActions.some((action) =>
+          action.destination.includes(join(wd, ".codebuddy", "skills")),
+        ),
+        false,
+      );
+
+      const gitignoreAction = plan.actions.find((action) =>
+        action.description.includes("Update .gitignore with OMB project rules"),
+      );
+      const gitignoreMetadata = gitignoreAction?.metadata as
+        | { missingEntries: string[] }
+        | undefined;
+      assert.ok(gitignoreMetadata);
+      assert.equal(
+        gitignoreMetadata.missingEntries.some((entry) =>
+          entry.startsWith(".codebuddy"),
+        ),
+        false,
+      );
+      assert.equal(
+        gitignoreMetadata.missingEntries.some((entry) =>
+          entry.startsWith(".codex"),
+        ),
+        true,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("plans user scope installs for both provider homes", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-plan-both-user-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+      const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
+      const previousCodexHome = process.env.CODEX_HOME;
+      process.env.CODEBUDDY_HOME = join(wd, ".codebuddy");
+      process.env.CODEX_HOME = join(wd, ".codex");
+
+      try {
+        const plan = await generateSetupPlan({
+          scope: "user",
+          projectRoot: wd,
+          pkgRoot,
+          provider: "both",
+        });
+
+        const configActions = plan.actions.filter((action) =>
+          action.description === "Update config.toml",
+        );
+        assert.equal(configActions.length, 2);
+        assert.equal(
+          configActions.some((action) =>
+            action.destination.includes(join(wd, ".codebuddy", "config.toml")),
+          ),
+          true,
+        );
+        assert.equal(
+          configActions.some((action) =>
+            action.destination.includes(join(wd, ".codex", "config.toml")),
+          ),
+          true,
+        );
+
+        const promptActions = plan.actions.filter((action) =>
+          action.description.startsWith("Install prompt ")
+        );
+        assert.equal(
+          promptActions.some((action) =>
+            action.destination.includes(join(wd, ".codebuddy", "prompts")),
+          ),
+          true,
+        );
+        assert.equal(
+          promptActions.some((action) =>
+            action.destination.includes(join(wd, ".codex", "prompts")),
+          ),
+          true,
+        );
+
+        const agentsMdActions = plan.actions.filter((action) =>
+          action.description === "Generate AGENTS.md"
+        );
+        assert.equal(agentsMdActions.length, 2);
+        assert.equal(
+          agentsMdActions.some((action) =>
+            action.destination.includes(join(wd, ".codebuddy", "AGENTS.md")),
+          ),
+          true,
+        );
+        assert.equal(
+          agentsMdActions.some((action) =>
+            action.destination.includes(join(wd, ".codex", "AGENTS.md")),
+          ),
+          true,
+        );
+      } finally {
+        if (previousCodebuddyHome === undefined) {
+          delete process.env.CODEBUDDY_HOME;
+        } else {
+          process.env.CODEBUDDY_HOME = previousCodebuddyHome;
+        }
+        if (previousCodexHome === undefined) {
+          delete process.env.CODEX_HOME;
+        } else {
+          process.env.CODEX_HOME = previousCodexHome;
+        }
+      }
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("plans both providers in project scope with combined .gitignore preview", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-plan-both-project-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+
+      const plan = await generateSetupPlan({
+        scope: "project",
+        projectRoot: wd,
+        pkgRoot,
+        provider: "both",
+      });
+
+      const configActions = plan.actions.filter((action) =>
+        action.description === "Update config.toml",
+      );
+      assert.equal(configActions.length, 2);
+      assert.equal(
+        configActions.some((action) =>
+          action.destination.includes(join(wd, ".codebuddy", "config.toml")),
+        ),
+        true,
+      );
+      assert.equal(
+        configActions.some((action) =>
+          action.destination.includes(join(wd, ".codex", "config.toml")),
+        ),
+        true,
+      );
+
+      const hookActions = plan.actions.filter((action) =>
+        action.description === "Update native hooks"
+      );
+      assert.equal(hookActions.length, 2);
+      assert.equal(
+        hookActions.some((action) =>
+          action.destination.includes(join(wd, ".codebuddy", "hooks.json")),
+        ),
+        true,
+      );
+      assert.equal(
+        hookActions.some((action) =>
+          action.destination.includes(join(wd, ".codex", "hooks.json")),
+        ),
+        true,
+      );
+
+      const gitignoreAction = plan.actions.find((action) =>
+        action.description.includes("Update .gitignore with OMB project rules"),
+      );
+      const gitignoreMetadata = gitignoreAction?.metadata as
+        | { missingEntries: string[] }
+        | undefined;
+      assert.ok(gitignoreMetadata);
+      assert.equal(
+        gitignoreMetadata.missingEntries.some((entry) =>
+          entry.startsWith(".codebuddy"),
+        ),
+        true,
+      );
+      assert.equal(
+        gitignoreMetadata.missingEntries.some((entry) =>
+          entry.startsWith(".codex"),
+        ),
+        true,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("skips mkdir for directories that already exist", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-plan-existing-dirs-"));
     try {
@@ -164,8 +389,8 @@ describe("generateSetupPlan", () => {
     }
   });
 
-  it("includes legacy alias symlink for project scope when .codex does not exist", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omb-plan-legacy-alias-"));
+  it("does not include legacy .codex alias symlinks for project scope", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-plan-no-legacy-alias-"));
     try {
       const pkgRoot = join(wd, "pkg");
       await mkdir(join(pkgRoot, "prompts"), { recursive: true });
@@ -173,39 +398,6 @@ describe("generateSetupPlan", () => {
       await mkdir(join(pkgRoot, "templates"), { recursive: true });
       await mkdir(join(pkgRoot, "dist", "cli"), { recursive: true });
       await mkdir(join(pkgRoot, "dist", "scripts"), { recursive: true });
-
-      const plan = await generateSetupPlan({
-        scope: "project",
-        projectRoot: wd,
-        pkgRoot,
-      });
-
-      const symlinkActions = plan.actions.filter(
-        (a) =>
-          a.kind === "symlink" &&
-          a.description.includes("legacy alias"),
-      );
-      assert.ok(
-        symlinkActions.length > 0,
-        "should have legacy alias symlink for project scope",
-      );
-    } finally {
-      await rm(wd, { recursive: true, force: true });
-    }
-  });
-
-  it("skips legacy alias when .codex already exists", async () => {
-    const wd = await mkdtemp(join(tmpdir(), "omb-plan-legacy-exists-"));
-    try {
-      const pkgRoot = join(wd, "pkg");
-      await mkdir(join(pkgRoot, "prompts"), { recursive: true });
-      await mkdir(join(pkgRoot, "skills"), { recursive: true });
-      await mkdir(join(pkgRoot, "templates"), { recursive: true });
-      await mkdir(join(pkgRoot, "dist", "cli"), { recursive: true });
-      await mkdir(join(pkgRoot, "dist", "scripts"), { recursive: true });
-
-      // Pre-create .codex directory
-      await mkdir(join(wd, ".codex"), { recursive: true });
 
       const plan = await generateSetupPlan({
         scope: "project",
@@ -221,7 +413,7 @@ describe("generateSetupPlan", () => {
       assert.equal(
         symlinkActions.length,
         0,
-        "should not create legacy alias when .codex exists",
+        "should not create legacy .codex alias symlinks",
       );
     } finally {
       await rm(wd, { recursive: true, force: true });
@@ -346,6 +538,88 @@ async function createMinimalPkgRoot(base: string): Promise<string> {
 // Dry-run and apply tests
 // ---------------------------------------------------------------------------
 
+describe("applySetupPlan scope persistence", () => {
+  it("persists provider alongside scope for provider=codex so downstream resolvers see the choice", async () => {
+    // Regression guard for handoff §8.1: generateSetupPlan carried provider
+    // in action metadata but applySetupPlan used to drop it, so the persisted
+    // setup-scope.json collapsed back to "just scope". Downstream resolvers
+    // (ask.ts, commands/index.ts, runtime/launch) rely on `.provider` to
+    // pick CodeBuddy vs Codex, so losing it silently breaks provider routing.
+    const wd = await mkdtemp(join(tmpdir(), "omb-apply-scope-codex-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+      const plan = await generateSetupPlan({
+        scope: "project",
+        provider: "codex",
+        projectRoot: wd,
+        pkgRoot,
+      });
+      const scopeAction = plan.actions.find(
+        (a) => a.kind === "update" && a.destination.endsWith("setup-scope.json"),
+      );
+      assert.ok(scopeAction, "plan should include a scope-persistence update action");
+
+      const result = await applyOnlyAction(plan, scopeAction!);
+      assert.equal(result.success, true, result.errors.join("\n"));
+
+      const persisted = JSON.parse(
+        await readFile(scopeAction!.destination, "utf-8"),
+      ) as { scope: string; provider: string };
+      assert.equal(persisted.scope, "project");
+      assert.equal(persisted.provider, "codex");
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("persists provider=both when the plan covers both providers", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-apply-scope-both-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+      const plan = await generateSetupPlan({
+        scope: "user",
+        provider: "both",
+        projectRoot: wd,
+        pkgRoot,
+      });
+      const scopeAction = plan.actions.find(
+        (a) => a.kind === "update" && a.destination.endsWith("setup-scope.json"),
+      );
+      assert.ok(scopeAction, "plan should include a scope-persistence update action");
+
+      const result = await applyOnlyAction(plan, scopeAction!);
+      assert.equal(result.success, true, result.errors.join("\n"));
+
+      const persisted = JSON.parse(
+        await readFile(scopeAction!.destination, "utf-8"),
+      ) as { scope: string; provider: string };
+      assert.equal(persisted.scope, "user");
+      assert.equal(persisted.provider, "both");
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Run applySetupPlan for a single action. Used by focused scope-persistence
+ * tests so they don't depend on the full plan executing end-to-end (the
+ * plan/apply architecture is still partially preview-only today).
+ */
+async function applyOnlyAction(
+  plan: Awaited<ReturnType<typeof generateSetupPlan>>,
+  action: (typeof plan)["actions"][number],
+): Promise<ApplyResult> {
+  const isolatedPlan: typeof plan = {
+    ...plan,
+    actions: plan.actions.map((existing) => ({
+      ...existing,
+      status: existing === action ? "pending" : "skipped",
+    })),
+  };
+  return applySetupPlan(isolatedPlan);
+}
+
 describe("applySetupPlan with dryRun=true", () => {
   it("leaves all pending actions as skipped without creating files", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-apply-dryrun-"));
@@ -443,7 +717,7 @@ describe("applySetupPlan with dryRun=true", () => {
 // ---------------------------------------------------------------------------
 
 describe("migration regression tests", () => {
-  it("project with .codex dir gets symlink action (not duplicate mkdir)", async () => {
+  it("project with .codex dir does not get a legacy symlink action", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-regression-codex-"));
     try {
       const pkgRoot = await createMinimalPkgRoot(wd);
@@ -482,7 +756,7 @@ describe("migration regression tests", () => {
     }
   });
 
-  it("project without .codex dir gets symlink action for compatibility", async () => {
+  it("project without .codex dir does not get a compatibility symlink action", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-regression-no-codex-"));
     try {
       const pkgRoot = await createMinimalPkgRoot(wd);
@@ -493,19 +767,13 @@ describe("migration regression tests", () => {
         pkgRoot,
       });
 
-      // Should have a symlink action for .codex
       const symlinkActions = plan.actions.filter(
         (a) => a.kind === "symlink" && a.destination === join(wd, ".codex"),
       );
       assert.equal(
         symlinkActions.length,
-        1,
-        "should create exactly one .codex symlink for project scope",
-      );
-      assert.equal(
-        symlinkActions[0]!.source,
-        ".codebuddy",
-        "symlink source should point to .codebuddy",
+        0,
+        "should not create .codex compatibility symlinks for project scope",
       );
     } finally {
       await rm(wd, { recursive: true, force: true });
@@ -542,7 +810,7 @@ describe("migration regression tests", () => {
     }
   });
 
-  it("project with both .codex and .omb gets .codex symlink warning but not .omb", async () => {
+  it("project with both .codex and .omb gets no legacy compat warnings", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-regression-both-"));
     try {
       const pkgRoot = await createMinimalPkgRoot(wd);
@@ -563,12 +831,17 @@ describe("migration regression tests", () => {
       );
       assert.equal(symlinkToCodex.length, 0, "should not symlink existing .codex");
 
-      // Should NOT have .omb warning (rule is deprecated)
       const ombWarnings = plan.warnings.filter((w) => w.includes(".omb"));
       assert.equal(
         ombWarnings.length,
         0,
         "deprecated .omb rule should not produce warnings",
+      );
+      const codexWarnings = plan.warnings.filter((w) => w.includes(".codex"));
+      assert.equal(
+        codexWarnings.length,
+        0,
+        "removal-candidate .codex rule should not produce warnings",
       );
     } finally {
       await rm(wd, { recursive: true, force: true });

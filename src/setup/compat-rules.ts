@@ -55,9 +55,9 @@ export const COMPAT_RULES: CompatRule[] = [
     from: ".codex",
     to: ".codebuddy",
     message:
-      "Legacy .codex directory detected. Setup will create a .codebuddy -> .codex compatibility symlink.",
-    autoFix: true,
-    status: "active",
+      "Historical .codex directory detected. CodeBuddy setup no longer migrates it; use --provider codex when you want Codex-owned files.",
+    autoFix: false,
+    status: "removal_candidate",
     condition: (cwd: string): boolean => {
       return existsSync(join(cwd, ".codex"));
     },
