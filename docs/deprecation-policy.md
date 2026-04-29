@@ -43,6 +43,12 @@ status, earliest removal version, and migration path.
 |------|----|--------|-----------|
 | `project-local` | `project` | deprecated | Re-run `omb setup` to update scope |
 
+### Configuration Files
+
+| Canonical | Legacy | Status | Earliest Removal | Migration |
+|-----------|--------|--------|-----------------|-----------|
+| `~/.codebuddy/.omb-config.json` providers block | `~/.codebuddy/config.toml` `model_provider` + `[model_providers.*]` | read_only | v0.14 | Re-run `omb setup --provider codebuddy`. Setup migrates OMB-consumed fields into `.omb-config.json` and deletes the legacy codex-format TOML. `readActiveProviderEnvOverrides` still falls back to the TOML for upgrade-but-not-yet-resetup users until v0.14. |
+
 ### Model Migration
 
 | From | To | Status | Migration |

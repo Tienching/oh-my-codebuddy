@@ -13,6 +13,7 @@ import {
   getSparkDefaultModel,
   getStandardDefaultModel,
   getTeamLowComplexityModel,
+  readActiveProviderEnvOverrides,
   readConfiguredEnvOverrides,
 } from '../models.js';
 
@@ -221,5 +222,98 @@ describe('getModelForMode', () => {
     assert.equal(getStandardDefaultModel(), DEFAULT_STANDARD_MODEL);
     assert.equal(getSparkDefaultModel(), DEFAULT_SPARK_MODEL);
     assert.equal(getTeamLowComplexityModel(), DEFAULT_SPARK_MODEL);
+  });
+
+  it('readActiveProviderEnvOverrides reads providers.active from .omb-config.json first', async () => {
+    // Regression guard for the config.toml zombie migration: the model_provider
+    // + model_providers.<p>.env_key schema now lives in .omb-config.json under
+    // `providers.active` + `providers.configs.<p>.env_key`. This test pins the
+    // primary read path so the TOML fallback can be retired on schedule.
+    await writeConfig({
+      providers: {
+        active: 'custom',
+        configs: { custom: { env_key: 'CUSTOM_API_KEY' } },
+      },
+    });
+    const overrides = readActiveProviderEnvOverrides(
+      { CUSTOM_API_KEY: 'sk-primary' },
+      tempDir,
+    );
+    assert.deepEqual(overrides, { CUSTOM_API_KEY: 'sk-primary' });
+  });
+
+  it('readActiveProviderEnvOverrides returns empty when env key is not set', async () => {
+    await writeConfig({
+      providers: {
+        active: 'custom',
+        configs: { custom: { env_key: 'CUSTOM_API_KEY' } },
+      },
+    });
+    const overrides = readActiveProviderEnvOverrides({}, tempDir);
+    assert.deepEqual(overrides, {});
+  });
+
+  it('readActiveProviderEnvOverrides falls back to config.toml when .omb-config.json providers block is missing', async () => {
+    // Upgrade-but-not-yet-setup path: users who upgrade OMB but have not yet
+    // rerun `omb setup` still need worker env API-key injection to work from
+    // the legacy ~/.codebuddy/config.toml. Drop this fallback once v0.14 lands.
+    await writeFile(
+      join(tempDir, 'config.toml'),
+      [
+        'model_provider = "fallback_prov"',
+        '[model_providers.fallback_prov]',
+        'env_key = "FALLBACK_API_KEY"',
+      ].join('\n'),
+    );
+    const overrides = readActiveProviderEnvOverrides(
+      { FALLBACK_API_KEY: 'sk-fallback' },
+      tempDir,
+    );
+    assert.deepEqual(overrides, { FALLBACK_API_KEY: 'sk-fallback' });
+  });
+
+  it('readActiveProviderEnvOverrides prefers .omb-config.json over a coexisting config.toml', async () => {
+    await writeConfig({
+      providers: {
+        active: 'primary',
+        configs: { primary: { env_key: 'PRIMARY_API_KEY' } },
+      },
+    });
+    await writeFile(
+      join(tempDir, 'config.toml'),
+      [
+        'model_provider = "legacy"',
+        '[model_providers.legacy]',
+        'env_key = "LEGACY_API_KEY"',
+      ].join('\n'),
+    );
+    const overrides = readActiveProviderEnvOverrides(
+      { PRIMARY_API_KEY: 'sk-primary', LEGACY_API_KEY: 'sk-legacy' },
+      tempDir,
+    );
+    assert.deepEqual(overrides, { PRIMARY_API_KEY: 'sk-primary' });
+  });
+
+  it('readActiveProviderEnvOverrides falls back to config.toml when .omb-config.json has env but no providers block', async () => {
+    // Regression guard: users may set env overrides via the migrated
+    // .omb-config.json while still relying on the legacy TOML's
+    // model_provider block (e.g. upgrade-but-not-yet-resetup). The presence
+    // of an env block must not short-circuit the providers lookup.
+    await writeConfig({
+      env: { OMB_DEFAULT_FRONTIER_MODEL: 'frontier-from-json' },
+    });
+    await writeFile(
+      join(tempDir, 'config.toml'),
+      [
+        'model_provider = "legacy"',
+        '[model_providers.legacy]',
+        'env_key = "LEGACY_API_KEY"',
+      ].join('\n'),
+    );
+    const overrides = readActiveProviderEnvOverrides(
+      { LEGACY_API_KEY: 'sk-legacy' },
+      tempDir,
+    );
+    assert.deepEqual(overrides, { LEGACY_API_KEY: 'sk-legacy' });
   });
 });

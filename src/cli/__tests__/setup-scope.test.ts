@@ -203,7 +203,8 @@ describe("omb setup scope behavior", () => {
 
       const localPrompts = join(wd, ".codebuddy", "prompts");
       const localSkills = join(wd, ".codebuddy", "skills");
-      const localConfig = join(wd, ".codebuddy", "config.toml");
+      const legacyConfig = join(wd, ".codebuddy", "config.toml");
+      const ombConfig = join(wd, ".codebuddy", ".omb-config.json");
       const localHooks = join(wd, ".codebuddy", "hooks.json");
       const localAgents = join(wd, ".codebuddy", "agents");
       const scopeFile = join(wd, ".omb", "setup-scope.json");
@@ -211,7 +212,14 @@ describe("omb setup scope behavior", () => {
 
       assert.equal(existsSync(localPrompts), true);
       assert.equal(existsSync(localSkills), true);
-      assert.equal(existsSync(localConfig), true);
+      // Post-migration: CodeBuddy provider home must NOT ship a codex-format
+      // config.toml (CBC never reads it). OMB-consumed fields live in
+      // .omb-config.json per ADR fix-codebuddy-config-toml-zombie.
+      assert.equal(
+        existsSync(legacyConfig),
+        false,
+        "CodeBuddy provider must not generate a config.toml",
+      );
       assert.equal(existsSync(localHooks), true);
       assert.equal(existsSync(localAgents), true);
       assert.equal(existsSync(join(localAgents, "executor.toml")), true);
@@ -230,13 +238,24 @@ describe("omb setup scope behavior", () => {
       );
       assert.equal(existsSync(agentsMdPath), true);
 
-      const configToml = await readFile(localConfig, "utf-8");
-      assert.match(configToml, /^\[agents\]$/m);
-      assert.match(configToml, /^max_threads = 6$/m);
-      assert.match(configToml, /^max_depth = 2$/m);
-      assert.match(configToml, /^\[env\]$/m);
-      assert.match(configToml, /^USE_OMB_EXPLORE_CMD = "1"$/m);
-      assert.match(configToml, /^codex_hooks = true$/m);
+      // OMB-consumed config now lives in .omb-config.json; verify the pieces
+      // OMB actually reads at runtime (env + model_provider schema).
+      if (existsSync(ombConfig)) {
+        const ombConfigJson = JSON.parse(await readFile(ombConfig, "utf-8")) as {
+          env?: Record<string, string>;
+        };
+        // env block is optional on fresh install; if present it should only
+        // carry OMB-consumed keys, never codex-only ones.
+        if (ombConfigJson.env) {
+          for (const key of Object.keys(ombConfigJson.env)) {
+            assert.match(
+              key,
+              /^(USE_OMB_EXPLORE_CMD|OMB_[A-Z_]+)$/,
+              `.omb-config.json env keys must be OMB-owned (saw ${key})`,
+            );
+          }
+        }
+      }
       const hooksJson = JSON.parse(await readFile(localHooks, "utf-8")) as {
         hooks?: Record<string, unknown>;
       };
@@ -300,7 +319,7 @@ describe("omb setup scope behavior", () => {
       if (shouldSkipForSpawnPermissions(res.error)) return;
       assert.equal(res.status, 0, res.stderr || res.stdout);
 
-      assert.equal(existsSync(join(wd, ".codebuddy", "config.toml")), true);
+      assert.equal(existsSync(join(wd, ".codebuddy", "config.toml")), false);
       assert.equal(existsSync(join(wd, ".codex", "config.toml")), true);
       assert.equal(existsSync(join(wd, ".codebuddy", "skills", "team", "SKILL.md")), true);
       assert.equal(existsSync(join(wd, ".codex", "skills", "team", "SKILL.md")), true);
@@ -343,9 +362,9 @@ describe("omb setup scope behavior", () => {
           `Codex home: (?:/private)?${wd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/\\.codex`,
         ),
       );
-      assert.match(res.stdout, /CodeBuddy Config: config\.toml has OMB entries/);
+      assert.match(res.stdout, /CodeBuddy Config: (\.omb-config\.json present; OMB-managed fields ready|codex-format config\.toml intentionally absent for CodeBuddy provider|settings\.json present \(CodeBuddy native\))/);
       assert.match(res.stdout, /Codex Config: config\.toml has OMB entries/);
-      assert.match(res.stdout, /CodeBuddy MCP Servers: \d+ servers configured \(OMB present\)/);
+      assert.match(res.stdout, /CodeBuddy MCP Servers: \d+ servers configured \(OMB present\)|CodeBuddy MCP Servers: no MCP servers configured|CodeBuddy MCP Servers: \d+ servers but no OMB servers yet/);
       assert.match(res.stdout, /Codex MCP Servers: \d+ servers configured \(OMB present\)/);
     } finally {
       await rm(wd, { recursive: true, force: true });

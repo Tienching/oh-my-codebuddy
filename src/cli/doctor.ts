@@ -214,10 +214,10 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
     ));
 
     // Check 4: Config file
-    checks.push(scopedProviderCheck(await checkConfig(paths.configPath), target, multiProvider));
+    checks.push(scopedProviderCheck(await checkConfig(paths.configPath, target.provider), target, multiProvider));
 
     // Check 4.5: Explore routing default
-    checks.push(scopedProviderCheck(await checkExploreRouting(paths.configPath), target, multiProvider));
+    checks.push(scopedProviderCheck(await checkExploreRouting(paths.configPath, target.provider), target, multiProvider));
 
     // Check 5: Prompts installed
     checks.push(scopedProviderCheck(await checkPrompts(paths.promptsDir), target, multiProvider));
@@ -252,7 +252,7 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 
   // Check 9: MCP servers configured
   for (const target of targets) {
-    checks.push(scopedProviderCheck(await checkMcpServers(target.paths.configPath), target, multiProvider));
+    checks.push(scopedProviderCheck(await checkMcpServers(target.paths.configPath, target.provider), target, multiProvider));
   }
 
   // Check 10: Prompt triage
@@ -761,8 +761,54 @@ function extractConfigEnv(parsed: Record<string, unknown>): Record<string, unkno
   return isPlainObject(envBlock) ? envBlock : null;
 }
 
-async function checkConfig(configPath: string): Promise<Check> {
+async function checkConfig(
+  configPath: string,
+  provider?: 'codebuddy' | 'codex',
+): Promise<Check> {
   const resolved = await readManagedConfig(configPath);
+  if (provider === 'codebuddy') {
+    // CodeBuddy provider: config.toml is intentionally not generated anymore.
+    // Healthy = .omb-config.json exists (means `omb setup` has run at least
+    // once). settings.json alone is inconclusive because CodeBuddy always
+    // writes one; we need OMB-side footprint to say "set up".
+    const ombConfigPath = join(dirname(configPath), '.omb-config.json');
+    if (existsSync(ombConfigPath)) {
+      return {
+        name: 'Config',
+        status: 'pass',
+        message: '.omb-config.json present; OMB-managed fields ready',
+      };
+    }
+    // No OMB-managed config yet. A residual codex-format config.toml is a
+    // separate bug (user needs to run `omb setup` to migrate + cleanup).
+    if (resolved && !('error' in resolved) && resolved.displayName !== 'settings.json') {
+      return {
+        name: 'Config',
+        status: 'warn',
+        message: `legacy ${resolved.displayName} still present; run "omb setup --provider codebuddy" to migrate OMB-consumed fields into .omb-config.json and remove the TOML`,
+      };
+    }
+    if (resolved && 'error' in resolved && resolved.displayName === 'settings.json') {
+      return {
+        name: 'Config',
+        status: 'fail',
+        message: `invalid ${resolved.displayName} (${resolved.error})`,
+      };
+    }
+    if (resolved && resolved.displayName === 'settings.json') {
+      return {
+        name: 'Config',
+        status: 'warn',
+        message: 'settings.json exists but no OMB entries yet (expected before first setup; run "omb setup --force" once)',
+      };
+    }
+    return {
+      name: 'Config',
+      status: 'warn',
+      message: 'settings.json exists but no OMB entries yet (expected before first setup; run "omb setup --force" once)',
+    };
+  }
+
   if (!resolved) {
     return { name: 'Config', status: 'warn', message: 'config.toml not found' };
   }
@@ -785,7 +831,10 @@ async function checkConfig(configPath: string): Promise<Check> {
   };
 }
 
-async function checkExploreRouting(configPath: string): Promise<Check> {
+async function checkExploreRouting(
+  configPath: string,
+  provider?: 'codebuddy' | 'codex',
+): Promise<Check> {
   const envValue = process.env[OMB_EXPLORE_CMD_ENV];
   if (typeof envValue === 'string' && !isExploreCommandRoutingEnabled(process.env)) {
     return {
@@ -793,6 +842,45 @@ async function checkExploreRouting(configPath: string): Promise<Check> {
       status: 'warn',
       message:
         'disabled by environment override; enable with USE_OMB_EXPLORE_CMD=1 (or remove the explicit opt-out)',
+    };
+  }
+
+  // CodeBuddy provider: env config lives primarily in .omb-config.json (not
+  // config.toml). Some users also set `env.USE_OMB_EXPLORE_CMD` inside
+  // settings.json directly; respect that too so doctor matches the full set
+  // of places a CodeBuddy user might actually configure explore routing.
+  if (provider === 'codebuddy') {
+    const codebuddyHomeDir = dirname(configPath);
+    const sources: Array<{ path: string; label: string }> = [
+      { path: join(codebuddyHomeDir, '.omb-config.json'), label: '.omb-config.json' },
+      { path: join(codebuddyHomeDir, 'settings.json'), label: 'settings.json' },
+    ];
+    for (const source of sources) {
+      if (!existsSync(source.path)) continue;
+      try {
+        const parsed = JSON.parse(await readFile(source.path, 'utf-8'));
+        if (!isPlainObject(parsed)) continue;
+        const envMap = isPlainObject(parsed.env) ? parsed.env : null;
+        if (!envMap) continue;
+        const configuredValue = envMap.USE_OMB_EXPLORE_CMD;
+        if (
+          typeof configuredValue === 'string' &&
+          !isExploreCommandRoutingEnabled({ USE_OMB_EXPLORE_CMD: configuredValue })
+        ) {
+          return {
+            name: 'Explore routing',
+            status: 'warn',
+            message: `disabled in ${source.label} env; set USE_OMB_EXPLORE_CMD to "1" to restore default explore-first routing`,
+          };
+        }
+      } catch {
+        // Unparseable source — skip and fall through to default-enabled pass.
+      }
+    }
+    return {
+      name: 'Explore routing',
+      status: 'pass',
+      message: 'enabled by default',
     };
   }
 
@@ -934,7 +1022,62 @@ function checkAgentsMd(scope: DoctorSetupScope, codebuddyHomeDir: string): Check
   };
 }
 
-async function checkMcpServers(configPath: string): Promise<Check> {
+async function checkMcpServers(
+  configPath: string,
+  provider?: 'codebuddy' | 'codex',
+): Promise<Check> {
+  if (provider === 'codebuddy') {
+    // CodeBuddy manages MCP servers via settings.json, not via codex-format
+    // `[mcp_servers.*]` TOML sections. Inspect settings.json directly so the
+    // check still surfaces "user has MCP servers but none are OMB-managed" as
+    // a first-setup warning, consistent with the pre-migration behavior.
+    const settingsPath = join(dirname(configPath), 'settings.json');
+    if (!existsSync(settingsPath)) {
+      return { name: 'MCP Servers', status: 'warn', message: 'settings.json not found' };
+    }
+    try {
+      const raw = await readFile(settingsPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (!isPlainObject(parsed)) {
+        return {
+          name: 'MCP Servers',
+          status: 'fail',
+          message: `invalid settings.json (not an object)`,
+        };
+      }
+      const mcpServers = isPlainObject(parsed.mcpServers) ? parsed.mcpServers : null;
+      if (!mcpServers) {
+        return {
+          name: 'MCP Servers',
+          status: 'warn',
+          message: 'no MCP servers configured',
+        };
+      }
+      const names = Object.keys(mcpServers);
+      const hasOmb = names.some((key) => key.startsWith('omb-') || key.startsWith('omb_'));
+      if (hasOmb) {
+        return {
+          name: 'MCP Servers',
+          status: 'pass',
+          message: `${names.length} servers configured (OMB present)`,
+        };
+      }
+      if (names.length === 0) {
+        return { name: 'MCP Servers', status: 'warn', message: 'no MCP servers configured' };
+      }
+      return {
+        name: 'MCP Servers',
+        status: 'warn',
+        message: `${names.length} servers but no OMB servers yet (expected before first setup; run "omb setup --force" once)`,
+      };
+    } catch (err) {
+      return {
+        name: 'MCP Servers',
+        status: 'fail',
+        message: `cannot parse settings.json (${err instanceof Error ? err.message : 'unknown error'})`,
+      };
+    }
+  }
   const resolved = await readManagedConfig(configPath);
   if (!resolved) {
     return { name: 'MCP Servers', status: 'warn', message: 'config.toml not found' };

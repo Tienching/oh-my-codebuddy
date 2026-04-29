@@ -274,10 +274,23 @@ describe('omb uninstall', () => {
       assert.match(res.stdout, /Cleaned 2 hooks artifact\(s\)\./);
 
       for (const providerDir of ['.codebuddy', '.codex']) {
-        const config = await readFile(join(wd, providerDir, 'config.toml'), 'utf-8');
-        assert.doesNotMatch(config, /oh-my-codebuddy \(OMB\) Configuration/);
-        assert.doesNotMatch(config, /omb_state/);
-        assert.doesNotMatch(config, /\[agents\.executor\]/);
+        if (providerDir === '.codex') {
+          // Codex provider still uses the codex-native config.toml; assert OMB
+          // markers are cleaned out of it on uninstall.
+          const config = await readFile(join(wd, providerDir, 'config.toml'), 'utf-8');
+          assert.doesNotMatch(config, /oh-my-codebuddy \(OMB\) Configuration/);
+          assert.doesNotMatch(config, /omb_state/);
+          assert.doesNotMatch(config, /\[agents\.executor\]/);
+        } else {
+          // CodeBuddy provider no longer carries a codex-format config.toml at
+          // all (ADR fix-codebuddy-config-toml-zombie). Assert the file is
+          // gone, i.e. uninstall + prior setup together leave no residue.
+          assert.equal(
+            existsSync(join(wd, providerDir, 'config.toml')),
+            false,
+            'CodeBuddy provider should have no codex-format config.toml after uninstall',
+          );
+        }
         assert.equal(existsSync(join(wd, providerDir, 'hooks.json')), false);
         assert.equal(existsSync(join(wd, providerDir, 'prompts', 'executor.md')), false);
         assert.equal(existsSync(join(wd, providerDir, 'agents', 'executor.toml')), false);

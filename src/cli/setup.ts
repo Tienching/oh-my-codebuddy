@@ -36,6 +36,10 @@ import {
 } from "../utils/paths.js";
 import { buildMergedConfig, getRootModelName } from "../config/generator.js";
 import {
+  ensureOmbManagedConfig,
+  migrateLegacyCodebuddyConfigToml,
+} from "../setup/migrate-codebuddy-config.js";
+import {
   mergeManagedCodebuddyHooksConfig,
   mergeManagedCodexHooksConfig,
 } from "../config/codebuddy-hooks.js";
@@ -1915,6 +1919,33 @@ async function updateManagedConfig(
     "codexVersionProbe" | "dryRun" | "verbose" | "modelUpgradePrompt"
   > & { setupProvider: SetupTargetProvider },
 ): Promise<ManagedConfigResult> {
+  // CodeBuddy provider: the CLI is JSON-native (settings.json + hooks.json +
+  // plugin marketplace). A codex-format config.toml here is dead bytes for the
+  // CLI and its OMB-consumed fields (model_provider / model_providers.env_key)
+  // are now backed by .omb-config.json.providers (see src/config/models.ts).
+  // Do not generate config.toml; migrate the legacy one if present and remove
+  // it, then ensure .omb-config.json exists so doctor can tell "setup ran" apart
+  // from "fresh CodeBuddy install we've never touched".
+  if (options.setupProvider === "codebuddy") {
+    const migrationResult = await migrateLegacyCodebuddyConfigToml({
+      legacyConfigPath: configPath,
+      dryRun: options.dryRun ?? false,
+      verbose: options.verbose ?? false,
+    });
+    const ensureResult = await ensureOmbManagedConfig({
+      codebuddyHome: dirname(configPath),
+      dryRun: options.dryRun ?? false,
+    });
+    if (migrationResult.noop && !ensureResult.wrote) {
+      summary.unchanged += 1;
+    } else {
+      summary.updated += 1;
+    }
+    // `finalConfig` is "" so downstream consumers (resolveAgentsModelTableContext)
+    // fall back to defaults, which matches the "no codex TOML" reality.
+    return { finalConfig: "", ombManagesTui: false };
+  }
+
   const existing = existsSync(configPath)
     ? await readFile(configPath, "utf-8")
     : "";

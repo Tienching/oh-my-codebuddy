@@ -33,9 +33,25 @@ export interface OmbConfigEnv {
   [key: string]: string | undefined;
 }
 
+export interface OmbConfigProviderEntry {
+  env_key?: string;
+  [key: string]: unknown;
+}
+
+export interface OmbConfigProviders {
+  active?: string;
+  configs?: Record<string, OmbConfigProviderEntry>;
+}
+
 interface OmbConfigFile {
   env?: OmbConfigEnv;
   models?: ModelsConfig;
+  /**
+   * Per-OMB active model-provider selection. Mirrors Codex's `model_provider` +
+   * `[model_providers.<name>].env_key` schema but lives in `.omb-config.json` so
+   * CodeBuddy-provider installs don't need to carry a codex-format `config.toml`.
+   */
+  providers?: OmbConfigProviders;
 }
 
 interface CodexConfigFile {
@@ -179,6 +195,36 @@ export function readActiveProviderEnvOverrides(
   env: NodeJS.ProcessEnv = process.env,
   codebuddyHomeOverride?: string,
 ): NodeJS.ProcessEnv {
+  // Primary source: .omb-config.json providers.active + configs.<name>.env_key.
+  // This lets CodeBuddy-provider installs drop the legacy config.toml zombie
+  // while keeping the worker-env API-key injection path intact.
+  const ombConfig = readOmbConfigFile(codebuddyHomeOverride);
+  const ombProviders = ombConfig?.providers;
+  if (ombProviders && typeof ombProviders === 'object' && !Array.isArray(ombProviders)) {
+    const activeFromJson = normalizeConfiguredValue(ombProviders.active);
+    const configsFromJson = ombProviders.configs;
+    if (
+      activeFromJson
+      && configsFromJson
+      && typeof configsFromJson === 'object'
+      && !Array.isArray(configsFromJson)
+    ) {
+      const entry = configsFromJson[activeFromJson];
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        const envKey = normalizeConfiguredValue(entry.env_key);
+        if (envKey) {
+          const envValue = normalizeConfiguredValue(env[envKey]);
+          return envValue ? { [envKey]: envValue } : {};
+        }
+      }
+    }
+  }
+
+  // Fallback: legacy ~/.codebuddy/config.toml (or Codex ~/.codex/config.toml)
+  // read of model_provider + model_providers.<p>.env_key. Kept for
+  // upgrade-but-not-yet-resetup users and for Codex provider installs which
+  // still write the TOML natively. Scheduled for removal in v0.14 for
+  // CodeBuddy-provider homes (see docs/deprecation-policy.md).
   const config = readCodexConfigFile(codebuddyHomeOverride);
   if (!config) return {};
 

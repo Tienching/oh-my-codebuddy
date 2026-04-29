@@ -234,6 +234,11 @@ describe("omb setup refresh summary and dry-run behavior", () => {
         join(wd, ".codebuddy", "skills", ".system", "cache.json"),
         "{}\n",
       );
+      // CodeBuddy provider no longer generates config.toml (ADR
+      // fix-codebuddy-config-toml-zombie). Stage a stray config.toml so the
+      // gitignore rule guarding against accidentally committing it is still
+      // exercised even though setup itself doesn't produce the file.
+      await writeFile(join(wd, ".codebuddy", "config.toml"), "# stale\n");
 
       const status = spawnSync(
         "git",
@@ -307,18 +312,22 @@ describe("omb setup refresh summary and dry-run behavior", () => {
   });
 
   it("offers an upgrade from gpt-5.3-codex to gpt-5.4 when accepted", async () => {
+    // Exercises the Codex-provider config.toml model-upgrade path (CodeBuddy
+    // provider no longer generates a codex-format config.toml; see ADR
+    // fix-codebuddy-config-toml-zombie).
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
-      await mkdir(join(wd, ".codebuddy"), { recursive: true });
+      await mkdir(join(wd, ".codex"), { recursive: true });
       await writeFile(
-        join(wd, ".codebuddy", "config.toml"),
+        join(wd, ".codex", "config.toml"),
         'model = \"gpt-5.3-codex\"\n',
       );
 
       let promptCalls = 0;
       await runSetupInTempDir(wd, {
         scope: "project",
+        provider: "codex",
         modelUpgradePrompt: async (currentModel, targetModel) => {
           promptCalls += 1;
           assert.equal(currentModel, "gpt-5.3-codex");
@@ -327,7 +336,7 @@ describe("omb setup refresh summary and dry-run behavior", () => {
         },
       });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.equal(promptCalls, 1);
       assert.match(config, /^model = "gpt-5\.4"$/m);
       assert.doesNotMatch(config, /^model = "gpt-5\.3-codex"$/m);
@@ -342,18 +351,19 @@ describe("omb setup refresh summary and dry-run behavior", () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
-      await mkdir(join(wd, ".codebuddy"), { recursive: true });
+      await mkdir(join(wd, ".codex"), { recursive: true });
       await writeFile(
-        join(wd, ".codebuddy", "config.toml"),
+        join(wd, ".codex", "config.toml"),
         'model = \"gpt-5.3-codex\"\n',
       );
 
       await runSetupInTempDir(wd, {
         scope: "project",
+        provider: "codex",
         modelUpgradePrompt: async () => false,
       });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.match(config, /^model = "gpt-5\.3-codex"$/m);
       assert.doesNotMatch(config, /^model = "gpt-5\.4"$/m);
       assert.doesNotMatch(config, /^model_context_window = 1000000$/m);
@@ -367,15 +377,15 @@ describe("omb setup refresh summary and dry-run behavior", () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
-      await mkdir(join(wd, ".codebuddy"), { recursive: true });
+      await mkdir(join(wd, ".codex"), { recursive: true });
       await writeFile(
-        join(wd, ".codebuddy", "config.toml"),
+        join(wd, ".codex", "config.toml"),
         'model = \"gpt-5.3-codex\"\n',
       );
 
-      await runSetupInTempDir(wd, { scope: "project" });
+      await runSetupInTempDir(wd, { scope: "project", provider: "codex" });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.match(config, /^model = "gpt-5\.3-codex"$/m);
       assert.doesNotMatch(config, /^model = "gpt-5\.4"$/m);
       assert.doesNotMatch(config, /^model_context_window = 1000000$/m);
@@ -389,18 +399,19 @@ describe("omb setup refresh summary and dry-run behavior", () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
-      await mkdir(join(wd, ".codebuddy"), { recursive: true });
+      await mkdir(join(wd, ".codex"), { recursive: true });
       await writeFile(
-        join(wd, ".codebuddy", "config.toml"),
+        join(wd, ".codex", "config.toml"),
         ['model = "gpt-5.4"', "", "[tui]", 'theme = "night"', 'status_line = ["git-branch"]', ""].join("\n"),
       );
 
       const output = await runSetupWithCapturedLogs(wd, {
         scope: "project",
+        provider: "codex",
         codexVersionProbe: () => "codex-cli 0.107.0",
       });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.equal(config.match(/^\[tui\]$/gm)?.length ?? 0, 1);
       assert.match(config, /^theme = "night"$/m);
       assert.match(config, /^status_line = \["git-branch"\]$/m);
@@ -420,10 +431,11 @@ describe("omb setup refresh summary and dry-run behavior", () => {
 
       const output = await runSetupWithCapturedLogs(wd, {
         scope: "project",
+        provider: "codex",
         codexVersionProbe: () => "codex-cli 0.106.0",
       });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.match(config, /^\[tui\]$/m);
       assert.match(output, /StatusLine configured in config\.toml via \[tui\] section\./);
     } finally {
@@ -432,6 +444,9 @@ describe("omb setup refresh summary and dry-run behavior", () => {
   });
 
   it("syncs shared MCP registry entries into config.toml during setup", async () => {
+    // Codex provider: config.toml [mcp_servers.*] sections are the native
+    // Codex schema. Codebuddy-provider install does not carry an MCP table
+    // (see ADR fix-codebuddy-config-toml-zombie).
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     try {
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
@@ -445,10 +460,11 @@ describe("omb setup refresh summary and dry-run behavior", () => {
 
       await runSetupInTempDir(wd, {
         scope: "project",
+        provider: "codex",
         mcpRegistryCandidates: [registryPath],
       });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.match(config, /oh-my-codebuddy \(OMB\) Shared MCP Registry Sync/);
       assert.match(config, /^\[mcp_servers\.eslint\]$/m);
       assert.match(config, /^command = "npx"$/m);
@@ -573,13 +589,13 @@ describe("omb setup refresh summary and dry-run behavior", () => {
         }),
       );
 
-      await runSetupInTempDir(wd, { scope: "project" });
+      await runSetupInTempDir(wd, { scope: "project", provider: "codex" });
 
-      const config = await readFile(join(wd, ".codebuddy", "config.toml"), "utf-8");
+      const config = await readFile(join(wd, ".codex", "config.toml"), "utf-8");
       assert.doesNotMatch(config, /^\[mcp_servers\.legacy_helper\]$/m);
       assert.doesNotMatch(config, /Shared MCP Server: legacy_helper/);
 
-      const output = await runSetupWithCapturedLogs(wd, { scope: "project" });
+      const output = await runSetupWithCapturedLogs(wd, { scope: "project", provider: "codex" });
       assert.match(output, /legacy shared MCP registry detected at .*\.omc\/mcp-registry\.json but ignored by default/i);
       assert.match(output, /move it to .*\.omb\/mcp-registry\.json/i);
     } finally {

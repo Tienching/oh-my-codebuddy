@@ -55,4 +55,34 @@ describe('omb doctor invalid config detection', () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
+
+  it('reports explore routing disabled when .omb-config.json env.USE_OMB_EXPLORE_CMD=0 for CodeBuddy provider (F1 regression)', async () => {
+    // Regression guard for architect-review F1: doctor's explore-routing
+    // check was previously TOML-only, so a CodeBuddy user who opted out of
+    // explore routing via the migrated .omb-config.json would see
+    // "enabled by default" in doctor while runtime actually had it disabled.
+    const wd = await mkdtemp(join(tmpdir(), 'omb-doctor-explore-json-'));
+    try {
+      const home = join(wd, 'home');
+      const codebuddyDir = join(home, '.codebuddy');
+      await mkdir(codebuddyDir, { recursive: true });
+      await writeFile(
+        join(codebuddyDir, '.omb-config.json'),
+        JSON.stringify({ env: { USE_OMB_EXPLORE_CMD: '0' } }),
+      );
+
+      const res = runOmb(wd, ['doctor'], {
+        HOME: home,
+        CODEBUDDY_HOME: codebuddyDir,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(
+        res.stdout,
+        /Explore routing: disabled in \.omb-config\.json env/,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
 });
