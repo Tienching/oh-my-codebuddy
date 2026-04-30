@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdtempSync } from 'node:fs';
 import { arch, platform } from 'node:os';
 import { join } from 'node:path';
@@ -27,8 +27,10 @@ describe('sparkshell packaging scaffold', () => {
     const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8')) as PackageJson;
     const binaryName = platform() === 'win32' ? 'omb-sparkshell.exe' : 'omb-sparkshell';
     const stagedRoot = mkdtempSync(join(tmpdir(), 'omb-sparkshell-stage-'));
+    const fakeCargoBin = mkdtempSync(join(tmpdir(), 'omb-sparkshell-cargo-'));
     const packagedBinaryRelativePath = join(`${platform()}-${arch()}`, binaryName);
     const packagedBinaryPath = join(stagedRoot, packagedBinaryRelativePath);
+    const releaseBinaryPath = join(process.cwd(), 'target', 'release', binaryName);
 
     assert.deepEqual(pkg.bin, { omb: 'dist/cli/omb.js' });
     assert.equal(pkg.scripts?.['build:sparkshell'], 'node dist/scripts/build-sparkshell.js');
@@ -48,6 +50,17 @@ describe('sparkshell packaging scaffold', () => {
     assert.doesNotMatch(testScriptSource, /'native', 'omb-sparkshell', 'Cargo\.toml'/);
 
     try {
+      mkdirSync(join(process.cwd(), 'target', 'release'), { recursive: true });
+      const cargoPath = join(fakeCargoBin, 'cargo');
+      writeFileSync(cargoPath, `#!/bin/sh
+set -eu
+cat > "${releaseBinaryPath}" <<'EOF'
+#!/bin/sh
+echo fake sparkshell
+EOF
+chmod +x "${releaseBinaryPath}"
+`);
+      chmodSync(cargoPath, 0o755);
       rmSync(packagedBinaryPath, { force: true });
       const buildResult = spawnSync(process.execPath, [buildScriptPath], {
         cwd: process.cwd(),
@@ -56,6 +69,7 @@ describe('sparkshell packaging scaffold', () => {
           ...process.env,
           OMB_SPARKSHELL_MANIFEST: join(process.cwd(), 'crates', 'omb-sparkshell', 'Cargo.toml'),
           OMB_SPARKSHELL_STAGE_DIR: stagedRoot,
+          PATH: `${fakeCargoBin}:${process.env.PATH ?? ''}`,
         },
       });
       assert.equal(buildResult.status, 0, buildResult.stderr || buildResult.stdout);
@@ -75,6 +89,7 @@ describe('sparkshell packaging scaffold', () => {
       assert.equal(packedFiles.has(packagedBinaryRelativePath.replaceAll('\\', '/')), false);
     } finally {
       rmSync(stagedRoot, { force: true, recursive: true });
+      rmSync(fakeCargoBin, { force: true, recursive: true });
     }
   });
 });

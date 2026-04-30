@@ -8,7 +8,7 @@ import { join, dirname, basename } from 'path';
 import { homedir } from 'os';
 import { parse as parseToml } from '@iarna/toml';
 import {
-  codebuddyHome, codebuddyConfigPath, codebuddyPromptsDir,
+  claudeHome, codebuddyHome, codebuddyConfigPath, codebuddyPromptsDir,
   userSkillsDir, ombStateDir, detectLegacySkillRootOverlap,
 } from '../utils/paths.js';
 import { classifySpawnError, spawnPlatformCommandSync } from '../utils/platform-command.js';
@@ -20,7 +20,7 @@ import { OMB_EXPLORE_CMD_ENV, isExploreCommandRoutingEnabled } from '../hooks/ex
 import { triagePrompt } from '../hooks/triage-heuristic.js';
 import { readTriageConfig } from '../hooks/triage-config.js';
 import { isLeaderRuntimeStale } from '../team/leader-activity.js';
-import { CODEBUDDY_BIN, CODEX_BIN } from './constants.js';
+import { CLAUDE_BIN, CODEBUDDY_BIN, CODEX_BIN } from './constants.js';
 
 interface DoctorOptions {
   verbose?: boolean;
@@ -38,8 +38,8 @@ interface Check {
 }
 
 type DoctorSetupScope = 'user' | 'project';
-type DoctorSetupProvider = 'codebuddy' | 'codex' | 'both';
-type DoctorTargetProvider = Exclude<DoctorSetupProvider, 'both'>;
+type DoctorSetupProvider = 'codebuddy' | 'codex' | 'claude' | 'both' | 'all';
+type DoctorTargetProvider = Exclude<DoctorSetupProvider, 'both' | 'all'>;
 
 interface DoctorScopeResolution {
   scope: DoctorSetupScope;
@@ -74,7 +74,10 @@ async function resolveDoctorScope(cwd: string): Promise<DoctorScopeResolution> {
     const raw = await readFile(scopePath, 'utf-8');
     const parsed = JSON.parse(raw) as Partial<{ provider: string; scope: string }>;
     const provider =
-      parsed.provider === 'codex' || parsed.provider === 'both'
+      parsed.provider === 'codex' ||
+      parsed.provider === 'claude' ||
+      parsed.provider === 'both' ||
+      parsed.provider === 'all'
         ? parsed.provider
         : 'codebuddy';
     if (typeof parsed.scope === 'string') {
@@ -104,7 +107,7 @@ function resolveDoctorPaths(
   provider: DoctorTargetProvider,
 ): DoctorPaths {
   if (scope === 'project') {
-    const codebuddyHomeDir = join(cwd, provider === 'codex' ? '.codex' : '.codebuddy');
+    const codebuddyHomeDir = join(cwd, providerProjectDirName(provider));
     return {
       codebuddyHomeDir,
       configPath: join(codebuddyHomeDir, 'config.toml'),
@@ -124,6 +127,16 @@ function resolveDoctorPaths(
       stateDir: ombStateDir(cwd),
     };
   }
+  if (provider === 'claude') {
+    const codebuddyHomeDir = claudeHome();
+    return {
+      codebuddyHomeDir,
+      configPath: join(codebuddyHomeDir, 'config.toml'),
+      promptsDir: join(codebuddyHomeDir, 'prompts'),
+      skillsDir: join(codebuddyHomeDir, 'skills'),
+      stateDir: ombStateDir(cwd),
+    };
+  }
 
   return {
     codebuddyHomeDir: codebuddyHome(),
@@ -135,11 +148,38 @@ function resolveDoctorPaths(
 }
 
 function doctorProviderTargets(provider: DoctorSetupProvider): DoctorTargetProvider[] {
-  return provider === 'both' ? ['codebuddy', 'codex'] : [provider];
+  switch (provider) {
+    case 'both':
+      return ['codebuddy', 'codex'];
+    case 'all':
+      return ['codebuddy', 'codex', 'claude'];
+    case 'codebuddy':
+    case 'codex':
+    case 'claude':
+      return [provider];
+  }
 }
 
 function providerDisplayName(provider: DoctorTargetProvider): string {
-  return provider === 'codex' ? 'Codex' : 'CodeBuddy';
+  switch (provider) {
+    case 'codebuddy':
+      return 'CodeBuddy';
+    case 'codex':
+      return 'Codex';
+    case 'claude':
+      return 'Claude';
+  }
+}
+
+function providerProjectDirName(provider: DoctorTargetProvider): string {
+  switch (provider) {
+    case 'codebuddy':
+      return '.codebuddy';
+    case 'codex':
+      return '.codex';
+    case 'claude':
+      return '.claude';
+  }
 }
 
 function resolveDoctorTargets(
@@ -525,9 +565,18 @@ function listTeamTmuxSessions(): Set<string> | null {
   return new Set(sessions);
 }
 
-function checkProviderCli(provider: 'codebuddy' | 'codex'): Check {
-  const binary = provider === 'codex' ? CODEX_BIN : CODEBUDDY_BIN;
-  const label = provider === 'codex' ? 'Codex CLI' : 'CodeBuddy CLI';
+function checkProviderCli(provider: DoctorTargetProvider): Check {
+  const binary = (() => {
+    switch (provider) {
+      case 'codebuddy':
+        return CODEBUDDY_BIN;
+      case 'codex':
+        return CODEX_BIN;
+      case 'claude':
+        return CLAUDE_BIN;
+    }
+  })();
+  const label = `${providerDisplayName(provider)} CLI`;
   const { result } = spawnPlatformCommandSync(binary, ['--version'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -536,9 +585,16 @@ function checkProviderCli(provider: 'codebuddy' | 'codex'): Check {
     const code = (result.error as NodeJS.ErrnoException).code;
     const kind = classifySpawnError(result.error as NodeJS.ErrnoException);
     if (kind === 'missing') {
-      const installHint = provider === 'codex'
-        ? 'install Codex CLI and ensure codex is on PATH'
-        : 'install with: npm install -g @tencent-ai/codebuddy-code';
+      const installHint = (() => {
+        switch (provider) {
+          case 'codebuddy':
+            return 'install with: npm install -g @tencent-ai/codebuddy-code';
+          case 'codex':
+            return 'install Codex CLI and ensure codex is on PATH';
+          case 'claude':
+            return 'install Claude Code CLI and ensure claude is on PATH';
+        }
+      })();
       return { name: label, status: 'fail', message: `not found - ${installHint}` };
     }
     if (kind === 'blocked') {
@@ -761,15 +817,19 @@ function extractConfigEnv(parsed: Record<string, unknown>): Record<string, unkno
   return isPlainObject(envBlock) ? envBlock : null;
 }
 
+function isJsonNativeProvider(provider: DoctorTargetProvider | undefined): boolean {
+  return provider === 'codebuddy' || provider === 'claude';
+}
+
 async function checkConfig(
   configPath: string,
-  provider?: 'codebuddy' | 'codex',
+  provider?: DoctorTargetProvider,
 ): Promise<Check> {
   const resolved = await readManagedConfig(configPath);
-  if (provider === 'codebuddy') {
-    // CodeBuddy provider: config.toml is intentionally not generated anymore.
+  if (isJsonNativeProvider(provider)) {
+    // JSON-native providers: config.toml is intentionally not generated.
     // Healthy = .omb-config.json exists (means `omb setup` has run at least
-    // once). settings.json alone is inconclusive because CodeBuddy always
+    // once). settings.json alone is inconclusive because provider-native CLIs may
     // writes one; we need OMB-side footprint to say "set up".
     const ombConfigPath = join(dirname(configPath), '.omb-config.json');
     if (existsSync(ombConfigPath)) {
@@ -785,7 +845,7 @@ async function checkConfig(
       return {
         name: 'Config',
         status: 'warn',
-        message: `legacy ${resolved.displayName} still present; run "omb setup --provider codebuddy" to migrate OMB-consumed fields into .omb-config.json and remove the TOML`,
+        message: `legacy ${resolved.displayName} still present; run "omb setup --provider ${provider ?? 'codebuddy'}" to migrate OMB-consumed fields into .omb-config.json and remove the TOML`,
       };
     }
     if (resolved && 'error' in resolved && resolved.displayName === 'settings.json') {
@@ -805,7 +865,7 @@ async function checkConfig(
     return {
       name: 'Config',
       status: 'warn',
-      message: 'settings.json exists but no OMB entries yet (expected before first setup; run "omb setup --force" once)',
+      message: '.omb-config.json not found (expected before first setup; run "omb setup --force" once)',
     };
   }
 
@@ -833,7 +893,7 @@ async function checkConfig(
 
 async function checkExploreRouting(
   configPath: string,
-  provider?: 'codebuddy' | 'codex',
+  provider?: DoctorTargetProvider,
 ): Promise<Check> {
   const envValue = process.env[OMB_EXPLORE_CMD_ENV];
   if (typeof envValue === 'string' && !isExploreCommandRoutingEnabled(process.env)) {
@@ -845,11 +905,11 @@ async function checkExploreRouting(
     };
   }
 
-  // CodeBuddy provider: env config lives primarily in .omb-config.json (not
+  // JSON-native providers: env config lives primarily in .omb-config.json (not
   // config.toml). Some users also set `env.USE_OMB_EXPLORE_CMD` inside
   // settings.json directly; respect that too so doctor matches the full set
-  // of places a CodeBuddy user might actually configure explore routing.
-  if (provider === 'codebuddy') {
+  // of places a JSON-native user might actually configure explore routing.
+  if (isJsonNativeProvider(provider)) {
     const codebuddyHomeDir = dirname(configPath);
     const sources: Array<{ path: string; label: string }> = [
       { path: join(codebuddyHomeDir, '.omb-config.json'), label: '.omb-config.json' },
@@ -1024,10 +1084,10 @@ function checkAgentsMd(scope: DoctorSetupScope, codebuddyHomeDir: string): Check
 
 async function checkMcpServers(
   configPath: string,
-  provider?: 'codebuddy' | 'codex',
+  provider?: DoctorTargetProvider,
 ): Promise<Check> {
-  if (provider === 'codebuddy') {
-    // CodeBuddy manages MCP servers via settings.json, not via codex-format
+  if (isJsonNativeProvider(provider)) {
+    // JSON-native providers manage MCP servers via settings.json, not via codex-format
     // `[mcp_servers.*]` TOML sections. Inspect settings.json directly so the
     // check still surfaces "user has MCP servers but none are OMB-managed" as
     // a first-setup warning, consistent with the pre-migration behavior.

@@ -143,6 +143,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
     expectOmb: boolean;
     expectCodex: boolean;
     expectCodebuddy: boolean;
+    expectClaude: boolean;
   }
 
   const cases: DirTestCase[] = [
@@ -152,6 +153,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
       expectOmb: false,
       expectCodex: false,
       expectCodebuddy: false,
+      expectClaude: false,
     },
     {
       name: "only .codex exists",
@@ -159,6 +161,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
       expectOmb: false,
       expectCodex: true,
       expectCodebuddy: false,
+      expectClaude: false,
     },
     {
       name: "only .omb exists",
@@ -166,6 +169,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
       expectOmb: true,
       expectCodex: false,
       expectCodebuddy: false,
+      expectClaude: false,
     },
     {
       name: "only .codebuddy exists",
@@ -173,13 +177,23 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
       expectOmb: false,
       expectCodex: false,
       expectCodebuddy: true,
+      expectClaude: false,
+    },
+    {
+      name: "only .claude exists",
+      create: [".claude"],
+      expectOmb: false,
+      expectCodex: false,
+      expectCodebuddy: false,
+      expectClaude: true,
     },
     {
       name: "all canonical/current dirs exist",
-      create: [".codex", ".omb", ".codebuddy"],
+      create: [".codex", ".omb", ".codebuddy", ".claude"],
       expectOmb: true,
       expectCodex: true,
       expectCodebuddy: true,
+      expectClaude: true,
     },
     {
       name: "legacy codex plus OMB state dir",
@@ -187,6 +201,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
       expectOmb: true,
       expectCodex: true,
       expectCodebuddy: false,
+      expectClaude: false,
     },
   ];
 
@@ -200,6 +215,7 @@ describe("E1-T05: .codebuddy vs .codex directory detection", () => {
       assert.equal(report.hasLegacyCodexDir, tc.expectCodex);
       assert.equal(report.hasCanonicalOmbDir, tc.expectOmb);
       assert.equal(report.hasCanonicalCodebuddyDir, tc.expectCodebuddy);
+      assert.equal(report.hasClaudeDir, tc.expectClaude);
     });
   }
 });

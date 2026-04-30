@@ -3,6 +3,7 @@ export const CODEBUDDY_LEGACY_BYPASS_FLAG = '--dangerously-bypass-approvals-and-
 export const YOLO_FLAG = '--yolo';
 export const CODEBUDDY_BIN = 'codebuddy';
 export const CODEX_BIN = 'codex';
+export const CLAUDE_BIN = 'claude';
 export const CODEBUDDY_BYPASS_FLAG = '--dangerously-skip-permissions';
 export const CODEBUDDY_PRINT_FLAG = '--print';
 export const CODEBUDDY_EFFORT_FLAG = '--effort';

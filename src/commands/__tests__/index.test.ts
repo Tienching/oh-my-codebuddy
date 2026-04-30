@@ -210,6 +210,59 @@ describe("command template resolution", () => {
     }
   });
 
+  it("loads command templates from .claude/commands and CLAUDE_HOME when setup provider=claude", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-command-template-claude-"));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codebuddy-home-"));
+    const codexHome = await mkdtemp(join(tmpdir(), "omb-codex-home-"));
+    const claudeHome = await mkdtemp(join(tmpdir(), "omb-claude-home-"));
+    try {
+      const projectClaudeDir = join(cwd, ".claude", "commands");
+      const projectCodebuddyDir = join(cwd, ".codebuddy", "commands");
+      const projectCodexDir = join(cwd, ".codex", "commands");
+      const homeClaudeDir = join(claudeHome, "commands");
+      await mkdir(projectClaudeDir, { recursive: true });
+      await mkdir(projectCodebuddyDir, { recursive: true });
+      await mkdir(projectCodexDir, { recursive: true });
+      await mkdir(homeClaudeDir, { recursive: true });
+      await writeFile(
+        join(projectClaudeDir, "project.md"),
+        ['---', 'description: "project claude"', "---", "project claude command"].join("\n"),
+      );
+      await writeFile(
+        join(homeClaudeDir, "home.md"),
+        ['---', 'description: "home claude"', "---", "home claude command"].join("\n"),
+      );
+      await writeFile(
+        join(projectCodebuddyDir, "buddy.md"),
+        ['---', 'description: "project buddy"', "---", "should not use codebuddy for claude setup"].join("\n"),
+      );
+      await writeFile(
+        join(projectCodexDir, "codex.md"),
+        ['---', 'description: "project codex"', "---", "should not use codex for claude setup"].join("\n"),
+      );
+      await mkdir(join(cwd, ".omb"), { recursive: true });
+      await writeFile(
+        join(cwd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "claude" }),
+      );
+
+      const names = await listCommandNames({
+        cwd,
+        env: {
+          CODEBUDDY_HOME: codebuddyHome,
+          CODEX_HOME: codexHome,
+          CLAUDE_HOME: claudeHome,
+        },
+      });
+      assert.deepEqual(names.sort(), ["home", "project"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+      await rm(codebuddyHome, { recursive: true, force: true });
+      await rm(codexHome, { recursive: true, force: true });
+      await rm(claudeHome, { recursive: true, force: true });
+    }
+  });
+
   it("loads command templates from both providers when setup provider=both", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omb-command-template-both-"));
     const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codebuddy-home-both-"));
@@ -257,6 +310,54 @@ describe("command template resolution", () => {
       await rm(cwd, { recursive: true, force: true });
       await rm(codebuddyHome, { recursive: true, force: true });
       await rm(codexHome, { recursive: true, force: true });
+    }
+  });
+
+  it("loads command templates from all providers when setup provider=all", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-command-template-all-"));
+    const codebuddyHome = await mkdtemp(join(tmpdir(), "omb-codebuddy-home-all-"));
+    const codexHome = await mkdtemp(join(tmpdir(), "omb-codex-home-all-"));
+    const claudeHome = await mkdtemp(join(tmpdir(), "omb-claude-home-all-"));
+    try {
+      for (const dir of [
+        join(cwd, ".codebuddy", "commands"),
+        join(cwd, ".codex", "commands"),
+        join(cwd, ".claude", "commands"),
+        join(codebuddyHome, "commands"),
+        join(codexHome, "commands"),
+        join(claudeHome, "commands"),
+      ]) {
+        await mkdir(dir, { recursive: true });
+      }
+      await writeFile(join(cwd, ".codebuddy", "commands", "project-buddy.md"), "---\ndescription: project buddy\n---\nproject buddy\n");
+      await writeFile(join(cwd, ".codex", "commands", "project-codex.md"), "---\ndescription: project codex\n---\nproject codex\n");
+      await writeFile(join(cwd, ".claude", "commands", "project-claude.md"), "---\ndescription: project claude\n---\nproject claude\n");
+      await writeFile(join(codebuddyHome, "commands", "home-buddy.md"), "---\ndescription: home buddy\n---\nhome buddy\n");
+      await writeFile(join(codexHome, "commands", "home-codex.md"), "---\ndescription: home codex\n---\nhome codex\n");
+      await writeFile(join(claudeHome, "commands", "home-claude.md"), "---\ndescription: home claude\n---\nhome claude\n");
+      await mkdir(join(cwd, ".omb"), { recursive: true });
+      await writeFile(
+        join(cwd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "all" }),
+      );
+
+      const names = await listCommandNames({
+        cwd,
+        env: {
+          CODEBUDDY_HOME: codebuddyHome,
+          CODEX_HOME: codexHome,
+          CLAUDE_HOME: claudeHome,
+        },
+      });
+      assert.deepEqual(
+        names.sort(),
+        ["home-buddy", "home-claude", "home-codex", "project-buddy", "project-claude", "project-codex"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+      await rm(codebuddyHome, { recursive: true, force: true });
+      await rm(codexHome, { recursive: true, force: true });
+      await rm(claudeHome, { recursive: true, force: true });
     }
   });
 

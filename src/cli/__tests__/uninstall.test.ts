@@ -302,6 +302,37 @@ describe('omb uninstall', () => {
     }
   });
 
+  it('uninstalls all provider homes when persisted provider is all', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-all-'));
+    try {
+      const home = join(wd, 'home');
+      await mkdir(home, { recursive: true });
+      const setupRes = runOmb(wd, ['setup', '--scope=project', '--provider=all'], {
+        HOME: home,
+      });
+      if (shouldSkipForSpawnPermissions(setupRes.error)) return;
+      assert.equal(setupRes.status, 0, setupRes.stderr || setupRes.stdout);
+
+      const res = runOmb(wd, ['uninstall'], { HOME: home });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /Resolved provider: all/);
+      assert.match(res.stdout, /Cleaned 3 hooks artifact\(s\)\./);
+
+      for (const providerDir of ['.codebuddy', '.codex', '.claude']) {
+        assert.equal(existsSync(join(wd, providerDir, 'hooks.json')), false, providerDir);
+        assert.equal(existsSync(join(wd, providerDir, 'prompts', 'executor.md')), false, providerDir);
+        assert.equal(existsSync(join(wd, providerDir, 'agents', 'executor.toml')), false, providerDir);
+        assert.equal(existsSync(join(wd, providerDir, 'skills', 'team', 'SKILL.md')), false, providerDir);
+      }
+      assert.equal(existsSync(join(wd, '.claude', '.omb-config.json')), false);
+      assert.equal(existsSync(join(wd, '.claude', 'config.toml')), false);
+      assert.equal(existsSync(join(wd, 'AGENTS.md')), false);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
 
   it('preserves user config entries when removing OMB', async () => {
     const wd = await mkdtemp(join(tmpdir(), 'omb-uninstall-'));

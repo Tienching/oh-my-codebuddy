@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -115,6 +115,36 @@ describe('compat doctor contract', () => {
       assert.equal(result.status, Number.parseInt(readFixture('team-resume-blocker.exitcode.txt').trim(), 10), result.stderr || result.stdout);
       assert.equal(result.stderr, '');
       assert.equal(result.stdout.replace(/\\/g, '/'), readFixture('team-resume-blocker.stdout.txt'));
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('accepts claude as an explicit doctor provider', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-compat-doctor-claude-'));
+    const home = join(wd, 'home');
+    const claudeHome = join(home, '.claude');
+    try {
+      await mkdir(claudeHome, { recursive: true });
+      await writeFile(join(claudeHome, '.omb-config.json'), JSON.stringify({ env: { USE_OMB_EXPLORE_CMD: '1' } }));
+      await writeFile(
+        join(claudeHome, 'settings.json'),
+        JSON.stringify({ mcpServers: { omb_state: { command: 'node', args: [] } } }),
+      );
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      await symlink('/bin/echo', join(fakeBin, 'claude'));
+
+      const result = runCompatTarget(wd, ['doctor', '--provider', 'claude'], {
+        HOME: home,
+        CLAUDE_HOME: claudeHome,
+        PATH: `${fakeBin}:${process.env.PATH || ''}`,
+      });
+      if (shouldSkipForSpawnPermissions(result.error)) return;
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(result.stdout, /Resolved setup provider: claude \(from --provider\)/);
+      assert.match(result.stdout, /Claude home: .*\.claude/);
+      assert.doesNotMatch(result.stdout, /CodeBuddy home:/);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }

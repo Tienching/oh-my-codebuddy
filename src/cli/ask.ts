@@ -25,8 +25,8 @@ const ASK_ADVISOR_SCRIPT_ENV = 'OMB_ASK_ADVISOR_SCRIPT';
 const ASK_AGENT_PROMPT_FLAG = '--agent-prompt';
 const ASK_ORIGINAL_TASK_ENV = 'OMB_ASK_ORIGINAL_TASK';
 const SAFE_ROLE_PATTERN = /^[a-z][a-z0-9-]*$/;
-const ASK_SETUP_PROVIDERS = new Set(['codebuddy', 'codex', 'both'] as const);
-type AskSetupProvider = 'codebuddy' | 'codex' | 'both';
+const ASK_SETUP_PROVIDERS = new Set(['codebuddy', 'codex', 'claude', 'both', 'all'] as const);
+type AskSetupProvider = 'codebuddy' | 'codex' | 'claude' | 'both' | 'all';
 type AskSetupScope = 'user' | 'project';
 
 function resolveCodeBuddyPromptsDir(env: NodeJS.ProcessEnv): string {
@@ -40,6 +40,14 @@ function resolveCodexPromptsDir(env: NodeJS.ProcessEnv): string {
     return join(override, 'prompts');
   }
   return join(homedir(), '.codex', 'prompts');
+}
+
+function resolveClaudePromptsDir(env: NodeJS.ProcessEnv): string {
+  const override = env.CLAUDE_HOME?.trim();
+  if (override) {
+    return join(override, 'prompts');
+  }
+  return join(homedir(), '.claude', 'prompts');
 }
 
 function normalizeAskSetupScope(rawScope: unknown): AskSetupScope | undefined {
@@ -99,21 +107,28 @@ function resolveAskPromptDirs(
   const dirs: string[] = [];
   const codebuddyHomePrompts = resolveCodeBuddyPromptsDir(env);
   const codexHomePrompts = resolveCodexPromptsDir(env);
+  const claudeHomePrompts = resolveClaudePromptsDir(env);
 
   if (scope === 'project') {
-    if (provider === 'both' || provider === 'codebuddy') {
+    if (provider === 'both' || provider === 'all' || provider === 'codebuddy') {
       dirs.push(join(cwd, '.codebuddy', 'prompts'));
     }
-    if (provider === 'both' || provider === 'codex') {
+    if (provider === 'both' || provider === 'all' || provider === 'codex') {
       dirs.push(join(cwd, '.codex', 'prompts'));
+    }
+    if (provider === 'all' || provider === 'claude') {
+      dirs.push(join(cwd, '.claude', 'prompts'));
     }
   }
 
-  if (provider === 'both' || provider === 'codebuddy') {
+  if (provider === 'both' || provider === 'all' || provider === 'codebuddy') {
     dirs.push(codebuddyHomePrompts);
   }
-  if (provider === 'both' || provider === 'codex') {
+  if (provider === 'both' || provider === 'all' || provider === 'codex') {
     dirs.push(codexHomePrompts);
+  }
+  if (provider === 'all' || provider === 'claude') {
+    dirs.push(claudeHomePrompts);
   }
 
   const deduped: string[] = [];

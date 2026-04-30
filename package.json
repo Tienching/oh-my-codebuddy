@@ -14,6 +14,7 @@
     "build:explore:release": "node dist/scripts/build-explore-harness.js",
     "check:no-unused": "tsc -p tsconfig.no-unused.json",
     "clean:native-package-assets": "node dist/scripts/cleanup-explore-harness.js",
+    "catalog:check": "node dist/scripts/generate-catalog-docs.js --check",
     "dev": "tsc --watch",
     "lint": "biome lint .",
     "prepack": "npm run build && npm run clean:native-package-assets",

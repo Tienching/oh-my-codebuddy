@@ -258,6 +258,46 @@ describe('omb ask', () => {
     }
   });
 
+  it('uses CLAUDE_HOME prompts when setup provider=claude in user scope', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-ask-claude-scope-'));
+    const claudeHome = await mkdtemp(join(tmpdir(), 'omb-claude-home-scope-'));
+    try {
+      const promptsDir = join(claudeHome, 'prompts');
+      const setupDir = join(wd, '.omb');
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(promptsDir, { recursive: true });
+      await mkdir(setupDir, { recursive: true });
+
+      await writeFile(
+        join(wd, '.omb', 'setup-scope.json'),
+        JSON.stringify({ scope: 'user', provider: 'claude' }),
+      );
+      await writeFile(
+        join(promptsDir, 'planner.md'),
+        'You are Planner from CLAUDE_HOME',
+      );
+
+      const res = runOmb(
+        wd,
+        ['ask', 'claude', '--agent-prompt', 'planner', 'plan', 'feature'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          CLAUDE_HOME: claudeHome,
+          OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
+        },
+      );
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /You are Planner from CLAUDE_HOME/);
+      assert.match(res.stdout, /plan feature/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+      await rm(claudeHome, { recursive: true, force: true });
+    }
+  });
+
   it('warns and falls back to codebuddy when setup-scope provider is invalid', async () => {
     // Hand-edited or upgraded setup-scope.json with an unknown provider value
     // must not silently collapse to CodeBuddy. Emit a stderr warning so the
@@ -345,6 +385,52 @@ describe('omb ask', () => {
     } finally {
       await rm(wd, { recursive: true, force: true });
       await rm(codebuddyHome, { recursive: true, force: true });
+    }
+  });
+
+  it('uses available provider prompt when setup provider=all in ask --agent-prompt', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-ask-all-scope-'));
+    const claudeHome = await mkdtemp(join(tmpdir(), 'omb-claude-home-all-scope-'));
+    try {
+      const setupDir = join(wd, '.omb');
+      const projectClaudePrompts = join(wd, '.claude', 'prompts');
+      const claudePrompts = join(claudeHome, 'prompts');
+      const fakeBin = join(wd, 'bin');
+      await mkdir(fakeBin, { recursive: true });
+      await mkdir(setupDir, { recursive: true });
+      await mkdir(projectClaudePrompts, { recursive: true });
+      await mkdir(claudePrompts, { recursive: true });
+
+      await writeFile(
+        join(wd, '.omb', 'setup-scope.json'),
+        JSON.stringify({ scope: 'project', provider: 'all' }),
+      );
+      await writeFile(
+        join(projectClaudePrompts, 'planner.md'),
+        'You are Planner from Project Claude',
+      );
+      await writeFile(
+        join(claudePrompts, 'planner.md'),
+        'You are Planner from Claude Home',
+      );
+
+      const res = runOmb(
+        wd,
+        ['ask', 'gemini', '--agent-prompt', 'planner', 'triage', 'incident'],
+        {
+          PATH: `${fakeBin}:${process.env.PATH || ''}`,
+          OMB_ASK_ADVISOR_SCRIPT: 'dist/scripts/fixtures/ask-advisor-stub.js',
+          CLAUDE_HOME: claudeHome,
+        },
+      );
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+      assert.match(res.stdout, /Project Claude/);
+      assert.doesNotMatch(res.stdout, /Claude Home/);
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+      await rm(claudeHome, { recursive: true, force: true });
     }
   });
 

@@ -151,9 +151,11 @@ export interface LegacyPathReport {
   hasLegacyCodexDir: boolean;
   hasCanonicalOmbDir: boolean;
   hasCanonicalCodebuddyDir: boolean;
+  hasClaudeDir: boolean;
   ombDir: string;
   codexDir: string;
   codebuddyDir: string;
+  claudeDir: string;
 }
 
 /**
@@ -163,15 +165,18 @@ export function readLegacyAliasIfPresent(cwd: string): LegacyPathReport {
   const ombDir = join(cwd, ".omb");
   const codexDir = join(cwd, ".codex");
   const codebuddyDir = join(cwd, ".codebuddy");
+  const claudeDir = join(cwd, ".claude");
 
   return {
     hasLegacyOmbDir: existsSync(ombDir),
     hasLegacyCodexDir: existsSync(codexDir),
     hasCanonicalOmbDir: existsSync(ombDir),
     hasCanonicalCodebuddyDir: existsSync(codebuddyDir),
+    hasClaudeDir: existsSync(claudeDir),
     ombDir,
     codexDir,
     codebuddyDir,
+    claudeDir,
   };
 }
 

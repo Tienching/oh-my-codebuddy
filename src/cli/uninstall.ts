@@ -35,7 +35,7 @@ export interface UninstallOptions {
   scope?: SetupScope;
 }
 
-type UninstallTargetProvider = Exclude<SetupProvider, "both">;
+type UninstallTargetProvider = Exclude<SetupProvider, "both" | "all">;
 
 interface UninstallTarget {
   provider: UninstallTargetProvider;
@@ -49,7 +49,9 @@ interface UninstallSummary {
   tuiSectionRemoved: boolean;
   topLevelKeysRemoved: boolean;
   featureFlagsRemoved: boolean;
+  ombConfigRemoved: boolean;
   hooksFileRemoved: boolean;
+  settingsMcpServersRemoved: string[];
   promptsRemoved: number;
   skillsRemoved: number;
   agentConfigsRemoved: number;
@@ -59,11 +61,27 @@ interface UninstallSummary {
 }
 
 function setupProviderTargets(provider: SetupProvider): UninstallTargetProvider[] {
-  return provider === "both" ? ["codebuddy", "codex"] : [provider];
+  switch (provider) {
+    case "both":
+      return ["codebuddy", "codex"];
+    case "all":
+      return ["codebuddy", "codex", "claude"];
+    case "codebuddy":
+    case "codex":
+    case "claude":
+      return [provider];
+  }
 }
 
 function providerDisplayName(provider: UninstallTargetProvider): string {
-  return provider === "codex" ? "Codex" : "CodeBuddy";
+  switch (provider) {
+    case "codebuddy":
+      return "CodeBuddy";
+    case "codex":
+      return "Codex";
+    case "claude":
+      return "Claude";
+  }
 }
 
 function resolveUninstallTargets(
@@ -91,6 +109,68 @@ function mergeConfigResult(
     summary.topLevelKeysRemoved || result.topLevelKeysRemoved;
   summary.featureFlagsRemoved =
     summary.featureFlagsRemoved || result.featureFlagsRemoved;
+}
+
+function isOmbMcpServerName(name: string): boolean {
+  return name.startsWith("omb-") || name.startsWith("omb_");
+}
+
+async function removeJsonNativeMcpServers(
+  settingsPath: string,
+  options: Pick<UninstallOptions, "dryRun" | "verbose">,
+): Promise<string[]> {
+  if (!existsSync(settingsPath)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(settingsPath, "utf-8"));
+  } catch {
+    return [];
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return [];
+  const root = parsed as Record<string, unknown>;
+  const mcpServers = root.mcpServers;
+  if (typeof mcpServers !== "object" || mcpServers === null || Array.isArray(mcpServers)) {
+    return [];
+  }
+
+  const nextMcpServers = { ...(mcpServers as Record<string, unknown>) };
+  const removed = Object.keys(nextMcpServers).filter(isOmbMcpServerName);
+  if (removed.length === 0) return [];
+  for (const name of removed) delete nextMcpServers[name];
+
+  const nextRoot: Record<string, unknown> = { ...root };
+  if (Object.keys(nextMcpServers).length > 0) {
+    nextRoot.mcpServers = nextMcpServers;
+  } else {
+    delete nextRoot.mcpServers;
+  }
+
+  if (!options.dryRun) {
+    await writeFile(settingsPath, `${JSON.stringify(nextRoot, null, 2)}\n`, "utf-8");
+  }
+  if (options.verbose) {
+    console.log(
+      `  ${options.dryRun ? "Would clean" : "Cleaned"} OMB MCP entries from ${settingsPath}`,
+    );
+  }
+  return removed;
+}
+
+async function removeOmbManagedConfig(
+  homeDir: string,
+  options: Pick<UninstallOptions, "dryRun" | "verbose">,
+): Promise<boolean> {
+  const configPath = join(homeDir, ".omb-config.json");
+  if (!existsSync(configPath)) return false;
+  if (!options.dryRun) {
+    await rm(configPath, { force: true });
+  }
+  if (options.verbose) {
+    console.log(
+      `  ${options.dryRun ? "Would remove" : "Removed"} ${configPath}`,
+    );
+  }
+  return true;
 }
 
 const OMB_MCP_SERVERS = [
@@ -448,8 +528,18 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
     console.log("  config.toml: no OMB/OMB entries found (or --keep-config used)");
   }
 
+  if (summary.ombConfigRemoved) {
+    console.log(`  ${prefix} provider .omb-config.json`);
+  }
+
+  if (summary.settingsMcpServersRemoved.length > 0) {
+    console.log(
+      `  ${prefix} OMB MCP server entries from provider settings.json: ${summary.settingsMcpServersRemoved.join(", ")}`,
+    );
+  }
+
   if (summary.hooksFileRemoved) {
-    console.log(`  ${prefix} OMB-managed entries in provider hooks.json (.codebuddy/hooks.json and/or .codex/hooks.json)`);
+    console.log(`  ${prefix} OMB-managed entries in provider hooks.json`);
   }
 
   if (summary.promptsRemoved > 0) {
@@ -475,6 +565,8 @@ function printSummary(summary: UninstallSummary, dryRun: boolean): void {
 
   const totalActions =
     (summary.configCleaned ? 1 : 0) +
+    (summary.ombConfigRemoved ? 1 : 0) +
+    summary.settingsMcpServersRemoved.length +
     (summary.hooksFileRemoved ? 1 : 0) +
     summary.promptsRemoved +
     summary.skillsRemoved +
@@ -529,7 +621,9 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
     tuiSectionRemoved: false,
     topLevelKeysRemoved: false,
     featureFlagsRemoved: false,
+    ombConfigRemoved: false,
     hooksFileRemoved: false,
+    settingsMcpServersRemoved: [],
     promptsRemoved: 0,
     skillsRemoved: 0,
     agentConfigsRemoved: 0,
@@ -551,15 +645,27 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
 
   // Step 1: Clean config.toml
   if (keepConfig) {
-    console.log("[1/5] Skipping config.toml cleanup (--keep-config).");
+    console.log("[1/5] Skipping provider configuration cleanup (--keep-config).");
   } else {
-    console.log("[1/5] Cleaning config.toml...");
+    console.log("[1/5] Cleaning provider configuration...");
     for (const target of uninstallTargets) {
       const configResult = await cleanConfig(target.scopeDirs.codexConfigFile, {
         dryRun,
         verbose,
       });
       mergeConfigResult(summary, configResult);
+      const removedSettingsMcp = await removeJsonNativeMcpServers(
+        join(target.scopeDirs.codexHomeDir, "settings.json"),
+        { dryRun, verbose },
+      );
+      summary.settingsMcpServersRemoved = Array.from(
+        new Set([...summary.settingsMcpServersRemoved, ...removedSettingsMcp]),
+      );
+      const removedOmbConfig = await removeOmbManagedConfig(
+        target.scopeDirs.codexHomeDir,
+        { dryRun, verbose },
+      );
+      summary.ombConfigRemoved = summary.ombConfigRemoved || removedOmbConfig;
     }
   }
   console.log();

@@ -12,6 +12,7 @@ dist/
 # Local agent/worktree artifacts (never commit)
 .codebuddy/*.local.md
 .claude/
+.claude-internal/
 .claire/
 .agents/
 coverage/

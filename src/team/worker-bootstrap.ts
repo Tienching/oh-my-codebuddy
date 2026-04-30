@@ -7,7 +7,7 @@ import {
   getFixLoopInstructions,
   getVerificationInstructions,
 } from "../verification/verifier.js";
-import { codebuddyHome, codexHome, listInstalledSkillDirectories } from "../utils/paths.js";
+import { claudeHome, codebuddyHome, codexHome, listInstalledSkillDirectories } from "../utils/paths.js";
 import { sleep } from "../utils/sleep.js";
 import type { TeamReminderDirective } from "./reminder-intents.js";
 
@@ -21,18 +21,27 @@ const LOCK_TIMEOUT_MS = 5000;
 const LOCK_POLL_INTERVAL_MS = 100;
 const LOCK_STALE_MS = 30_000;
 
-function resolveLeaderCliFromEnv(
+export function resolveLeaderCliFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): "codebuddy" | "codex" | null {
+): "codebuddy" | "codex" | "claude" | null {
   const raw = String(env[LEADER_CLI_ENV] ?? "").trim().toLowerCase();
+  if (raw === "claude") return "claude";
   if (raw === "codex") return "codex";
   if (raw === "codebuddy") return "codebuddy";
   return null;
 }
 
-function resolveWorkerUserHome(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveWorkerUserHome(env: NodeJS.ProcessEnv = process.env): string {
   const leaderCli = resolveLeaderCliFromEnv(env);
-  return leaderCli === "codex" ? codexHome() : codebuddyHome();
+  switch (leaderCli) {
+    case "codex":
+      return codexHome();
+    case "claude":
+      return claudeHome();
+    case "codebuddy":
+    case null:
+      return codebuddyHome();
+  }
 }
 
 interface WorkerRootAgentsOptions {
@@ -101,8 +110,10 @@ This file is generated for a live OMB team worker run and is disposable.
 2. Load the worker skill from the first existing path:
    - \`${"${CODEBUDDY_HOME:-~/.codebuddy}"}/skills/worker/SKILL.md\`
    - \`${"${CODEX_HOME:-~/.codex}"}/skills/worker/SKILL.md\`
+   - \`${"${CLAUDE_HOME:-~/.claude}"}/skills/worker/SKILL.md\`
    - \`${options.leaderCwd}/.codebuddy/skills/worker/SKILL.md\`
    - \`${options.leaderCwd}/.codex/skills/worker/SKILL.md\`
+   - \`${options.leaderCwd}/.claude/skills/worker/SKILL.md\`
    - \`${options.leaderCwd}/skills/worker/SKILL.md\`
 3. Send startup ACK before task work:
 
@@ -318,8 +329,10 @@ You are a team worker in team "${teamName}". Your identity and assigned tasks ar
 2. Load the worker skill instructions from the first path that exists:
    - \`${"${CODEBUDDY_HOME:-~/.codebuddy}"}/skills/worker/SKILL.md\`
    - \`${"${CODEX_HOME:-~/.codex}"}/skills/worker/SKILL.md\`
+   - \`${"${CLAUDE_HOME:-~/.claude}"}/skills/worker/SKILL.md\`
    - \`<leader_cwd>/.codebuddy/skills/worker/SKILL.md\`
    - \`<leader_cwd>/.codex/skills/worker/SKILL.md\`
+   - \`<leader_cwd>/.claude/skills/worker/SKILL.md\`
    - \`<leader_cwd>/skills/worker/SKILL.md\` (repo fallback)
 3. Send an ACK to the lead using CLI interop \`omb team api send-message --json\` (to_worker="leader-fixed") once initialized
 4. Resolve canonical team state root in this order:
@@ -708,8 +721,10 @@ ${taskList}
 1. Load and follow the worker skill from the first existing path:
    - \`${"${CODEBUDDY_HOME:-~/.codebuddy}"}/skills/worker/SKILL.md\`
    - \`${"${CODEX_HOME:-~/.codex}"}/skills/worker/SKILL.md\`
+   - \`${"${CLAUDE_HOME:-~/.claude}"}/skills/worker/SKILL.md\`
    - \`${leaderCwd}/.codebuddy/skills/worker/SKILL.md\`
    - \`${leaderCwd}/.codex/skills/worker/SKILL.md\`
+   - \`${leaderCwd}/.claude/skills/worker/SKILL.md\`
    - \`${leaderCwd}/skills/worker/SKILL.md\` (repo fallback)
 2. Send startup ACK to the lead mailbox BEFORE any task work (run this exact command):
 

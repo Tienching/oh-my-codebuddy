@@ -183,8 +183,8 @@ export function isPaneRunningShell(paneCurrentCommand: any): boolean {
   return SHELL_COMMANDS.has(base);
 }
 
-// CodeBuddy agent commands — do NOT include 'claude' (that's Claude Code CLI, a different tool)
-const AGENT_COMMANDS = new Set(['node', 'codex', 'codebuddy', 'npx']);
+// Leader/agent foreground commands that can own an OMB tmux pane.
+const AGENT_COMMANDS = new Set(['node', 'codex', 'codebuddy', 'claude', 'npx']);
 
 function isHudStartCommand(startCommand: string): boolean {
   return /\b(?:omb|omb)\b.*\bhud\b.*--watch/i.test(startCommand);
@@ -201,15 +201,21 @@ function isHudStartCommand(startCommand: string): boolean {
  * All callers (auto-nudge, ralph steer, team dispatch, tmux injection) should
  * use this instead of raw `process.env.TMUX_PANE`.
  */
-export function resolveCodexPane(): string {
+type ExecFileSyncLike = (
+  file: string,
+  args: readonly string[],
+  options: { encoding: 'utf-8'; timeout: number; windowsHide?: boolean },
+) => string;
+
+export function resolveCodexPane(execFileSyncImpl: ExecFileSyncLike = execFileSync as ExecFileSyncLike): string {
   const envPane = (process.env.TMUX_PANE || '').trim();
   if (!envPane) return '';
 
   try {
-    const cmd = execFileSync('tmux', ['display-message', '-t', envPane, '-p', '#{pane_current_command}'], {
+    const cmd = execFileSyncImpl('tmux', ['display-message', '-t', envPane, '-p', '#{pane_current_command}'], {
       encoding: 'utf-8', timeout: 2000,
     }).trim().toLowerCase();
-    const startCmd = execFileSync('tmux', ['display-message', '-t', envPane, '-p', '#{pane_start_command}'], {
+    const startCmd = execFileSyncImpl('tmux', ['display-message', '-t', envPane, '-p', '#{pane_start_command}'], {
       encoding: 'utf-8', timeout: 2000,
     }).trim().toLowerCase();
     const base = cmd.split('/').pop()?.replace(/^-/, '') || '';
@@ -217,21 +223,21 @@ export function resolveCodexPane(): string {
       return envPane;
     }
     if (!SHELL_COMMANDS.has(base)) {
-      // Not a shell and not a known agent (e.g. claude CLI) — fall through to
-      // session scan so we can still reject HUD or locate a codex pane.
+      // Not a shell and not a known agent. Fall through to session scan so we
+      // can still reject HUD or locate another leader pane.
     }
   } catch {
     // Fall through to session scan instead of guessing.
   }
 
   try {
-    const sessionName = execFileSync('tmux', ['display-message', '-t', envPane, '-p', '#S'], {
+    const sessionName = execFileSyncImpl('tmux', ['display-message', '-t', envPane, '-p', '#S'], {
       encoding: 'utf-8', timeout: 2000,
       windowsHide: true,
     }).trim();
     if (!sessionName) return '';
 
-    const panes = execFileSync('tmux', [
+    const panes = execFileSyncImpl('tmux', [
       'list-panes', '-s', '-t', sessionName,
       '-F', '#{pane_id}\t#{pane_current_command}\t#{pane_start_command}',
     ], { encoding: 'utf-8', timeout: 2000 }).trim().split('\n');
@@ -241,7 +247,7 @@ export function resolveCodexPane(): string {
       const paneId = parts[0];
       const startCmd = (parts[2] || '').toLowerCase();
       if (!paneId) continue;
-      if ((startCmd.includes('codex') || startCmd.includes('codebuddy')) && !isHudStartCommand(startCmd)) {
+      if ((startCmd.includes('codex') || startCmd.includes('codebuddy') || startCmd.includes('claude')) && !isHudStartCommand(startCmd)) {
         return paneId;
       }
     }

@@ -126,7 +126,7 @@ Options:
   --scope       Setup scope for "{cmd} setup", "{cmd} doctor", and "{cmd} uninstall":
                 user | project
   --provider    Provider for "{cmd} setup", "{cmd} doctor", and "{cmd} uninstall":
-                codebuddy (default) | codex | both
+                codebuddy (default) | codex | claude | both | all
 `);
   }
 }

@@ -18,6 +18,7 @@ import { readFile, writeFile, mkdir, rm } from "fs/promises";
 import { dirname, join } from "path";
 import { existsSync } from "fs";
 import {
+  claudeHome,
   codebuddyHome,
   codexHome,
   listInstalledSkillDirectories,
@@ -55,8 +56,9 @@ const SKILL_REFERENCE_PATTERN = /\/skills\/([^/\s`]+)\/SKILL\.md\b/g;
 
 function resolveLeaderCliFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-): "codebuddy" | "codex" | null {
+): "codebuddy" | "codex" | "claude" | null {
   const raw = String(env[LEADER_CLI_ENV] ?? "").trim().toLowerCase();
+  if (raw === "claude") return "claude";
   if (raw === "codex") return "codex";
   if (raw === "codebuddy") return "codebuddy";
   return null;
@@ -64,7 +66,15 @@ function resolveLeaderCliFromEnv(
 
 function resolveSessionUserHome(): string {
   const leaderCli = resolveLeaderCliFromEnv();
-  return leaderCli === "codex" ? codexHome() : codebuddyHome();
+  switch (leaderCli) {
+    case "codex":
+      return codexHome();
+    case "claude":
+      return claudeHome();
+    case "codebuddy":
+    case null:
+      return codebuddyHome();
+  }
 }
 
 // ── Lock helpers ─────────────────────────────────────────────────────────────
@@ -661,7 +671,7 @@ function minimalOmbWorkflowFallback(): string {
 }
 
 /**
- * Build a session-scoped AGENTS.md that combines user-level CODEBUDDY_HOME
+ * Build a session-scoped AGENTS.md that combines user-level provider-home
  * instructions, project instructions (if any), and the runtime overlay,
  * without mutating the source AGENTS.md files.
  */

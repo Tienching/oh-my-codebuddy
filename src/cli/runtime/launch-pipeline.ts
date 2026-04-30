@@ -16,6 +16,7 @@ import {
   MADMAX_FLAG,
   CODEBUDDY_BIN,
   CODEX_BIN,
+  CLAUDE_BIN,
   CODEBUDDY_BYPASS_FLAG,
   CODEBUDDY_EFFORT_FLAG,
   CODEBUDDY_LEGACY_BYPASS_FLAG,
@@ -105,7 +106,7 @@ import type { ClassifiedError } from "./errors.js";
 import { classifyCliError } from "./errors.js";
 
 export type CodexLaunchPolicy = "inside-tmux" | "detached-tmux" | "direct";
-export type LeaderCli = "codebuddy" | "codex";
+export type LeaderCli = "codebuddy" | "codex" | "claude";
 
 export interface LaunchPipelineResult {
   exitCode: number;
@@ -236,11 +237,13 @@ export function ensureCodeBuddyAvailable(cwd: string, env: NodeJS.ProcessEnv = p
 
 // ── Leader CLI selection ──────────────────────────────────────────────────
 
-function parseLeaderCliValue(raw: string | undefined, source: string): LeaderCli {
+export function parseLeaderCliValue(raw: string | undefined, source: string): LeaderCli {
   const normalized = String(raw ?? "").trim().toLowerCase();
   if (normalized === "" && source === LEADER_CLI_ENV) return "codebuddy";
-  if (normalized === "codebuddy" || normalized === "codex") return normalized;
-  throw new Error(`Invalid ${source} value "${raw ?? ""}". Expected: codebuddy, codex`);
+  if (normalized === "codebuddy" || normalized === "codex" || normalized === "claude") {
+    return normalized;
+  }
+  throw new Error(`Invalid ${source} value "${raw ?? ""}". Expected: codebuddy, codex, claude`);
 }
 
 function isLeaderCliFlag(arg: string): boolean {
@@ -270,7 +273,7 @@ export function extractLeaderCliArgs(
     if (arg === "--") { passthroughOnly = true; remainingArgs.push(arg); continue; }
     if (isLeaderCliFlag(arg)) {
       const next = args[index + 1];
-      if (!next || next.startsWith("-")) throw new Error(`Missing value after ${arg}. Expected: codebuddy, codex`);
+      if (!next || next.startsWith("-")) throw new Error(`Missing value after ${arg}. Expected: codebuddy, codex, claude`);
       leaderCli = parseLeaderCliValue(next, arg);
       index += 1;
       continue;
@@ -287,7 +290,14 @@ export function extractLeaderCliArgs(
 }
 
 function resolveLeaderCliBinary(leaderCli: LeaderCli): string {
-  return leaderCli === "codex" ? CODEX_BIN : CODEBUDDY_BIN;
+  switch (leaderCli) {
+    case "codebuddy":
+      return CODEBUDDY_BIN;
+    case "codex":
+      return CODEX_BIN;
+    case "claude":
+      return CLAUDE_BIN;
+  }
 }
 
 // ── Run codex blocking ─────────────────────────────────────────────────────
@@ -299,7 +309,16 @@ function runCodexBlocking(
   codexEnv: NodeJS.ProcessEnv,
 ): void {
   if (binary === CODEBUDDY_BIN) ensureCodeBuddyAvailable(cwd, codexEnv);
-  const product = binary === CODEX_BIN ? "codex" : "codebuddy";
+  const product = (() => {
+    switch (binary) {
+      case CODEX_BIN:
+        return "codex";
+      case CLAUDE_BIN:
+        return "claude";
+      default:
+        return "codebuddy";
+    }
+  })();
   const { result } = spawnPlatformCommandSync(binary, launchArgs, {
     cwd,
     stdio: "inherit",
@@ -576,7 +595,13 @@ export function normalizeCodexCliLaunchArgs(args: string[]): string[] {
 }
 
 export function normalizeLeaderLaunchArgs(args: string[], leaderCli: LeaderCli): string[] {
-  return leaderCli === "codex" ? normalizeCodexCliLaunchArgs(args) : normalizeCodexLaunchArgs(args);
+  switch (leaderCli) {
+    case "codebuddy":
+      return normalizeCodexLaunchArgs(args);
+    case "codex":
+    case "claude":
+      return normalizeCodexCliLaunchArgs(args);
+  }
 }
 
 export function translateCodeBuddyResumeArgs(args: string[]): string[] {
@@ -652,11 +677,23 @@ export function translateCodeBuddyExecArgs(args: string[]): string[] {
 }
 
 export function translateLeaderResumeArgs(args: string[], leaderCli: LeaderCli): string[] {
-  return leaderCli === "codex" ? [...args] : translateCodeBuddyResumeArgs(args);
+  switch (leaderCli) {
+    case "codebuddy":
+      return translateCodeBuddyResumeArgs(args);
+    case "codex":
+    case "claude":
+      return [...args];
+  }
 }
 
 export function translateLeaderExecArgs(args: string[], leaderCli: LeaderCli): string[] {
-  return leaderCli === "codex" ? ["exec", ...args] : translateCodeBuddyExecArgs(args);
+  switch (leaderCli) {
+    case "codebuddy":
+      return translateCodeBuddyExecArgs(args);
+    case "codex":
+    case "claude":
+      return ["exec", ...args];
+  }
 }
 
 export function injectLeaderModelInstructionsBypassArgs(
@@ -670,10 +707,13 @@ export function injectLeaderModelInstructionsBypassArgs(
   if (!shouldBypassDefaultSystemPrompt(env)) return [...args];
   if (hasModelInstructionsOverride(args)) return [...args];
   const modelInstructionsPath = resolveModelInstructionsFilePath(cwd, env, defaultFilePath);
-  if (leaderCli === "codex") {
-    return [...args, CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(modelInstructionsPath)}"`];
+  switch (leaderCli) {
+    case "codebuddy":
+      return [...args, CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, modelInstructionsPath];
+    case "codex":
+    case "claude":
+      return [...args, CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(modelInstructionsPath)}"`];
   }
-  return [...args, CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, modelInstructionsPath];
 }
 
 export function injectModelInstructionsBypassArgs(
@@ -745,7 +785,7 @@ export function mirrorLeaderCliIntoProcessEnv(
   env[LEADER_CLI_ENV] = leaderCli;
 }
 
-function providerHomeEnv(
+export function providerHomeEnv(
   homeOverride: string | undefined,
   leaderCli: LeaderCli,
 ): NodeJS.ProcessEnv {
@@ -753,15 +793,23 @@ function providerHomeEnv(
   // nested team/autoresearch flows) can detect the active provider without guessing.
   const env: NodeJS.ProcessEnv = { [LEADER_CLI_ENV]: leaderCli };
   if (!homeOverride) return env;
-  if (leaderCli === "codex") {
-    env.CODEX_HOME = homeOverride;
-    // Clear opposite-provider home so CodeBuddy-only config can't leak into a Codex session.
-    env.CODEBUDDY_HOME = "";
-  } else {
-    env.CODEBUDDY_HOME = homeOverride;
-    env.CODEX_HOME = "";
+  switch (leaderCli) {
+    case "codebuddy":
+      env.CODEBUDDY_HOME = homeOverride;
+      env.CODEX_HOME = "";
+      env.CLAUDE_HOME = "";
+      return env;
+    case "codex":
+      env.CODEX_HOME = homeOverride;
+      env.CODEBUDDY_HOME = "";
+      env.CLAUDE_HOME = "";
+      return env;
+    case "claude":
+      env.CLAUDE_HOME = homeOverride;
+      env.CODEBUDDY_HOME = "";
+      env.CODEX_HOME = "";
+      return env;
   }
-  return env;
 }
 
 /**
@@ -777,18 +825,40 @@ export function buildProviderLeaderEnv(
   const next: NodeJS.ProcessEnv = { ...baseEnv };
   next[LEADER_CLI_ENV] = leaderCli;
   if (homeOverride) {
-    if (leaderCli === "codex") {
-      next.CODEX_HOME = homeOverride;
-      delete next.CODEBUDDY_HOME;
-    } else {
-      next.CODEBUDDY_HOME = homeOverride;
-      delete next.CODEX_HOME;
+    switch (leaderCli) {
+      case "codebuddy":
+        next.CODEBUDDY_HOME = homeOverride;
+        delete next.CODEX_HOME;
+        delete next.CLAUDE_HOME;
+        break;
+      case "codex":
+        next.CODEX_HOME = homeOverride;
+        delete next.CODEBUDDY_HOME;
+        delete next.CLAUDE_HOME;
+        break;
+      case "claude":
+        next.CLAUDE_HOME = homeOverride;
+        delete next.CODEBUDDY_HOME;
+        delete next.CODEX_HOME;
+        break;
     }
   } else {
     // Still clear the opposite provider's home so a leaked ambient env doesn't confuse
     // downstream consumers about which provider is active.
-    if (leaderCli === "codex") delete next.CODEBUDDY_HOME;
-    else delete next.CODEX_HOME;
+    switch (leaderCli) {
+      case "codebuddy":
+        delete next.CODEX_HOME;
+        delete next.CLAUDE_HOME;
+        break;
+      case "codex":
+        delete next.CODEBUDDY_HOME;
+        delete next.CLAUDE_HOME;
+        break;
+      case "claude":
+        delete next.CODEBUDDY_HOME;
+        delete next.CODEX_HOME;
+        break;
+    }
   }
   return next;
 }
@@ -1718,15 +1788,27 @@ export function resolveCodexHomeForLaunch(
   env: NodeJS.ProcessEnv = process.env,
   leaderCli: LeaderCli = "codebuddy",
 ): string | undefined {
-  if (leaderCli === "codex") {
-    if (env.CODEX_HOME && env.CODEX_HOME.trim() !== "") return env.CODEX_HOME;
-  } else if (env.CODEBUDDY_HOME && env.CODEBUDDY_HOME.trim() !== "") {
-    return env.CODEBUDDY_HOME;
+  switch (leaderCli) {
+    case "codebuddy":
+      if (env.CODEBUDDY_HOME && env.CODEBUDDY_HOME.trim() !== "") return env.CODEBUDDY_HOME;
+      break;
+    case "codex":
+      if (env.CODEX_HOME && env.CODEX_HOME.trim() !== "") return env.CODEX_HOME;
+      break;
+    case "claude":
+      if (env.CLAUDE_HOME && env.CLAUDE_HOME.trim() !== "") return env.CLAUDE_HOME;
+      break;
   }
   const persisted = readPersistedSetupPreferences(cwd);
   if (persisted?.scope === "project") {
-    if (leaderCli === "codex") return join(cwd, ".codex");
-    return join(cwd, ".codebuddy");
+    switch (leaderCli) {
+      case "codebuddy":
+        return join(cwd, ".codebuddy");
+      case "codex":
+        return join(cwd, ".codex");
+      case "claude":
+        return join(cwd, ".claude");
+    }
   }
   return undefined;
 }

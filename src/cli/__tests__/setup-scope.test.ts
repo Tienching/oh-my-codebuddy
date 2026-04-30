@@ -308,6 +308,54 @@ describe("omb setup scope behavior", () => {
     }
   });
 
+  it("project scope can install a first-class Claude provider under .claude", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
+    try {
+      const home = join(wd, "home");
+      await mkdir(home, { recursive: true });
+      const res = runOmb(wd, ["setup", "--scope", "project", "--provider", "claude"], {
+        HOME: home,
+      });
+      if (shouldSkipForSpawnPermissions(res.error)) return;
+      assert.equal(res.status, 0, res.stderr || res.stdout);
+
+      assert.equal(existsSync(join(wd, ".claude", "prompts")), true);
+      assert.equal(existsSync(join(wd, ".claude", "skills", "help", "SKILL.md")), true);
+      assert.equal(existsSync(join(wd, ".claude", "agents", "executor.toml")), true);
+      assert.equal(existsSync(join(wd, ".claude", "config.toml")), false);
+      // Claude CLI reads hooks at <home>/hooks/hooks.json (subdirectory),
+      // not a flat <home>/hooks.json.
+      assert.equal(existsSync(join(wd, ".claude", "hooks", "hooks.json")), true);
+      assert.equal(existsSync(join(wd, ".claude", "hooks.json")), false);
+      assert.equal(existsSync(join(wd, ".claude", ".omb-config.json")), true);
+      assert.equal(existsSync(join(wd, ".codebuddy", "config.toml")), false);
+
+      // Claude CLI does not read MCP from <home>/settings.json#mcpServers;
+      // OMB therefore leaves that field alone. settings.json is still present
+      // but OMB must not inject omb_* entries there.
+      const settingsJson = JSON.parse(
+        await readFile(join(wd, ".claude", "settings.json"), "utf-8"),
+      ) as { mcpServers?: Record<string, unknown> };
+      assert.equal(settingsJson.mcpServers?.omb_state, undefined);
+      const hooksJson = await readFile(
+        join(wd, ".claude", "hooks", "hooks.json"),
+        "utf-8",
+      );
+      assert.match(hooksJson, /claude-native-hook\.js/);
+      const agentsMd = await readFile(join(wd, "AGENTS.md"), "utf-8");
+      assert.match(agentsMd, /\.\/\.claude\/skills/);
+      assert.doesNotMatch(agentsMd, /\.\/\.codebuddy\/skills/);
+      assert.doesNotMatch(agentsMd, /\.\/\.codex\/skills/);
+      const persisted = JSON.parse(
+        await readFile(join(wd, ".omb", "setup-scope.json"), "utf-8"),
+      ) as { provider?: string; scope: string };
+      assert.equal(persisted.scope, "project");
+      assert.equal(persisted.provider, "claude");
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("project scope can install both CodeBuddy and Codex provider homes", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-scope-"));
     try {

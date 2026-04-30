@@ -22,7 +22,7 @@ Options:
   --help, -h           Show this help message
   --prd <task text>    PRD mode shortcut: mark the task text explicitly
   --prd=<task text>    Same as --prd "<task text>"
-  --leader-cli <name>  Select leader CLI runtime: codebuddy (default) | codex
+  --leader-cli <name>  Select leader CLI runtime: codebuddy (default) | codex | claude
                        (--cli is kept as a compatibility alias)
   --no-deslop         Skip the final ai-slop-cleaner pass
 
@@ -155,7 +155,14 @@ export function buildRalphAppendInstructions(
 }
 
 function leaderCliDisplayName(leaderCli: LeaderCli): string {
-  return leaderCli === 'codex' ? 'Codex' : 'CodeBuddy';
+  switch (leaderCli) {
+    case 'codebuddy':
+      return 'CodeBuddy';
+    case 'codex':
+      return 'Codex';
+    case 'claude':
+      return 'Claude';
+  }
 }
 
 async function writeRalphSessionFiles(

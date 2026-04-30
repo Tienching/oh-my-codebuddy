@@ -23,8 +23,8 @@ export interface CommandTemplateOptions {
 
 const SUPPORTED_COMMAND_EXTS = [".md", ".txt", ""] as const;
 const COMMAND_NAME_RE = /^[A-Za-z0-9_.-]+$/;
-const COMMAND_TEMPLATE_SETUP_PROVIDERS = new Set(["codebuddy", "codex", "both"]);
-type CommandTemplateSetupProvider = "codebuddy" | "codex" | "both";
+const COMMAND_TEMPLATE_SETUP_PROVIDERS = new Set(["codebuddy", "codex", "claude", "both", "all"]);
+type CommandTemplateSetupProvider = "codebuddy" | "codex" | "claude" | "both" | "all";
 
 function resolveCodeBuddyHome(env: NodeJS.ProcessEnv): string {
   const envHome = env.CODEBUDDY_HOME;
@@ -40,6 +40,14 @@ function resolveCodexHome(env: NodeJS.ProcessEnv): string {
     return envHome.trim();
   }
   return join(homedir(), ".codex");
+}
+
+function resolveClaudeHome(env: NodeJS.ProcessEnv): string {
+  const envHome = env.CLAUDE_HOME;
+  if (typeof envHome === "string" && envHome.trim() !== "") {
+    return envHome.trim();
+  }
+  return join(homedir(), ".claude");
 }
 
 function resolveCommandTemplateSetupProvider(
@@ -118,28 +126,38 @@ function resolveCommandTemplateDirectories(
   const paths: string[] = [];
 
   // Order is intentional: project scope wins over user scope, and within each
-  // scope the primary provider (CodeBuddy) wins over the secondary (Codex).
-  // `provider=both` therefore resolves as:
+  // scope the primary provider (CodeBuddy) wins over Codex, then Claude.
+  // `provider=all` therefore resolves as:
   //   1. project .codebuddy/commands
   //   2. project .codex/commands
-  //   3. user CODEBUDDY_HOME/commands
-  //   4. user CODEX_HOME/commands
+  //   3. project .claude/commands
+  //   4. user CODEBUDDY_HOME/commands
+  //   5. user CODEX_HOME/commands
+  //   6. user CLAUDE_HOME/commands
   // so a per-project Codex override is never shadowed by an ambient user-level
   // CodeBuddy install.
-  if (provider === "both" || provider === "codebuddy") {
+  if (provider === "both" || provider === "all" || provider === "codebuddy") {
     addCommandTemplateDirectory(paths, join(cwd, ".codebuddy", "commands"));
   }
 
-  if (provider === "both" || provider === "codex") {
+  if (provider === "both" || provider === "all" || provider === "codex") {
     addCommandTemplateDirectory(paths, join(cwd, ".codex", "commands"));
   }
 
-  if (provider === "both" || provider === "codebuddy") {
+  if (provider === "all" || provider === "claude") {
+    addCommandTemplateDirectory(paths, join(cwd, ".claude", "commands"));
+  }
+
+  if (provider === "both" || provider === "all" || provider === "codebuddy") {
     addCommandTemplateDirectory(paths, join(resolveCodeBuddyHome(env), "commands"));
   }
 
-  if (provider === "both" || provider === "codex") {
+  if (provider === "both" || provider === "all" || provider === "codex") {
     addCommandTemplateDirectory(paths, join(resolveCodexHome(env), "commands"));
+  }
+
+  if (provider === "all" || provider === "claude") {
+    addCommandTemplateDirectory(paths, join(resolveClaudeHome(env), "commands"));
   }
 
   const deduped: string[] = [];

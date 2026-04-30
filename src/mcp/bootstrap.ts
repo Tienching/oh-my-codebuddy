@@ -383,6 +383,7 @@ export function autoStartStdioMcpServer(
   process.stdin.on('data', handleStdinData);
   process.stdin.once('end', handleStdinEnd);
   process.stdin.once('close', handleStdinClose);
+  process.stdin.resume();
   process.once('SIGTERM', handleSigterm);
   process.once('SIGINT', handleSigint);
 

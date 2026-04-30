@@ -97,10 +97,12 @@ async function runNodeCli(
   });
 }
 
-function skipUnlessTmux(t: TestContext): void {
+function skipUnlessTmux(t: TestContext): boolean {
   if (!isRealTmuxAvailable()) {
     t.skip('tmux is not available in this environment');
+    return true;
   }
+  return false;
 }
 
 function runFixtureTmux(fixture: TempTmuxSessionFixture, args: string[]): string {
@@ -424,7 +426,7 @@ esac
   });
 
   it('keeps the shutdown command alive when executed inside the leader pane PTY', { concurrency: false }, async (t) => {
-    skipUnlessTmux(t);
+    if (skipUnlessTmux(t)) return;
 
     const wd = await mkdtemp(join(tmpdir(), 'omb-team-shutdown-shared-in-pane-'));
     try {

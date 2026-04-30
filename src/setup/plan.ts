@@ -105,7 +105,7 @@ export interface SetupPlanOptions {
   mcpRegistryCandidates?: string[];
 }
 
-type SetupTargetProvider = Exclude<SetupProvider, "both">;
+type SetupTargetProvider = Exclude<SetupProvider, "both" | "all">;
 
 const PROJECT_GITIGNORE_BASE_ENTRIES = [
   ".omb/",
@@ -130,15 +130,41 @@ const PROJECT_CODEX_GITIGNORE_ENTRIES = [
   "!.codex/prompts/",
   "!.codex/prompts/**",
 ] as const;
+const PROJECT_CLAUDE_GITIGNORE_ENTRIES = [
+  ".claude/*",
+  "!.claude/agents/",
+  "!.claude/agents/**",
+  "!.claude/skills/",
+  "!.claude/skills/**",
+  ".claude/skills/.system/**",
+  "!.claude/prompts/",
+  "!.claude/prompts/**",
+] as const;
 
-const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/"] as const;
+const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/", ".claude/"] as const;
 
 function setupProviderTargets(provider: SetupProvider): SetupTargetProvider[] {
-  return provider === "both" ? ["codebuddy", "codex"] : [provider];
+  switch (provider) {
+    case "both":
+      return ["codebuddy", "codex"];
+    case "all":
+      return ["codebuddy", "codex", "claude"];
+    case "codebuddy":
+    case "codex":
+    case "claude":
+      return [provider];
+  }
 }
 
 function providerDisplayName(provider: SetupTargetProvider): string {
-  return provider === "codex" ? "Codex" : "CodeBuddy";
+  switch (provider) {
+    case "codebuddy":
+      return "CodeBuddy";
+    case "codex":
+      return "Codex";
+    case "claude":
+      return "Claude";
+  }
 }
 
 function projectGitignoreEntriesForProvider(
@@ -146,8 +172,9 @@ function projectGitignoreEntriesForProvider(
 ): readonly string[] {
   return [
     ...PROJECT_GITIGNORE_BASE_ENTRIES,
-    ...(provider === "codex" ? [] : PROJECT_CODEBUDDY_GITIGNORE_ENTRIES),
-    ...(provider === "codebuddy" ? [] : PROJECT_CODEX_GITIGNORE_ENTRIES),
+    ...(provider === "codex" || provider === "claude" ? [] : PROJECT_CODEBUDDY_GITIGNORE_ENTRIES),
+    ...(provider === "codebuddy" || provider === "claude" ? [] : PROJECT_CODEX_GITIGNORE_ENTRIES),
+    ...(provider === "codebuddy" || provider === "codex" || provider === "both" ? [] : PROJECT_CLAUDE_GITIGNORE_ENTRIES),
   ];
 }
 

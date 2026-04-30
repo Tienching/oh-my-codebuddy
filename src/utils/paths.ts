@@ -20,6 +20,11 @@ export function codexHome(): string {
   return process.env.CODEX_HOME || join(homedir(), ".codex");
 }
 
+/** Claude CLI home directory (~/.claude/) */
+export function claudeHome(): string {
+  return process.env.CLAUDE_HOME || join(homedir(), ".claude");
+}
+
 export const OMB_ENTRY_PATH_ENV = "OMB_ENTRY_PATH";
 export const OMB_STARTUP_CWD_ENV = "OMB_STARTUP_CWD";
 

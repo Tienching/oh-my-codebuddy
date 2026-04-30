@@ -22,6 +22,8 @@ import {
   buildMailboxTriggerDirective,
   generateLeaderMailboxTriggerMessage,
   buildLeaderMailboxTriggerDirective,
+  resolveLeaderCliFromEnv,
+  resolveWorkerUserHome,
 } from "../worker-bootstrap.js";
 import { composeRoleInstructionsForRole } from "../../agents/native-config.js";
 import type { TeamTask } from "../state.js";
@@ -44,8 +46,17 @@ function setMockCodexHome(codexHomePath: string): () => void {
   };
 }
 
+function setMockClaudeHome(claudeHomePath: string): () => void {
+  const previous = process.env.CLAUDE_HOME;
+  process.env.CLAUDE_HOME = claudeHomePath;
+  return () => {
+    if (typeof previous === "string") process.env.CLAUDE_HOME = previous;
+    else delete process.env.CLAUDE_HOME;
+  };
+}
+
 function setMockLeaderCli(
-  leaderCli: "codebuddy" | "codex" | undefined,
+  leaderCli: "codebuddy" | "codex" | "claude" | undefined,
 ): () => void {
   const previous = process.env.OMB_LEADER_CLI;
   if (typeof leaderCli === "string") process.env.OMB_LEADER_CLI = leaderCli;
@@ -95,7 +106,12 @@ describe("worker bootstrap", () => {
       overlay,
       /\$\{CODEBUDDY_HOME:-~\/\.codebuddy\}\/skills\/worker\/SKILL\.md/,
     );
+    assert.match(
+      overlay,
+      /\$\{CLAUDE_HOME:-~\/\.claude\}\/skills\/worker\/SKILL\.md/,
+    );
     assert.match(overlay, /<leader_cwd>\/\.codebuddy\/skills\/worker\/SKILL\.md/);
+    assert.match(overlay, /<leader_cwd>\/\.claude\/skills\/worker\/SKILL\.md/);
     assert.match(overlay, /Resolve canonical team state root/i);
     assert.match(overlay, /<team_state_root>\/team\/my-team\/tasks/);
     assert.match(overlay, /tasks\/task-<id>\.json/);
@@ -282,7 +298,12 @@ describe("worker bootstrap", () => {
       inbox,
       /\$\{CODEBUDDY_HOME:-~\/\.codebuddy\}\/skills\/worker\/SKILL\.md/,
     );
+    assert.match(
+      inbox,
+      /\$\{CLAUDE_HOME:-~\/\.claude\}\/skills\/worker\/SKILL\.md/,
+    );
     assert.match(inbox, /\/\.codebuddy\/skills\/worker\/SKILL\.md/);
+    assert.match(inbox, /\/\.claude\/skills\/worker\/SKILL\.md/);
     assert.match(inbox, /ACK: worker-1 initialized/);
     assert.match(inbox, /Mailbox Delivery Protocol \(Required\)/);
     assert.match(inbox, /mailbox-mark-delivered/);
@@ -694,6 +715,53 @@ describe("worker bootstrap", () => {
     } finally {
       restoreCodebuddyHome();
       restoreCodexHome();
+      restoreLeaderCli();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("writeTeamWorkerInstructionsFile uses CLAUDE_HOME AGENTS when OMB_LEADER_CLI is claude", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-worker-bootstrap-"));
+    const restoreCodebuddyHome = setMockCodebuddyHome(join(cwd, "home", ".codebuddy"));
+    const restoreCodexHome = setMockCodexHome(join(cwd, "home", ".codex"));
+    const restoreClaudeHome = setMockClaudeHome(join(cwd, "home", ".claude"));
+    const restoreLeaderCli = setMockLeaderCli("claude");
+    try {
+      await mkdir(join(cwd, "home", ".codebuddy"), { recursive: true });
+      await mkdir(join(cwd, "home", ".codex"), { recursive: true });
+      await mkdir(join(cwd, "home", ".claude"), { recursive: true });
+      await writeFile(
+        join(cwd, "home", ".codebuddy", "AGENTS.md"),
+        "# CodeBuddy instructions\n",
+        "utf8",
+      );
+      await writeFile(
+        join(cwd, "home", ".codex", "AGENTS.md"),
+        "# Codex instructions\n",
+        "utf8",
+      );
+      await writeFile(
+        join(cwd, "home", ".claude", "AGENTS.md"),
+        "# Claude instructions\n",
+        "utf8",
+      );
+      const overlay = generateWorkerOverlay("mode-claude-team");
+      const outPath = await writeTeamWorkerInstructionsFile(
+        "mode-claude-team",
+        cwd,
+        overlay,
+      );
+      const content = await readFile(outPath, "utf8");
+
+      assert.doesNotMatch(content, /# CodeBuddy instructions/);
+      assert.doesNotMatch(content, /# Codex instructions/);
+      assert.match(content, /# Claude instructions/);
+      assert.equal(resolveLeaderCliFromEnv(), "claude");
+      assert.equal(resolveWorkerUserHome(), join(cwd, "home", ".claude"));
+    } finally {
+      restoreCodebuddyHome();
+      restoreCodexHome();
+      restoreClaudeHome();
       restoreLeaderCli();
       await rm(cwd, { recursive: true, force: true });
     }

@@ -17,6 +17,7 @@ export interface ManagedCodebuddyHooksConfig {
 }
 
 export type ManagedCodexHooksConfig = ManagedCodebuddyHooksConfig;
+export type ManagedClaudeHooksConfig = ManagedCodebuddyHooksConfig;
 
 interface ParsedCodebuddyHooksConfig {
   root: JsonObject;
@@ -29,6 +30,7 @@ export interface RemoveManagedCodebuddyHooksResult {
 }
 
 export type RemoveManagedCodexHooksResult = RemoveManagedCodebuddyHooksResult;
+export type RemoveManagedClaudeHooksResult = RemoveManagedCodebuddyHooksResult;
 
 function isPlainObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -61,7 +63,10 @@ function buildCommandHook(
 
 function buildManagedHooksConfig(
   pkgRoot: string,
-  scriptName: "codebuddy-native-hook.js" | "codex-native-hook.js",
+  scriptName:
+    | "codebuddy-native-hook.js"
+    | "codex-native-hook.js"
+    | "claude-native-hook.js",
 ): ManagedCodebuddyHooksConfig {
   const hookScript = join(pkgRoot, "dist", "scripts", scriptName);
   const command = `node "${hookScript}"`;
@@ -111,6 +116,12 @@ export function buildManagedCodexHooksConfig(
   return buildManagedHooksConfig(pkgRoot, "codex-native-hook.js");
 }
 
+export function buildManagedClaudeHooksConfig(
+  pkgRoot: string,
+): ManagedClaudeHooksConfig {
+  return buildManagedHooksConfig(pkgRoot, "claude-native-hook.js");
+}
+
 export function parseCodebuddyHooksConfig(
   content: string,
 ): ParsedCodebuddyHooksConfig | null {
@@ -130,7 +141,7 @@ export function parseCodebuddyHooksConfig(
 export const parseCodexHooksConfig = parseCodebuddyHooksConfig;
 
 function isManagedHookCommand(command: string): boolean {
-  return /(?:^|[\\/])(?:codebuddy|codex)-native-hook\.js(?:["'\s]|$)/.test(
+  return /(?:^|[\\/])(?:codebuddy|codex|claude)-native-hook\.js(?:["'\s]|$)/.test(
     command,
   );
 }
@@ -234,6 +245,16 @@ export function mergeManagedCodexHooksConfig(
   );
 }
 
+export function mergeManagedClaudeHooksConfig(
+  existingContent: string | null | undefined,
+  pkgRoot: string,
+): string {
+  return mergeManagedHooksConfig(
+    existingContent,
+    buildManagedClaudeHooksConfig(pkgRoot),
+  );
+}
+
 export function removeManagedCodebuddyHooks(
   existingContent: string,
 ): RemoveManagedCodebuddyHooksResult {
@@ -286,3 +307,4 @@ export function removeManagedCodebuddyHooks(
 }
 
 export const removeManagedCodexHooks = removeManagedCodebuddyHooks;
+export const removeManagedClaudeHooks = removeManagedCodebuddyHooks;

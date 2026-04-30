@@ -26,6 +26,7 @@ import {
 } from './autoresearch-intake.js';
 import {
   CODEBUDDY_LEGACY_BYPASS_FLAG,
+  CLAUDE_BIN,
   CODEBUDDY_BIN,
   CODEX_BIN,
   CODEBUDDY_BYPASS_FLAG,
@@ -58,7 +59,7 @@ Usage:
   {cmd} autoresearch --resume <run-id> [leader-cli-args...]
 
 Arguments:
-  --leader-cli C   Select leader CLI runtime for intake and turns: codebuddy (default) | codex
+  --leader-cli C   Select leader CLI runtime for intake and turns: codebuddy (default) | codex | claude
                    (--cli is kept as a compatibility alias).
   (no args)        Launch an interactive selected-CLI session that activates deep-interview --autoresearch,
                    writes .omb/specs artifacts, then launches only after explicit confirmation.
@@ -212,17 +213,58 @@ export function normalizeAutoresearchCodexArgs(codebuddyArgs: readonly string[])
 }
 
 function normalizeAutoresearchLeaderArgs(leaderCli: LeaderCli, args: string[]): string[] {
-  if (leaderCli === 'codebuddy') return normalizeAutoresearchCodeBuddyArgs(args);
-  const normalized = normalizeLeaderLaunchArgs(args, leaderCli);
-  return normalized.includes(CODEBUDDY_LEGACY_BYPASS_FLAG)
-    ? normalized
-    : [...normalized, CODEBUDDY_LEGACY_BYPASS_FLAG];
+  switch (leaderCli) {
+    case 'codebuddy':
+      return normalizeAutoresearchCodeBuddyArgs(args);
+    case 'codex':
+    case 'claude': {
+      const normalized = normalizeLeaderLaunchArgs(args, leaderCli);
+      return normalized.includes(CODEBUDDY_LEGACY_BYPASS_FLAG)
+        ? normalized
+        : [...normalized, CODEBUDDY_LEGACY_BYPASS_FLAG];
+    }
+  }
 }
 
-function resolveAutoresearchLeaderHomeEnv(leaderCli: LeaderCli, cwd: string): NodeJS.ProcessEnv {
-  const home = resolveCodexHomeForLaunch(cwd, process.env, leaderCli);
-  if (!home) return {};
-  return leaderCli === 'codex' ? { CODEX_HOME: home } : { CODEBUDDY_HOME: home };
+export function resolveAutoresearchLeaderHomeEnv(
+  leaderCli: LeaderCli,
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const home = resolveCodexHomeForLaunch(cwd, env, leaderCli);
+  switch (leaderCli) {
+    case 'codebuddy':
+      return {
+        ...(home ? { CODEBUDDY_HOME: home } : {}),
+        CODEX_HOME: '',
+        CLAUDE_HOME: '',
+      };
+    case 'codex':
+      return {
+        ...(home ? { CODEX_HOME: home } : {}),
+        CODEBUDDY_HOME: '',
+        CLAUDE_HOME: '',
+      };
+    case 'claude':
+      return {
+        ...(home ? { CLAUDE_HOME: home } : {}),
+        CODEBUDDY_HOME: '',
+        CODEX_HOME: '',
+      };
+  }
+}
+
+export function buildAutoresearchLeaderEnv(
+  leaderCli: LeaderCli,
+  cwd: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const leaderHomeEnv = resolveAutoresearchLeaderHomeEnv(leaderCli, cwd, baseEnv);
+  const launchEnv: NodeJS.ProcessEnv = { ...baseEnv, ...leaderHomeEnv, OMB_LEADER_CLI: leaderCli };
+  if (leaderHomeEnv.CODEBUDDY_HOME === '') delete launchEnv.CODEBUDDY_HOME;
+  if (leaderHomeEnv.CODEX_HOME === '') delete launchEnv.CODEX_HOME;
+  if (leaderHomeEnv.CLAUDE_HOME === '') delete launchEnv.CLAUDE_HOME;
+  return launchEnv;
 }
 
 function runAutoresearchTurn(
@@ -234,14 +276,17 @@ function runAutoresearchTurn(
   const prompt = readFileSync(instructionsFile, 'utf-8');
   const normalizedArgs = normalizeAutoresearchLeaderArgs(leaderCli, codebuddyArgs);
   const launchArgs = translateLeaderExecArgs([...normalizedArgs, prompt], leaderCli);
-  const leaderHomeEnv = resolveAutoresearchLeaderHomeEnv(leaderCli, worktreePath);
-  const launchEnv: NodeJS.ProcessEnv = { ...process.env, ...leaderHomeEnv, OMB_LEADER_CLI: leaderCli };
-  if (leaderCli === 'codex') {
-    delete launchEnv.CODEBUDDY_HOME;
-  } else {
-    delete launchEnv.CODEX_HOME;
-  }
-  const binary = leaderCli === 'codex' ? CODEX_BIN : CODEBUDDY_BIN;
+  const launchEnv = buildAutoresearchLeaderEnv(leaderCli, worktreePath);
+  const binary = (() => {
+    switch (leaderCli) {
+      case 'codebuddy':
+        return CODEBUDDY_BIN;
+      case 'codex':
+        return CODEX_BIN;
+      case 'claude':
+        return CLAUDE_BIN;
+    }
+  })();
   const result = spawnSync(binary, launchArgs, {
     cwd: worktreePath,
     stdio: ['ignore', 'inherit', 'inherit'],

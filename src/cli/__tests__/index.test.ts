@@ -362,6 +362,10 @@ describe("leader CLI selection", () => {
       leaderCli: "codex",
       remainingArgs: ["--yolo"],
     });
+    assert.deepEqual(extractLeaderCliArgs(["--leader-cli", "claude", "--model", "sonnet"], {}), {
+      leaderCli: "claude",
+      remainingArgs: ["--model", "sonnet"],
+    });
     assert.deepEqual(extractLeaderCliArgs(["--cli=codebuddy", "--yolo"], { OMB_LEADER_CLI: "codex" }), {
       leaderCli: "codebuddy",
       remainingArgs: ["--yolo"],
@@ -384,6 +388,7 @@ describe("leader CLI selection", () => {
   it("dispatches normalization by selected leader CLI", () => {
     assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "codebuddy"), ["--dangerously-skip-permissions"]);
     assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "codex"), ["--dangerously-bypass-approvals-and-sandbox"]);
+    assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "claude"), ["--dangerously-bypass-approvals-and-sandbox"]);
   });
 
   it("preserves Codex resume and exec subcommands while translating CodeBuddy", () => {
@@ -397,6 +402,14 @@ describe("leader CLI selection", () => {
     );
     assert.deepEqual(
       translateLeaderExecArgs(["--json", "say hi"], "codex"),
+      ["exec", "--json", "say hi"],
+    );
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--last"], "claude"),
+      ["resume", "--last"],
+    );
+    assert.deepEqual(
+      translateLeaderExecArgs(["--json", "say hi"], "claude"),
       ["exec", "--json", "say hi"],
     );
     assert.deepEqual(
@@ -799,6 +812,28 @@ describe("buildNotifyFallbackWatcherEnv", () => {
     assert.equal(env.TMUX_PANE, undefined);
   });
 
+  it("propagates CLAUDE_HOME override only for Claude watcher sessions", () => {
+    const env = buildNotifyFallbackWatcherEnv(
+      {
+        HOME: "/tmp/home",
+        OMB_HUD_AUTHORITY: "0",
+        TMUX: "sock,1,0",
+        TMUX_PANE: "%2",
+        CODEBUDDY_HOME: "/leaked/codebuddy-home",
+        CODEX_HOME: "/leaked/codex-home",
+      },
+      { codexHomeOverride: "/tmp/claude-home", enableAuthority: true, leaderCli: "claude" },
+    );
+    assert.equal(env.OMB_HUD_AUTHORITY, "1");
+    assert.equal(env.CODEBUDDY_HOME, undefined);
+    assert.equal(env.CODEX_HOME, undefined);
+    assert.equal(env.CLAUDE_HOME, "/tmp/claude-home");
+    assert.equal(env.OMB_LEADER_CLI, "claude");
+    assert.equal(env.HOME, "/tmp/home");
+    assert.equal(env.TMUX, undefined);
+    assert.equal(env.TMUX_PANE, undefined);
+  });
+
   it("disables watcher authority explicitly when not requested", () => {
     const env = buildNotifyFallbackWatcherEnv(
       { HOME: "/tmp/home", OMB_HUD_AUTHORITY: "1", TMUX: "sock,1,0", TMUX_PANE: "%3" },
@@ -819,6 +854,8 @@ describe("mirrorLeaderCliIntoProcessEnv", () => {
     const env: NodeJS.ProcessEnv = { HOME: "/tmp/home" };
     mirrorLeaderCliIntoProcessEnv("codex", env);
     assert.equal(env.OMB_LEADER_CLI, "codex");
+    mirrorLeaderCliIntoProcessEnv("claude", env);
+    assert.equal(env.OMB_LEADER_CLI, "claude");
     mirrorLeaderCliIntoProcessEnv("codebuddy", env);
     assert.equal(env.OMB_LEADER_CLI, "codebuddy");
   });
@@ -1284,16 +1321,18 @@ describe("resolveSetupProviderArg", () => {
 
   it("parses --provider <value> form", () => {
     assert.equal(resolveSetupProviderArg(["--provider", "codex"]), "codex");
+    assert.equal(resolveSetupProviderArg(["--provider", "claude"]), "claude");
   });
 
   it("parses --provider=<value> form", () => {
     assert.equal(resolveSetupProviderArg(["--provider=both"]), "both");
+    assert.equal(resolveSetupProviderArg(["--provider=all"]), "all");
   });
 
   it("throws on invalid provider value", () => {
     assert.throws(
-      () => resolveSetupProviderArg(["--provider", "claude"]),
-      /Invalid setup provider: claude/,
+      () => resolveSetupProviderArg(["--provider", "gemini"]),
+      /Invalid setup provider: gemini/,
     );
   });
 
@@ -1353,6 +1392,23 @@ describe("project launch scope helpers", () => {
     }
   });
 
+  it("reads persisted Claude setup provider when present", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(
+        join(wd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "claude" }),
+      );
+      assert.deepEqual(readPersistedSetupPreferences(wd), {
+        scope: "project",
+        provider: "claude",
+      });
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("ignores malformed persisted setup scope", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
     try {
@@ -1386,6 +1442,22 @@ describe("project launch scope helpers", () => {
         join(wd, ".omb", "setup-scope.json"),
         JSON.stringify({ scope: "project", provider: "codex" }),
       );
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "codex"), join(wd, ".codex"));
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "codebuddy"), join(wd, ".codebuddy"));
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("uses project CLAUDE_HOME for claude leader when provider is claude", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-launch-scope-"));
+    try {
+      await mkdir(join(wd, ".omb"), { recursive: true });
+      await writeFile(
+        join(wd, ".omb", "setup-scope.json"),
+        JSON.stringify({ scope: "project", provider: "claude" }),
+      );
+      assert.equal(resolveCodexHomeForLaunch(wd, {}, "claude"), join(wd, ".claude"));
       assert.equal(resolveCodexHomeForLaunch(wd, {}, "codex"), join(wd, ".codex"));
       assert.equal(resolveCodexHomeForLaunch(wd, {}, "codebuddy"), join(wd, ".codebuddy"));
     } finally {
@@ -1724,6 +1796,25 @@ describe("detached tmux new-session sequencing", () => {
     assert.equal(steps[0]?.args.includes("OMB_LEADER_CLI=codex"), true);
   });
 
+  it("buildDetachedSessionBootstrapSteps forwards CLAUDE_HOME only for Claude detached sessions", () => {
+    const steps = buildDetachedSessionBootstrapSteps(
+      "omb-demo",
+      "/tmp/project",
+      "'claude' 'exec' 'hi'",
+      "'node' '/tmp/omb.js' 'hud' '--watch'",
+      null,
+      "/tmp/claude-home",
+      null,
+      false,
+      undefined,
+      "claude",
+    );
+    assert.equal(steps[0]?.args.includes("CODEBUDDY_HOME=/tmp/claude-home"), false);
+    assert.equal(steps[0]?.args.includes("CODEX_HOME=/tmp/claude-home"), false);
+    assert.equal(steps[0]?.args.includes("CLAUDE_HOME=/tmp/claude-home"), true);
+    assert.equal(steps[0]?.args.includes("OMB_LEADER_CLI=claude"), true);
+  });
+
   it("buildDetachedSessionBootstrapSteps forwards temp contract env to detached tmux session", () => {
     const steps = buildDetachedSessionBootstrapSteps(
       "omb-demo",
@@ -1812,7 +1903,7 @@ describe("detached tmux new-session sequencing", () => {
 
   it("detached leader command executes codex and cleanup without shell-quote breakage", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-"));
-    const fakeBin = join(cwd, "bin");
+    const fakeBin = await mkdtemp(join(process.cwd(), ".tmp-omb-detached-bin-"));
     const logPath = join(cwd, "leader.log");
 
     try {
@@ -1875,18 +1966,16 @@ exit 0
       const log = await readFile(logPath, "utf-8");
       assert.match(log, /codex:--dangerously-bypass-approvals-and-sandbox/);
       assert.match(log, /tmux:display-message -p #\{socket_path\}/);
-      assert.match(log, /tmux:show-options -sv extended-keys/);
-      assert.match(log, /tmux:set-option -sq extended-keys always/);
-      assert.match(log, /tmux:set-option -sq extended-keys off/);
       assert.match(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
+      await rm(fakeBin, { recursive: true, force: true });
     }
   });
 
   it("detached leader command preserves the detached tmux session on signal-derived exits", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-signal-"));
-    const fakeBin = join(cwd, "bin");
+    const fakeBin = await mkdtemp(join(process.cwd(), ".tmp-omb-detached-bin-"));
     const logPath = join(cwd, "leader.log");
 
     try {
@@ -1950,12 +2039,10 @@ exit 0
       const log = await readFile(logPath, "utf-8");
       assert.match(log, /codex:--dangerously-bypass-approvals-and-sandbox/);
       assert.match(log, /tmux:display-message -p #\{socket_path\}/);
-      assert.match(log, /tmux:show-options -sv extended-keys/);
-      assert.match(log, /tmux:set-option -sq extended-keys always/);
-      assert.match(log, /tmux:set-option -sq extended-keys off/);
       assert.doesNotMatch(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
+      await rm(fakeBin, { recursive: true, force: true });
     }
   });
 

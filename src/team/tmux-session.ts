@@ -29,7 +29,7 @@ import {
   resolveCommandPathForPlatform,
   spawnPlatformCommandSync,
 } from '../utils/platform-command.js';
-import { codebuddyHome, codexHome, resolveOmbCliEntryPath } from '../utils/paths.js';
+import { claudeHome, codebuddyHome, codexHome, resolveOmbCliEntryPath } from '../utils/paths.js';
 
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
@@ -980,7 +980,11 @@ export function buildWorkerProcessLaunchSpec(
       ? (typeof effectiveEnv.CODEX_HOME === 'string' && effectiveEnv.CODEX_HOME.trim() !== ''
           ? effectiveEnv.CODEX_HOME.trim()
           : codexHome())
-      : undefined;
+      : workerCli === 'claude'
+        ? (typeof effectiveEnv.CLAUDE_HOME === 'string' && effectiveEnv.CLAUDE_HOME.trim() !== ''
+            ? effectiveEnv.CLAUDE_HOME.trim()
+            : claudeHome())
+        : undefined;
   const providerLookupHome = workerCliHomeOverride
     ? (isAbsolute(workerCliHomeOverride) ? workerCliHomeOverride : resolve(cwd, workerCliHomeOverride))
     : undefined;
@@ -995,10 +999,10 @@ export function buildWorkerProcessLaunchSpec(
     [OMB_LEADER_CLI_PATH_ENV]: resolvedCliPath,
     // Identify the CLI actually driving this worker so downstream consumers
     // (agents-overlay, worker-bootstrap) pick the matching AGENTS/home.
-    ...((workerCli === 'codex' || workerCli === 'codebuddy')
+    ...((workerCli === 'codex' || workerCli === 'codebuddy' || workerCli === 'claude')
       ? { OMB_LEADER_CLI: workerCli }
       : {}),
-    ...((workerCli === 'codex' || workerCli === 'codebuddy')
+    ...((workerCli === 'codex' || workerCli === 'codebuddy' || workerCli === 'claude')
       ? readActiveProviderEnvOverrides(
           effectiveEnv,
           providerLookupHome,

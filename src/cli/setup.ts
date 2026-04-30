@@ -28,6 +28,7 @@ import {
   codebuddyConfigPath,
   codebuddyPromptsDir,
   codebuddyAgentsDir,
+  claudeHome,
   userSkillsDir,
   ombStateDir,
   detectLegacySkillRootOverlap,
@@ -42,6 +43,7 @@ import {
 import {
   mergeManagedCodebuddyHooksConfig,
   mergeManagedCodexHooksConfig,
+  mergeManagedClaudeHooksConfig,
 } from "../config/codebuddy-hooks.js";
 import {
   getLegacyUnifiedMcpRegistryCandidate,
@@ -78,7 +80,7 @@ import {
   getLegacyScopeMigration,
   getLegacySetupModel,
 } from "../setup/compat-rules.js";
-import { CODEBUDDY_BIN, CODEX_BIN } from "./constants.js";
+import { CLAUDE_BIN, CODEBUDDY_BIN, CODEX_BIN } from "./constants.js";
 
 interface SetupOptions {
   codexVersionProbe?: () => string | null;
@@ -105,9 +107,9 @@ const LEGACY_SCOPE_MIGRATION: Record<string, "project"> = getLegacyScopeMigratio
 
 export const SETUP_SCOPES = ["user", "project"] as const;
 export type SetupScope = (typeof SETUP_SCOPES)[number];
-export const SETUP_PROVIDERS = ["codebuddy", "codex", "both"] as const;
+export const SETUP_PROVIDERS = ["codebuddy", "codex", "claude", "both", "all"] as const;
 export type SetupProvider = (typeof SETUP_PROVIDERS)[number];
-type SetupTargetProvider = Exclude<SetupProvider, "both">;
+type SetupTargetProvider = Exclude<SetupProvider, "both" | "all">;
 
 export interface ScopeDirectories {
   /** @deprecated Use homeDir instead */
@@ -209,7 +211,17 @@ const PROJECT_CODEX_GITIGNORE_ENTRIES = [
   "!.codex/prompts/",
   "!.codex/prompts/**",
 ] as const;
-const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/"] as const;
+const PROJECT_CLAUDE_GITIGNORE_ENTRIES = [
+  ".claude/*",
+  "!.claude/agents/",
+  "!.claude/agents/**",
+  "!.claude/skills/",
+  "!.claude/skills/**",
+  ".claude/skills/.system/**",
+  "!.claude/prompts/",
+  "!.claude/prompts/**",
+] as const;
+const LEGACY_PROJECT_GITIGNORE_ENTRIES = [".codex/", ".codebuddy/", ".claude/"] as const;
 
 function applyScopePathRewritesToAgentsTemplate(
   content: string,
@@ -222,17 +234,26 @@ function applyScopePathRewritesToAgentsTemplate(
         .replaceAll("~/.codebuddy", "./.codebuddy")
         .replaceAll("~/.codex", "./.codex");
     }
-    const projectHome = provider === "codex" ? "./.codex" : "./.codebuddy";
+    if (provider === "all") {
+      return content
+        .replaceAll("~/.codebuddy", "./.codebuddy")
+        .replaceAll("~/.codex", "./.codex")
+        .replaceAll("~/.claude", "./.claude");
+    }
+    const projectHome = providerHomeLabel(provider, "project");
     return content
       .replaceAll("~/.codebuddy", projectHome)
-      .replaceAll("~/.codex", projectHome);
+      .replaceAll("~/.codex", projectHome)
+      .replaceAll("~/.claude", projectHome);
   }
 
   if (provider === "both") return content;
-  const userHome = provider === "codex" ? "~/.codex" : "~/.codebuddy";
+  if (provider === "all") return content;
+  const userHome = providerHomeLabel(provider, "user");
   return content
     .replaceAll("~/.codebuddy", userHome)
-    .replaceAll("~/.codex", userHome);
+    .replaceAll("~/.codex", userHome)
+    .replaceAll("~/.claude", userHome);
 }
 
 interface PersistedSetupScope {
@@ -322,16 +343,69 @@ function mergeCategorySummary(
 }
 
 function providerDisplayName(provider: SetupTargetProvider): string {
-  return provider === "codex" ? "Codex" : "CodeBuddy";
+  switch (provider) {
+    case "codebuddy":
+      return "CodeBuddy";
+    case "codex":
+      return "Codex";
+    case "claude":
+      return "Claude";
+  }
 }
 
 function setupProviderTargets(provider: SetupProvider): SetupTargetProvider[] {
-  return provider === "both" ? ["codebuddy", "codex"] : [provider];
+  switch (provider) {
+    case "both":
+      return ["codebuddy", "codex"];
+    case "all":
+      return ["codebuddy", "codex", "claude"];
+    case "codebuddy":
+    case "codex":
+    case "claude":
+      return [provider];
+  }
 }
 
 function codexProviderHome(): string {
   const explicit = String(process.env.CODEX_HOME ?? "").trim();
   return explicit !== "" ? explicit : join(homedir(), ".codex");
+}
+
+function providerHomeLabel(
+  provider: SetupTargetProvider,
+  scope: SetupScope,
+): string {
+  const prefix = scope === "project" ? "./" : "~/";
+  switch (provider) {
+    case "codebuddy":
+      return `${prefix}.codebuddy`;
+    case "codex":
+      return `${prefix}.codex`;
+    case "claude":
+      return `${prefix}.claude`;
+  }
+}
+
+function providerProjectDirName(provider: SetupTargetProvider): string {
+  switch (provider) {
+    case "codebuddy":
+      return ".codebuddy";
+    case "codex":
+      return ".codex";
+    case "claude":
+      return ".claude";
+  }
+}
+
+function providerBinary(provider: SetupTargetProvider): string {
+  switch (provider) {
+    case "codebuddy":
+      return CODEBUDDY_BIN;
+    case "codex":
+      return CODEX_BIN;
+    case "claude":
+      return CLAUDE_BIN;
+  }
 }
 
 async function ensureBackup(
@@ -472,9 +546,16 @@ async function buildLegacySkillOverlapNotice(
   }
   const providerName = providerDisplayName(provider);
 
-  const canonicalDir = provider === "codex"
-    ? join(codexProviderHome(), "skills")
-    : userSkillsDir();
+  const canonicalDir = (() => {
+    switch (provider) {
+      case "codebuddy":
+        return userSkillsDir();
+      case "codex":
+        return join(codexProviderHome(), "skills");
+      case "claude":
+        return join(claudeHome(), "skills");
+    }
+  })();
   const overlap = await detectLegacySkillRootOverlap(canonicalDir);
   if (!overlap.legacyExists) {
     return { shouldWarn: false, message: "" };
@@ -536,16 +617,19 @@ export function resolveScopeDirectories(
   projectRoot: string,
   provider: SetupProvider = "codebuddy",
 ): ScopeDirectories {
-  const concreteProvider = provider === "both" ? "codebuddy" : provider;
+  const concreteProvider =
+    provider === "both" || provider === "all" ? "codebuddy" : provider;
   if (scope === "project") {
-    const codexHomeDir = join(
-      projectRoot,
-      concreteProvider === "codex" ? ".codex" : ".codebuddy",
-    );
+    const codexHomeDir = join(projectRoot, providerProjectDirName(concreteProvider));
     return {
       codexConfigFile: join(codexHomeDir, "config.toml"),
       codexHomeDir,
-      codexHooksFile: join(codexHomeDir, "hooks.json"),
+      // Claude CLI reads hooks from `<home>/hooks/hooks.json` (subdirectory)
+      // for both user and project scope; codebuddy/codex keep the flat layout.
+      codexHooksFile:
+        concreteProvider === "claude"
+          ? join(codexHomeDir, "hooks", "hooks.json")
+          : join(codexHomeDir, "hooks.json"),
       nativeAgentsDir: join(codexHomeDir, "agents"),
       promptsDir: join(codexHomeDir, "prompts"),
       skillsDir: join(codexHomeDir, "skills"),
@@ -560,6 +644,20 @@ export function resolveScopeDirectories(
       nativeAgentsDir: join(codexHomeDir, "agents"),
       promptsDir: join(codexHomeDir, "prompts"),
       skillsDir: join(codexHomeDir, "skills"),
+    };
+  }
+  if (concreteProvider === "claude") {
+    const claudeHomeDir = claudeHome();
+    return {
+      codexConfigFile: join(claudeHomeDir, "config.toml"),
+      codexHomeDir: claudeHomeDir,
+      // Claude CLI reads hooks from `<home>/hooks/hooks.json` (subdirectory),
+      // not a flat `<home>/hooks.json`. This path matches the Claude native contract
+      // and mirrors the OMC install layout.
+      codexHooksFile: join(claudeHomeDir, "hooks", "hooks.json"),
+      nativeAgentsDir: join(claudeHomeDir, "agents"),
+      promptsDir: join(claudeHomeDir, "prompts"),
+      skillsDir: join(claudeHomeDir, "skills"),
     };
   }
   return {
@@ -660,9 +758,9 @@ async function promptForSetupScope(
   try {
     console.log("Select setup scope:");
     console.log(
-      `  1) user (default) — installs to ~/.codebuddy (skills default to ~/.codebuddy/skills)`,
+      `  1) user (default) — installs to the selected provider home`,
     );
-    console.log("  2) project — installs to ./.codebuddy (local to project)");
+    console.log("  2) project — installs to the selected project provider home");
     const answer = (await rl.question("Scope [1-2] (default: 1): "))
       .trim()
       .toLowerCase();
@@ -714,7 +812,7 @@ function semverGte(
 }
 
 function probeInstalledCliVersion(provider: SetupTargetProvider): string | null {
-  const binary = provider === "codex" ? CODEX_BIN : CODEBUDDY_BIN;
+  const binary = providerBinary(provider);
   const { result } = spawnPlatformCommandSync(binary, ["--version"], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
@@ -818,8 +916,9 @@ async function ensureProjectGitignore(
   const gitignorePath = join(projectRoot, ".gitignore");
   const projectGitignoreEntries = [
     ...PROJECT_GITIGNORE_BASE_ENTRIES,
-    ...(provider === "codex" ? [] : PROJECT_CODEBUDDY_GITIGNORE_ENTRIES),
-    ...(provider === "codebuddy" ? [] : PROJECT_CODEX_GITIGNORE_ENTRIES),
+    ...(provider === "codex" || provider === "claude" ? [] : PROJECT_CODEBUDDY_GITIGNORE_ENTRIES),
+    ...(provider === "codebuddy" || provider === "claude" ? [] : PROJECT_CODEX_GITIGNORE_ENTRIES),
+    ...(provider === "codebuddy" || provider === "codex" || provider === "both" ? [] : PROJECT_CLAUDE_GITIGNORE_ENTRIES),
   ];
   const destinationExists = existsSync(gitignorePath);
   const existing = destinationExists
@@ -971,12 +1070,20 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
       { dryRun, verbose },
       resolvedProvider.provider,
     );
-    const trackableProviderPaths =
-      resolvedProvider.provider === "codex"
-        ? ".codex agents, skills, and prompts"
-        : resolvedProvider.provider === "both"
-          ? ".codebuddy/.codex agents, skills, and prompts"
-          : ".codebuddy agents, skills, and prompts";
+    const trackableProviderPaths = (() => {
+      switch (resolvedProvider.provider) {
+        case "codebuddy":
+          return ".codebuddy agents, skills, and prompts";
+        case "codex":
+          return ".codex agents, skills, and prompts";
+        case "claude":
+          return ".claude agents, skills, and prompts";
+        case "both":
+          return ".codebuddy/.codex agents, skills, and prompts";
+        case "all":
+          return ".codebuddy/.codex/.claude agents, skills, and prompts";
+      }
+    })();
     if (gitignoreResult === "created") {
       console.log(
         `  Created .gitignore with OMB project ignore rules so local runtime state stays out of source control while ${trackableProviderPaths} remain trackable.\n`,
@@ -1078,8 +1185,8 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
     console.log();
   }
 
-  // Step 5: Update config.toml
-  console.log("[5/8] Updating config.toml...");
+  // Step 5: Update provider configuration
+  console.log("[5/8] Updating provider configuration...");
   const registryCandidates = getUnifiedMcpRegistryCandidates();
   const defaultRegistryCandidates = registryCandidates.slice(0, 1);
   const legacyRegistryCandidate = getLegacyUnifiedMcpRegistryCandidate();
@@ -1129,9 +1236,21 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
         verbose,
       },
     );
-    console.log(
-      `  Config refresh complete (${target.scopeDirs.codexConfigFile}).`,
-    );
+    switch (target.provider) {
+      case "codex":
+        console.log(`  Config refresh complete (${target.scopeDirs.codexConfigFile}).`);
+        break;
+      case "codebuddy":
+      case "claude":
+        console.log(`  Config refresh complete (${join(target.scopeDirs.codexHomeDir, ".omb-config.json")}).`);
+        break;
+    }
+    // Claude CLI does NOT read MCP servers from `~/.claude/settings.json#mcpServers`.
+    // It reads them from `claude mcp add` managed state (~/.claude/.claude.json or
+    // ~/.claude-internal/.claude.json on Internal builds) or from project `.mcp.json`.
+    // OMB therefore does not write MCP settings for the claude provider at setup time;
+    // MCP integration for claude is tracked as a follow-up (skill-packaged MCP clients).
+    // See: prd-claude-leader-provider.md §9 out-of-scope follow-ups.
   }
   if (resolvedScope.scope === "user") {
     await syncClaudeCodeMcpSettings(
@@ -1147,10 +1266,16 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
     const existingHooksContent = existsSync(target.scopeDirs.codexHooksFile)
       ? await readFile(target.scopeDirs.codexHooksFile, "utf-8")
       : null;
-    const hooksConfig =
-      target.provider === "codex"
-        ? mergeManagedCodexHooksConfig(existingHooksContent, pkgRoot)
-        : mergeManagedCodebuddyHooksConfig(existingHooksContent, pkgRoot);
+    const hooksConfig = (() => {
+      switch (target.provider) {
+        case "codebuddy":
+          return mergeManagedCodebuddyHooksConfig(existingHooksContent, pkgRoot);
+        case "codex":
+          return mergeManagedCodexHooksConfig(existingHooksContent, pkgRoot);
+        case "claude":
+          return mergeManagedClaudeHooksConfig(existingHooksContent, pkgRoot);
+      }
+    })();
     await syncManagedContent(
       hooksConfig,
       target.scopeDirs.codexHooksFile,
@@ -1330,8 +1455,10 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   );
   if (anyManagedTui) {
     console.log("  StatusLine configured in config.toml via [tui] section.");
+  } else if (managedConfigs.has("codex")) {
+    console.log("  Codex CLI >= 0.107.0 manages [tui]; OMB left that section untouched.");
   } else {
-    console.log("  CodeBuddy/Codex CLI >= 0.107.0 manages [tui]; OMB left that section untouched.");
+    console.log("  No provider-native TUI config changes needed.");
   }
   console.log();
 
@@ -1343,9 +1470,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   logCategorySummary("config", summary.config);
   console.log();
 
-  const setupProviders = resolvedProvider.provider === "both"
-    ? (setupProviderTargets(resolvedProvider.provider) as SetupTargetProvider[])
-    : [setupProviderTargets(resolvedProvider.provider)[0]!];
+  const setupProviders = setupProviderTargets(resolvedProvider.provider);
   let legacySkillOverlapPrinted = false;
   for (const targetProvider of setupProviders) {
     const notice = await buildLegacySkillOverlapNotice(
@@ -1372,13 +1497,23 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   const cliLabel =
     resolvedProvider.provider === "both"
       ? "CodeBuddy or Codex CLI"
-      : `${providerDisplayName(setupProviderTargets(resolvedProvider.provider)[0]!)} CLI`;
-  const skillsPathLabel =
-    resolvedProvider.provider === "codex"
-      ? ".codex/agents/"
-      : resolvedProvider.provider === "both"
-        ? ".codebuddy/agents/ and .codex/agents/"
-        : ".codebuddy/agents/";
+      : resolvedProvider.provider === "all"
+        ? "CodeBuddy, Codex, or Claude CLI"
+        : `${providerDisplayName(setupProviderTargets(resolvedProvider.provider)[0]!)} CLI`;
+  const skillsPathLabel = (() => {
+    switch (resolvedProvider.provider) {
+      case "codebuddy":
+        return ".codebuddy/agents/";
+      case "codex":
+        return ".codex/agents/";
+      case "claude":
+        return ".claude/agents/";
+      case "both":
+        return ".codebuddy/agents/ and .codex/agents/";
+      case "all":
+        return ".codebuddy/agents/, .codex/agents/, and .claude/agents/";
+    }
+  })();
   console.log(`  1. Start ${cliLabel} in your project directory`);
   console.log(
     `  2. Use role/workflow keywords like $architect, $executor, and $plan in ${cliLabel}`,
@@ -1386,7 +1521,7 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   console.log("  3. Browse skills with /skills; AGENTS keyword routing can also activate them implicitly");
   console.log("  4. The AGENTS.md orchestration brain is loaded automatically");
   console.log(
-    `  5. Native agent defaults configured in config.toml [agents] and TOML files written to ${skillsPathLabel}`,
+    `  5. Native agent defaults installed under ${skillsPathLabel}`,
   );
   console.log(
     '  6. "omb explore" and "omb sparkshell" can hydrate native release binaries on first use; the legacy `omb` alias still works, and source installs still allow repo-local fallbacks plus OMB_/OMB_ binary override env vars',
@@ -1919,14 +2054,15 @@ async function updateManagedConfig(
     "codexVersionProbe" | "dryRun" | "verbose" | "modelUpgradePrompt"
   > & { setupProvider: SetupTargetProvider },
 ): Promise<ManagedConfigResult> {
-  // CodeBuddy provider: the CLI is JSON-native (settings.json + hooks.json +
-  // plugin marketplace). A codex-format config.toml here is dead bytes for the
-  // CLI and its OMB-consumed fields (model_provider / model_providers.env_key)
-  // are now backed by .omb-config.json.providers (see src/config/models.ts).
+  // JSON-native providers (CodeBuddy and Claude): settings.json + hooks.json +
+  // .omb-config.json are the active surfaces. A codex-format config.toml here
+  // is dead bytes, and its OMB-consumed fields (model_provider /
+  // model_providers.env_key) are backed by .omb-config.json.providers (see
+  // src/config/models.ts).
   // Do not generate config.toml; migrate the legacy one if present and remove
   // it, then ensure .omb-config.json exists so doctor can tell "setup ran" apart
   // from "fresh CodeBuddy install we've never touched".
-  if (options.setupProvider === "codebuddy") {
+  if (options.setupProvider === "codebuddy" || options.setupProvider === "claude") {
     const migrationResult = await migrateLegacyCodebuddyConfigToml({
       legacyConfigPath: configPath,
       dryRun: options.dryRun ?? false,

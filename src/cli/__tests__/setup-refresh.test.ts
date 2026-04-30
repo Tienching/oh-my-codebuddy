@@ -38,6 +38,18 @@ const EXPECTED_CODEX_PROJECT_GITIGNORE = [
   "!.codex/prompts/**",
 ].join("\n") + "\n";
 
+const EXPECTED_CLAUDE_PROJECT_GITIGNORE = [
+  ".omb/",
+  ".claude/*",
+  "!.claude/agents/",
+  "!.claude/agents/**",
+  "!.claude/skills/",
+  "!.claude/skills/**",
+  ".claude/skills/.system/**",
+  "!.claude/prompts/",
+  "!.claude/prompts/**",
+].join("\n") + "\n";
+
 async function runSetupWithCapturedLogs(
   cwd: string,
   options: Parameters<typeof setup>[0],
@@ -198,6 +210,20 @@ describe("omb setup refresh summary and dry-run behavior", () => {
       assert.equal(
         await readFile(join(wd, ".gitignore"), "utf-8"),
         EXPECTED_CODEX_PROJECT_GITIGNORE,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("creates provider-specific .gitignore rules for Claude project-scoped setup", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
+    try {
+      await runSetupInTempDir(wd, { scope: "project", provider: "claude" });
+
+      assert.equal(
+        await readFile(join(wd, ".gitignore"), "utf-8"),
+        EXPECTED_CLAUDE_PROJECT_GITIGNORE,
       );
     } finally {
       await rm(wd, { recursive: true, force: true });

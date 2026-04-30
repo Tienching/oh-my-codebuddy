@@ -201,6 +201,68 @@ describe("generateSetupPlan", () => {
     }
   });
 
+  it("uses only Claude paths for project scope with provider claude", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-plan-claude-project-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+      const pkgSkill = join(pkgRoot, "skills", "help");
+      await mkdir(pkgSkill, { recursive: true });
+      await writeFile(join(pkgSkill, "SKILL.md"), "# Help\n");
+
+      const plan = await generateSetupPlan({
+        scope: "project",
+        projectRoot: wd,
+        pkgRoot,
+        provider: "claude",
+      });
+
+      const promptActions = plan.actions.filter((action) =>
+        action.description.startsWith("Install prompt ")
+          || action.description.startsWith("Prompt ")
+      );
+      assert.equal(
+        promptActions.some((action) =>
+          action.destination.includes(join(wd, ".claude", "prompts")),
+        ),
+        true,
+      );
+      assert.equal(
+        promptActions.some((action) =>
+          action.destination.includes(join(wd, ".codebuddy", "prompts")),
+        ),
+        false,
+      );
+      assert.equal(
+        promptActions.some((action) =>
+          action.destination.includes(join(wd, ".codex", "prompts")),
+        ),
+        false,
+      );
+
+      const gitignoreAction = plan.actions.find((action) =>
+        action.description.includes("Update .gitignore with OMB project rules"),
+      );
+      const gitignoreMetadata = gitignoreAction?.metadata as
+        | { missingEntries: string[] }
+        | undefined;
+      assert.ok(gitignoreMetadata);
+      assert.equal(
+        gitignoreMetadata.missingEntries.some((entry) =>
+          entry.startsWith(".claude"),
+        ),
+        true,
+      );
+      assert.equal(
+        gitignoreMetadata.missingEntries.some((entry) =>
+          entry.startsWith(".codebuddy") || entry.startsWith(".codex"),
+        ),
+        false,
+      );
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
   it("plans user scope installs for both provider homes", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-plan-both-user-"));
     try {
@@ -277,6 +339,75 @@ describe("generateSetupPlan", () => {
           delete process.env.CODEX_HOME;
         } else {
           process.env.CODEX_HOME = previousCodexHome;
+        }
+      }
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it("plans user scope installs for all three provider homes", async () => {
+    const wd = await mkdtemp(join(tmpdir(), "omb-plan-all-user-"));
+    try {
+      const pkgRoot = await createMinimalPkgRoot(wd);
+      const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
+      const previousCodexHome = process.env.CODEX_HOME;
+      const previousClaudeHome = process.env.CLAUDE_HOME;
+      process.env.CODEBUDDY_HOME = join(wd, ".codebuddy");
+      process.env.CODEX_HOME = join(wd, ".codex");
+      process.env.CLAUDE_HOME = join(wd, ".claude");
+
+      try {
+        const plan = await generateSetupPlan({
+          scope: "user",
+          projectRoot: wd,
+          pkgRoot,
+          provider: "all",
+        });
+
+        const hookActions = plan.actions.filter((action) =>
+          action.description === "Update native hooks"
+        );
+        assert.equal(hookActions.length, 3);
+        for (const providerDir of [".codebuddy", ".codex", ".claude"]) {
+          // Claude CLI reads hooks from `<home>/hooks/hooks.json` (subdirectory);
+          // codebuddy/codex keep the flat layout.
+          const expectedHooksPath =
+            providerDir === ".claude"
+              ? join(wd, providerDir, "hooks", "hooks.json")
+              : join(wd, providerDir, "hooks.json");
+          assert.equal(
+            hookActions.some((action) =>
+              action.destination.includes(expectedHooksPath),
+            ),
+            true,
+            providerDir,
+          );
+        }
+
+        const agentsMdActions = plan.actions.filter((action) =>
+          action.description === "Generate AGENTS.md"
+        );
+        assert.equal(agentsMdActions.length, 3);
+        assert.deepEqual(
+          agentsMdActions.map((action) => action.metadata?.provider).sort(),
+          ["claude", "codebuddy", "codex"],
+        );
+      } finally {
+        if (previousCodebuddyHome === undefined) {
+          delete process.env.CODEBUDDY_HOME;
+        } else {
+          process.env.CODEBUDDY_HOME = previousCodebuddyHome;
+        }
+        if (previousCodexHome === undefined) {
+          delete process.env.CODEX_HOME;
+        } else {
+          process.env.CODEX_HOME = previousCodexHome;
+        }
+        if (previousClaudeHome === undefined) {
+          delete process.env.CLAUDE_HOME;
+        } else {
+          process.env.CLAUDE_HOME = previousClaudeHome;
         }
       }
     } finally {
