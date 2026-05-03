@@ -499,7 +499,19 @@ describe("omb setup refresh summary and dry-run behavior", () => {
       await rm(wd, { recursive: true, force: true });
     }
   });
-  it("syncs shared MCP registry entries into ~/.claude/settings.json for user scope", async () => {
+  // Historical context: before the Claude leader provider landed, OMB setup
+  // would unconditionally merge the shared MCP registry into
+  // ~/.claude/settings.json#mcpServers on every user-scope run (intended as a
+  // convenience for any Claude product that might read that field). Empirical
+  // smoke against Claude Code Internal 1.1.5 proved that Claude CLI does NOT
+  // read ~/.claude/settings.json#mcpServers (it reads state managed by
+  // `claude mcp add` or a project-scoped `.mcp.json`). Writing there was a
+  // silent no-op that violated shared-ownership for unrelated OMB runs
+  // (e.g. `omb setup --provider codebuddy` would mutate a file the user never
+  // asked OMB to manage). The function was removed; this test now pins the
+  // opposite contract: OMB must leave ~/.claude/settings.json untouched
+  // during non-claude setup, even when a shared MCP registry is configured.
+  it("does not mutate ~/.claude/settings.json during non-claude setup even with a shared MCP registry (M1 guard)", async () => {
     const wd = await mkdtemp(join(tmpdir(), "omb-setup-refresh-"));
     const previousHome = process.env.HOME;
     const previousCodebuddyHome = process.env.CODEBUDDY_HOME;
@@ -509,23 +521,19 @@ describe("omb setup refresh summary and dry-run behavior", () => {
 
       await mkdir(join(wd, ".omb", "state"), { recursive: true });
       await mkdir(join(wd, ".claude"), { recursive: true });
-      await writeFile(
-        join(wd, ".claude", "settings.json"),
-        JSON.stringify(
-          {
-            uiTheme: "dark",
-            mcpServers: {
-              existing_server: {
-                command: "custom-existing-server",
-                args: ["serve"],
-                enabled: true,
-              },
-            },
+      const originalSettings = {
+        uiTheme: "dark",
+        mcpServers: {
+          existing_server: {
+            command: "custom-existing-server",
+            args: ["serve"],
+            enabled: true,
           },
-          null,
-          2,
-        ),
-      );
+        },
+      };
+      const claudeSettingsPath = join(wd, ".claude", "settings.json");
+      const originalContent = JSON.stringify(originalSettings, null, 2);
+      await writeFile(claudeSettingsPath, originalContent);
       const registryPath = join(wd, "mcp-registry.json");
       await writeFile(
         registryPath,
@@ -540,23 +548,13 @@ describe("omb setup refresh summary and dry-run behavior", () => {
         mcpRegistryCandidates: [registryPath],
       });
 
-      const settings = JSON.parse(
-        await readFile(join(wd, ".claude", "settings.json"), "utf-8"),
-      ) as {
-        uiTheme?: string;
-        mcpServers?: Record<string, { command: string; args: string[]; enabled: boolean }>;
-      };
-      assert.equal(settings.uiTheme, "dark");
-      assert.deepEqual(settings.mcpServers?.existing_server, {
-        command: "custom-existing-server",
-        args: ["serve"],
-        enabled: true,
-      });
-      assert.deepEqual(settings.mcpServers?.eslint, {
-        command: "npx",
-        args: ["@eslint/mcp@latest"],
-        enabled: false,
-      });
+      // File content must be byte-identical: OMB did not touch it at all.
+      const after = await readFile(claudeSettingsPath, "utf-8");
+      assert.equal(
+        after,
+        originalContent,
+        "OMB setup must leave ~/.claude/settings.json byte-identical when provider is not claude",
+      );
     } finally {
       if (typeof previousHome === "string") process.env.HOME = previousHome;
       else delete process.env.HOME;

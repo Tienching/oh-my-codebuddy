@@ -49,7 +49,6 @@ import {
   getLegacyUnifiedMcpRegistryCandidate,
   getUnifiedMcpRegistryCandidates,
   loadUnifiedMcpRegistry,
-  planClaudeCodeMcpSettingsSync,
   type UnifiedMcpRegistryLoadResult,
 } from "../config/mcp-registry.js";
 import { generateAgentToml } from "../agents/native-config.js";
@@ -1252,14 +1251,6 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
     // MCP integration for claude is tracked as a follow-up (skill-packaged MCP clients).
     // See: prd-claude-leader-provider.md §9 out-of-scope follow-ups.
   }
-  if (resolvedScope.scope === "user") {
-    await syncClaudeCodeMcpSettings(
-      sharedMcpRegistry,
-      summary.config,
-      backupContext,
-      { dryRun, verbose },
-    );
-  }
   console.log();
 
   for (const target of setupTargets) {
@@ -2152,54 +2143,6 @@ async function updateManagedConfig(
     );
   }
   return { finalConfig, ombManagesTui };
-}
-
-function getClaudeCodeSettingsPath(homeDir = homedir()): string {
-  return join(homeDir, ".claude", "settings.json");
-}
-
-async function syncClaudeCodeMcpSettings(
-  sharedMcpRegistry: UnifiedMcpRegistryLoadResult,
-  summary: SetupCategorySummary,
-  backupContext: SetupBackupContext,
-  options: Pick<SetupOptions, "dryRun" | "verbose">,
-): Promise<void> {
-  if (sharedMcpRegistry.servers.length === 0) return;
-
-  const settingsPath = getClaudeCodeSettingsPath();
-  const existing = existsSync(settingsPath)
-    ? await readFile(settingsPath, "utf-8")
-    : "";
-  const syncPlan = planClaudeCodeMcpSettingsSync(
-    existing,
-    sharedMcpRegistry.servers,
-  );
-
-  for (const warning of syncPlan.warnings) {
-    console.log(`  warning: ${warning}`);
-  }
-  if (syncPlan.warnings.length > 0) {
-    summary.skipped += 1;
-    return;
-  }
-  if (!syncPlan.content) {
-    summary.unchanged += 1;
-    if (options.verbose && syncPlan.unchanged.length > 0) {
-      console.log(
-        `  shared MCP servers already present in Claude Code settings (${settingsPath})`,
-      );
-    }
-    return;
-  }
-
-  await syncManagedContent(
-    syncPlan.content,
-    settingsPath,
-    summary,
-    backupContext,
-    options,
-    `Claude Code MCP settings ${settingsPath} (+${syncPlan.added.join(", ")})`,
-  );
 }
 
 async function setupNotifyHook(

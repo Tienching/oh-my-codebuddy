@@ -52,7 +52,7 @@ function setMockCodexHome(codexHomePath: string): () => void {
 }
 
 function setMockLeaderCli(
-  leaderCli: "codebuddy" | "codex" | undefined,
+  leaderCli: "codebuddy" | "codex" | "claude" | undefined,
 ): () => void {
   const previous = process.env.OMB_LEADER_CLI;
   if (typeof leaderCli === "string") process.env.OMB_LEADER_CLI = leaderCli;

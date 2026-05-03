@@ -223,7 +223,7 @@ Usage:
 
 Options:
   --leader-cli <name>
-                Select leader CLI runtime: codebuddy (default) | codex
+                Select leader CLI runtime: codebuddy (default) | codex | claude
                 (--cli is kept as a compatibility alias)
   --yolo        Launch {product} in yolo mode (shorthand for: {cmd} launch --yolo)
   --model <id>  Pass through to {product} to choose the exact model directly
