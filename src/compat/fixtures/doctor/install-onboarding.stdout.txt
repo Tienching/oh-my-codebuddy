@@ -14,6 +14,7 @@ Resolved setup scope: user
   [OK] Legacy skill roots: no ~/.agents/skills overlap detected
   [!!] AGENTS.md: not found in <CODEBUDDY_HOME>/AGENTS.md (run omb setup --scope user)
   [!!] State dir: <REPO_STATE_DIR> (not created yet)
+  [!!] Hooks: <CODEBUDDY_HOME>/hooks.json not found (run "omb setup --force")
   [!!] MCP Servers: settings.json not found
   [OK] Prompt triage: config: enabled (default)
 

@@ -50,6 +50,15 @@ interface DoctorScopeResolution {
 interface DoctorPaths {
   codebuddyHomeDir: string;
   configPath: string;
+  hooksPath: string;
+  /**
+   * For claude, `hooksPath` points at `<home>/hooks/hooks.json` (subdirectory,
+   * the path Claude CLI actually reads). `hooksLegacyFlatPath` points at
+   * `<home>/hooks.json` so doctor can detect if a user or a previous OMB
+   * version wrote a flat file that Claude would silently ignore. Unset for
+   * codebuddy/codex where the flat path IS the canonical path.
+   */
+  hooksLegacyFlatPath?: string;
   promptsDir: string;
   skillsDir: string;
   stateDir: string;
@@ -111,6 +120,14 @@ function resolveDoctorPaths(
     return {
       codebuddyHomeDir,
       configPath: join(codebuddyHomeDir, 'config.toml'),
+      // Claude CLI reads hooks from `<home>/hooks/hooks.json` (subdirectory);
+      // codebuddy/codex use the flat `<home>/hooks.json` layout.
+      hooksPath:
+        provider === 'claude'
+          ? join(codebuddyHomeDir, 'hooks', 'hooks.json')
+          : join(codebuddyHomeDir, 'hooks.json'),
+      hooksLegacyFlatPath:
+        provider === 'claude' ? join(codebuddyHomeDir, 'hooks.json') : undefined,
       promptsDir: join(codebuddyHomeDir, 'prompts'),
       skillsDir: join(codebuddyHomeDir, 'skills'),
       stateDir: ombStateDir(cwd),
@@ -122,6 +139,7 @@ function resolveDoctorPaths(
     return {
       codebuddyHomeDir,
       configPath: join(codebuddyHomeDir, 'config.toml'),
+      hooksPath: join(codebuddyHomeDir, 'hooks.json'),
       promptsDir: join(codebuddyHomeDir, 'prompts'),
       skillsDir: join(codebuddyHomeDir, 'skills'),
       stateDir: ombStateDir(cwd),
@@ -132,6 +150,8 @@ function resolveDoctorPaths(
     return {
       codebuddyHomeDir,
       configPath: join(codebuddyHomeDir, 'config.toml'),
+      hooksPath: join(codebuddyHomeDir, 'hooks', 'hooks.json'),
+      hooksLegacyFlatPath: join(codebuddyHomeDir, 'hooks.json'),
       promptsDir: join(codebuddyHomeDir, 'prompts'),
       skillsDir: join(codebuddyHomeDir, 'skills'),
       stateDir: ombStateDir(cwd),
@@ -141,6 +161,7 @@ function resolveDoctorPaths(
   return {
     codebuddyHomeDir: codebuddyHome(),
     configPath: codebuddyConfigPath(),
+    hooksPath: join(codebuddyHome(), 'hooks.json'),
     promptsDir: codebuddyPromptsDir(),
     skillsDir: userSkillsDir(),
     stateDir: ombStateDir(cwd),
@@ -289,6 +310,22 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
 
   // Check 8: State directory
   checks.push(checkDirectory('State dir', targets[0]!.paths.stateDir));
+
+  // Check 8.5: OMB-managed hooks installed and aimed at current pkgRoot.
+  // Provider-aware: claude uses a subdirectory path and also gets a legacy
+  // flat-path guard; codebuddy/codex use the flat path directly.
+  const packageRootForHooks = getPackageRoot();
+  for (const target of targets) {
+    const hooksChecks = await checkHooks(
+      target.paths.hooksPath,
+      target.provider,
+      packageRootForHooks,
+      target.paths.hooksLegacyFlatPath,
+    );
+    for (const c of hooksChecks) {
+      checks.push(scopedProviderCheck(c, target, multiProvider));
+    }
+  }
 
   // Check 9: MCP servers configured
   for (const target of targets) {
@@ -1162,6 +1199,151 @@ async function checkMcpServers(
     status: 'warn',
     message: `${mcpCount} servers but no OMB servers yet (expected before first setup; run "omb setup --force" once)`,
   };
+}
+
+// Canonical OMB hook events installed by `buildManagedHooksConfig`. Keep in
+// sync with `src/config/codebuddy-hooks.ts`.
+const OMB_HOOK_EVENTS = [
+  'SessionStart',
+  'PreToolUse',
+  'PostToolUse',
+  'UserPromptSubmit',
+  'Stop',
+] as const;
+
+async function checkHooks(
+  hooksPath: string,
+  provider: DoctorTargetProvider,
+  pkgRoot: string,
+  hooksLegacyFlatPath?: string,
+): Promise<Check[]> {
+  const displayName = providerDisplayName(provider);
+  const results: Check[] = [];
+
+  // Primary check: the canonical hooks file exists, parses, registers all 5
+  // OMB events, and every managed entry points at the current pkgRoot's
+  // native-hook.js.
+  if (!existsSync(hooksPath)) {
+    results.push({
+      name: 'Hooks',
+      status: 'warn',
+      message: `${hooksPath} not found (run "omb setup --force")`,
+    });
+  } else {
+    let content: string;
+    try {
+      content = await readFile(hooksPath, 'utf-8');
+    } catch (error) {
+      results.push({
+        name: 'Hooks',
+        status: 'fail',
+        message: `cannot read ${hooksPath}: ${String(error)}`,
+      });
+      return maybeAppendFlatGuard(results, provider, hooksLegacyFlatPath);
+    }
+
+    let parsed: { hooks?: Record<string, unknown> };
+    try {
+      parsed = JSON.parse(content) as { hooks?: Record<string, unknown> };
+    } catch (error) {
+      results.push({
+        name: 'Hooks',
+        status: 'fail',
+        message: `${hooksPath} is not valid JSON (${String(error)})`,
+      });
+      return maybeAppendFlatGuard(results, provider, hooksLegacyFlatPath);
+    }
+
+    const hooksMap = (parsed.hooks ?? {}) as Record<string, unknown>;
+    const missingEvents: string[] = [];
+    const staleCommandEvents: string[] = [];
+    const expectedCommandFragment = expectedNativeHookCommandFragment(
+      pkgRoot,
+      provider,
+    );
+
+    for (const event of OMB_HOOK_EVENTS) {
+      const entries = hooksMap[event];
+      if (!Array.isArray(entries) || entries.length === 0) {
+        missingEvents.push(event);
+        continue;
+      }
+      const hasOmbManagedEntry = entries.some((entry) =>
+        entryPointsAtExpectedCommand(entry, expectedCommandFragment),
+      );
+      if (!hasOmbManagedEntry) staleCommandEvents.push(event);
+    }
+
+    if (missingEvents.length > 0) {
+      results.push({
+        name: 'Hooks',
+        status: 'warn',
+        message: `${displayName} hooks missing OMB events: ${missingEvents.join(', ')} (run "omb setup --force")`,
+      });
+    } else if (staleCommandEvents.length > 0) {
+      results.push({
+        name: 'Hooks',
+        status: 'warn',
+        message: `${displayName} hooks present but do not reference current pkgRoot (${pkgRoot}); stale events: ${staleCommandEvents.join(', ')} (run "omb setup --force")`,
+      });
+    } else {
+      results.push({
+        name: 'Hooks',
+        status: 'pass',
+        message: `${OMB_HOOK_EVENTS.length} OMB events registered at ${hooksPath}`,
+      });
+    }
+  }
+
+  return maybeAppendFlatGuard(results, provider, hooksLegacyFlatPath);
+}
+
+function expectedNativeHookCommandFragment(
+  pkgRoot: string,
+  provider: DoctorTargetProvider,
+): string {
+  const scriptName =
+    provider === 'codex'
+      ? 'codex-native-hook.js'
+      : provider === 'claude'
+        ? 'claude-native-hook.js'
+        : 'codebuddy-native-hook.js';
+  return join(pkgRoot, 'dist', 'scripts', scriptName);
+}
+
+function entryPointsAtExpectedCommand(
+  entry: unknown,
+  expectedCommandFragment: string,
+): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const hooksArr = (entry as { hooks?: unknown }).hooks;
+  if (!Array.isArray(hooksArr)) return false;
+  return hooksArr.some((hook) => {
+    if (!hook || typeof hook !== 'object') return false;
+    const cmd = (hook as { command?: unknown }).command;
+    return typeof cmd === 'string' && cmd.includes(expectedCommandFragment);
+  });
+}
+
+function maybeAppendFlatGuard(
+  results: Check[],
+  provider: DoctorTargetProvider,
+  hooksLegacyFlatPath: string | undefined,
+): Check[] {
+  // Claude CLI reads hooks exclusively from `<home>/hooks/hooks.json`. A flat
+  // `<home>/hooks.json` left behind from an older OMB version (or a user's
+  // manual write) is silently ignored, which looks like "OMB hooks don't
+  // fire". Doctor should surface that discrepancy as a warning so users can
+  // delete the stale flat file.
+  if (provider !== 'claude') return results;
+  if (!hooksLegacyFlatPath) return results;
+  if (!existsSync(hooksLegacyFlatPath)) return results;
+  results.push({
+    name: 'Hooks (legacy flat path)',
+    status: 'warn',
+    message: `${hooksLegacyFlatPath} exists but Claude CLI does not read it; delete the file or run "omb uninstall --provider claude && omb setup --provider claude --force"`,
+  });
+  return results;
 }
 
 function checkPromptTriage(): Check {
