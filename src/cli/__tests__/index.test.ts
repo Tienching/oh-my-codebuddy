@@ -1903,7 +1903,11 @@ describe("detached tmux new-session sequencing", () => {
 
   it("detached leader command executes codex and cleanup without shell-quote breakage", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-"));
-    const fakeBin = await mkdtemp(join(process.cwd(), ".tmp-omb-detached-bin-"));
+    // fakeBin lives inside cwd so the `finally { rm cwd }` cleanup covers it.
+    // Keeping it under tmpdir (not repo cwd) avoids polluting the working
+    // tree if the test crashes. `join(cwd, "bin")` was the original pattern
+    // pre-ea0152eb; restored for clean test isolation.
+    const fakeBin = join(cwd, "bin");
     const logPath = join(cwd, "leader.log");
 
     try {
@@ -1966,16 +1970,24 @@ exit 0
       const log = await readFile(logPath, "utf-8");
       assert.match(log, /codex:--dangerously-bypass-approvals-and-sandbox/);
       assert.match(log, /tmux:display-message -p #\{socket_path\}/);
+      // tmux extended-keys lease lifecycle: acquire (show-options + set-option
+      // always) runs before the leader process starts; release (set-option
+      // <original>) runs after. Asserts that the production shell snippet in
+      // `buildTmuxExtendedKeysAcquire/ReleaseShellSnippet` actually spawns
+      // the helper subprocess and that PATH-override reaches the fake tmux.
+      // Restored from ea0152eb; see commit history for why it was dropped.
+      assert.match(log, /tmux:show-options -sv extended-keys/);
+      assert.match(log, /tmux:set-option -sq extended-keys always/);
+      assert.match(log, /tmux:set-option -sq extended-keys off/);
       assert.match(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
-      await rm(fakeBin, { recursive: true, force: true });
     }
   });
 
   it("detached leader command preserves the detached tmux session on signal-derived exits", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-signal-"));
-    const fakeBin = await mkdtemp(join(process.cwd(), ".tmp-omb-detached-bin-"));
+    const fakeBin = join(cwd, "bin");
     const logPath = join(cwd, "leader.log");
 
     try {
@@ -2039,10 +2051,16 @@ exit 0
       const log = await readFile(logPath, "utf-8");
       assert.match(log, /codex:--dangerously-bypass-approvals-and-sandbox/);
       assert.match(log, /tmux:display-message -p #\{socket_path\}/);
+      // Even on signal-derived exits (SIGTERM 143 here), the tmux extended-
+      // keys lease must still acquire + release so we don't leave the tmux
+      // server with `extended-keys always` sticking around after the
+      // detached leader dies. Restored from ea0152eb.
+      assert.match(log, /tmux:show-options -sv extended-keys/);
+      assert.match(log, /tmux:set-option -sq extended-keys always/);
+      assert.match(log, /tmux:set-option -sq extended-keys off/);
       assert.doesNotMatch(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
-      await rm(fakeBin, { recursive: true, force: true });
     }
   });
 
