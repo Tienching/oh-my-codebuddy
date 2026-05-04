@@ -49,6 +49,7 @@ import {
   getLegacyUnifiedMcpRegistryCandidate,
   getUnifiedMcpRegistryCandidates,
   loadUnifiedMcpRegistry,
+  planClaudeOmbMcpConfigFile,
   type UnifiedMcpRegistryLoadResult,
 } from "../config/mcp-registry.js";
 import { generateAgentToml } from "../agents/native-config.js";
@@ -1294,12 +1295,37 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
         console.log(`  Config refresh complete (${join(target.scopeDirs.codexHomeDir, ".omb-config.json")}).`);
         break;
     }
-    // Claude CLI does NOT read MCP servers from `~/.claude/settings.json#mcpServers`.
-    // It reads them from `claude mcp add` managed state (~/.claude/.claude.json or
-    // ~/.claude-internal/.claude.json on Internal builds) or from project `.mcp.json`.
-    // OMB therefore does not write MCP settings for the claude provider at setup time;
-    // MCP integration for claude is tracked as a follow-up (skill-packaged MCP clients).
-    // See: prd-claude-leader-provider.md §9 out-of-scope follow-ups.
+    if (target.provider === "claude") {
+      // Claude CLI silently ignores `<home>/settings.json#mcpServers` and the
+      // user-scope `.claude.json` also stores auth state, so OMB neither
+      // touches those files. Instead, we emit a standalone, OMB-owned
+      // `<claude-home>/omb-mcp.json` (same shape as a project `.mcp.json`).
+      //
+      // Activation is offline / user-driven: setup prints the exact
+      // `claude --mcp-config <path>` command, and AGENTS.md documents how to
+      // merge it into a project `.mcp.json`. Doctor then verifies the file
+      // exists and contains the expected OMB MCP entries. This keeps
+      // shared-ownership clean: OMB never modifies files the user owns.
+      const ombMcpPath = join(target.scopeDirs.codexHomeDir, "omb-mcp.json");
+      const plan = planClaudeOmbMcpConfigFile(
+        pkgRoot,
+        sharedMcpRegistry.servers,
+      );
+      for (const warning of plan.warnings) {
+        console.log(`  warning: ${warning}`);
+      }
+      await syncManagedContent(
+        plan.content,
+        ombMcpPath,
+        summary.config,
+        backupContext,
+        { dryRun, verbose },
+        `Claude OMB MCP manifest ${ombMcpPath} (${plan.names.length} servers)`,
+      );
+      console.log(
+        `  Claude MCP manifest ready (${ombMcpPath}); activate with "claude --mcp-config ${ombMcpPath}" or merge its mcpServers block into a project .mcp.json.`,
+      );
+    }
   }
   console.log();
 

@@ -1163,6 +1163,54 @@ async function checkMcpServers(
   configPath: string,
   provider?: DoctorTargetProvider,
 ): Promise<Check> {
+  if (provider === 'claude') {
+    // Claude provider stores its MCP manifest in a dedicated OMB-owned file
+    // (`<home>/omb-mcp.json`) rather than in `settings.json` (which Claude
+    // CLI silently ignores) or `.claude.json` (which stores auth state).
+    // See M1 commit 26b4c67d and the Claude-MCP-skill follow-up for
+    // rationale. Doctor verifies that OMB's 4 built-in MCP entries are
+    // present and usable.
+    const ombMcpPath = join(dirname(configPath), 'omb-mcp.json');
+    if (!existsSync(ombMcpPath)) {
+      return {
+        name: 'MCP Servers',
+        status: 'warn',
+        message: `${ombMcpPath} not found (run "omb setup --provider claude --force")`,
+      };
+    }
+    try {
+      const raw = await readFile(ombMcpPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (!isPlainObject(parsed) || !isPlainObject(parsed.mcpServers)) {
+        return {
+          name: 'MCP Servers',
+          status: 'fail',
+          message: `${ombMcpPath} missing mcpServers object`,
+        };
+      }
+      const names = Object.keys(parsed.mcpServers);
+      const ombBuiltins = ['omb_state', 'omb_memory', 'omb_code_intel', 'omb_trace'];
+      const missingBuiltins = ombBuiltins.filter((n) => !names.includes(n));
+      if (missingBuiltins.length > 0) {
+        return {
+          name: 'MCP Servers',
+          status: 'warn',
+          message: `${ombMcpPath} missing built-in OMB servers: ${missingBuiltins.join(', ')} (run "omb setup --provider claude --force")`,
+        };
+      }
+      return {
+        name: 'MCP Servers',
+        status: 'pass',
+        message: `${names.length} OMB MCP servers declared in ${ombMcpPath}; activate with "claude --mcp-config ${ombMcpPath}" or merge into a project .mcp.json`,
+      };
+    } catch (err) {
+      return {
+        name: 'MCP Servers',
+        status: 'fail',
+        message: `cannot parse ${ombMcpPath} (${err instanceof Error ? err.message : 'unknown error'})`,
+      };
+    }
+  }
   if (isJsonNativeProvider(provider)) {
     // JSON-native providers manage MCP servers via settings.json, not via codex-format
     // `[mcp_servers.*]` TOML sections. Inspect settings.json directly so the

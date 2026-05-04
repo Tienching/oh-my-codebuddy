@@ -173,6 +173,28 @@ async function removeOmbManagedConfig(
   return true;
 }
 
+/**
+ * Claude-only: remove the OMB-owned `omb-mcp.json` manifest written by
+ * `omb setup --provider claude`. Safe because OMB fully owns this file
+ * (see Claude MCP skill-packaging design).
+ */
+async function removeClaudeOmbMcpManifest(
+  homeDir: string,
+  options: Pick<UninstallOptions, "dryRun" | "verbose">,
+): Promise<boolean> {
+  const manifestPath = join(homeDir, "omb-mcp.json");
+  if (!existsSync(manifestPath)) return false;
+  if (!options.dryRun) {
+    await rm(manifestPath, { force: true });
+  }
+  if (options.verbose) {
+    console.log(
+      `  ${options.dryRun ? "Would remove" : "Removed"} ${manifestPath}`,
+    );
+  }
+  return true;
+}
+
 const OMB_MCP_SERVERS = [
   "omb_state",
   "omb_memory",
@@ -666,6 +688,15 @@ export async function uninstall(options: UninstallOptions = {}): Promise<void> {
         { dryRun, verbose },
       );
       summary.ombConfigRemoved = summary.ombConfigRemoved || removedOmbConfig;
+      if (target.provider === "claude") {
+        const removedMcpManifest = await removeClaudeOmbMcpManifest(
+          target.scopeDirs.codexHomeDir,
+          { dryRun, verbose },
+        );
+        if (removedMcpManifest) {
+          summary.ombConfigRemoved = true; // roll into same summary field
+        }
+      }
     }
   }
   console.log();

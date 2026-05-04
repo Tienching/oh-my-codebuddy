@@ -217,3 +217,122 @@ export function planClaudeCodeMcpSettingsSync(
     warnings: [],
   };
 }
+
+/**
+ * The 4 OMB-built-in MCP servers. These are the canonical source of truth
+ * for what OMB ships out of the box; keep in sync with
+ * `src/config/generator.ts#getOmbTablesBlock` (the codex/TOML equivalent).
+ */
+export const OMB_BUILTIN_MCP_NAMES = [
+  "omb_state",
+  "omb_memory",
+  "omb_code_intel",
+  "omb_trace",
+] as const;
+
+type OmbBuiltinMcpName = (typeof OMB_BUILTIN_MCP_NAMES)[number];
+
+interface OmbBuiltinMcpSpec {
+  name: OmbBuiltinMcpName;
+  serverScript: string; // e.g. "state-server.js"
+  startupTimeoutSec: number;
+}
+
+const OMB_BUILTIN_MCP_SPECS: readonly OmbBuiltinMcpSpec[] = [
+  { name: "omb_state", serverScript: "state-server.js", startupTimeoutSec: 5 },
+  { name: "omb_memory", serverScript: "memory-server.js", startupTimeoutSec: 5 },
+  {
+    name: "omb_code_intel",
+    serverScript: "code-intel-server.js",
+    startupTimeoutSec: 10,
+  },
+  { name: "omb_trace", serverScript: "trace-server.js", startupTimeoutSec: 5 },
+];
+
+export function buildOmbBuiltinMcpServers(
+  pkgRoot: string,
+): UnifiedMcpRegistryServer[] {
+  return OMB_BUILTIN_MCP_SPECS.map((spec) => ({
+    name: spec.name,
+    command: "node",
+    args: [join(pkgRoot, "dist", "mcp", spec.serverScript)],
+    enabled: true,
+    startupTimeoutSec: spec.startupTimeoutSec,
+  }));
+}
+
+export function isOmbBuiltinMcpName(name: string): boolean {
+  return (OMB_BUILTIN_MCP_NAMES as readonly string[]).includes(name);
+}
+
+export function isOmbMcpServerName(name: string): boolean {
+  return name.startsWith("omb-") || name.startsWith("omb_");
+}
+
+export interface ClaudeOmbMcpConfigFilePlan {
+  /** Full file content for `omb-mcp.json`, already newline-terminated. */
+  content: string;
+  /** Server names the file will declare (for summary output). */
+  names: string[];
+  /** Non-fatal warnings (e.g. shared-registry parse issues). */
+  warnings: string[];
+}
+
+/**
+ * Plan the contents of `<claude-home>/omb-mcp.json`: a standalone
+ * `.mcp.json`-shaped file that lists OMB's built-in MCP servers plus any
+ * OMB-prefixed entries from the shared MCP registry
+ * (`~/.omb/mcp-registry.json`).
+ *
+ * Intentionally decoupled from any on-disk `settings.json` or `.claude.json`:
+ * see M1 rationale (commit 26b4c67d) -- Claude CLI silently ignores
+ * `settings.json#mcpServers`, and `.claude.json` also stores auth state so
+ * OMB should not merge there. This file is OMB-owned and OMB-only; users
+ * activate it via `claude --mcp-config <path>` or by merging its
+ * `mcpServers` block into their own `.mcp.json` / `.claude.json`.
+ *
+ * `sharedRegistryServers` should be `sharedMcpRegistry.servers` from
+ * `loadUnifiedMcpRegistry(...)`. Non-OMB-prefixed entries are intentionally
+ * skipped: they belong to whatever registry the user maintains for their
+ * own tools, not to OMB's managed surface.
+ */
+export function planClaudeOmbMcpConfigFile(
+  pkgRoot: string,
+  sharedRegistryServers: readonly UnifiedMcpRegistryServer[],
+): ClaudeOmbMcpConfigFilePlan {
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+  const servers: UnifiedMcpRegistryServer[] = [];
+
+  for (const builtin of buildOmbBuiltinMcpServers(pkgRoot)) {
+    servers.push(builtin);
+    seen.add(builtin.name);
+  }
+  for (const shared of sharedRegistryServers) {
+    if (!isOmbMcpServerName(shared.name)) continue;
+    if (seen.has(shared.name)) {
+      // Shared registry entry with the same name as a built-in. Prefer the
+      // registry version (user intent wins) but flag it so users know
+      // something overrode the default.
+      const index = servers.findIndex((s) => s.name === shared.name);
+      if (index >= 0) servers[index] = shared;
+      warnings.push(
+        `omb-mcp.json: shared MCP registry entry "${shared.name}" overrides the built-in server; remove the registry entry if this was unintentional`,
+      );
+      continue;
+    }
+    servers.push(shared);
+    seen.add(shared.name);
+  }
+
+  const mcpServers: Record<string, ClaudeCodeMcpServerConfig> = {};
+  for (const server of servers) {
+    mcpServers[server.name] = toClaudeCodeMcpServerConfig(server);
+  }
+
+  return {
+    content: `${JSON.stringify({ mcpServers }, null, 2)}\n`,
+    names: servers.map((s) => s.name),
+    warnings,
+  };
+}

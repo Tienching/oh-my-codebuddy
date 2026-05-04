@@ -66,11 +66,19 @@ describe("doctor --provider claude", { concurrency: false }, () => {
       assert.match(doctor.stdout, /Resolved setup provider: claude \(from --provider\)/);
       assert.match(doctor.stdout, /\[OK\] Claude CLI: installed/);
       assert.match(doctor.stdout, /\[OK\] Claude Config: \.omb-config\.json present|(\[OK\] Config: \.omb-config\.json present)/);
-      // Claude CLI does not read MCP from <home>/settings.json#mcpServers, so
-      // OMB does not register MCP entries at claude setup time (skill-packaged
-      // MCP is a follow-up). Doctor must therefore report "no MCP servers
-      // configured" on a fresh claude install, not a false-positive "OMB present".
-      assert.match(doctor.stdout, /MCP Servers: no MCP servers configured/);
+      // After the Claude MCP skill-packaging follow-up (post-M1), OMB ships
+      // a dedicated `<home>/omb-mcp.json` listing the 4 built-in OMB MCP
+      // servers. Doctor must recognize that file as a healthy MCP manifest
+      // (the manifest exists, contains all 4 built-ins, and Doctor prints
+      // the exact `claude --mcp-config <path>` activation command).
+      assert.match(
+        doctor.stdout,
+        /\[OK\] (?:Claude )?MCP Servers: 4 OMB MCP servers declared in .+\/\.claude\/omb-mcp\.json/,
+      );
+      assert.match(
+        doctor.stdout,
+        /claude --mcp-config .+\/\.claude\/omb-mcp\.json/,
+      );
       assert.match(doctor.stdout, /\[OK\] Explore routing: enabled by default|\[OK\] Claude Explore routing: enabled by default/);
     } finally {
       await rm(wd, { recursive: true, force: true });
