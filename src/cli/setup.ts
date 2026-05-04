@@ -79,6 +79,11 @@ import {
   getLegacyScopeMigration,
   getLegacySetupModel,
 } from "../setup/compat-rules.js";
+import {
+  detectStaleProjectProviderResidue,
+  formatStaleProviderResidueHint,
+  type ProviderDirName,
+} from "../setup/stale-provider.js";
 import { CLAUDE_BIN, CODEBUDDY_BIN, CODEX_BIN } from "./constants.js";
 
 interface SetupOptions {
@@ -386,6 +391,23 @@ function providerHomeLabel(
 }
 
 function providerProjectDirName(provider: SetupTargetProvider): string {
+  switch (provider) {
+    case "codebuddy":
+      return ".codebuddy";
+    case "codex":
+      return ".codex";
+    case "claude":
+      return ".claude";
+  }
+}
+
+/**
+ * Same mapping as `providerProjectDirName`, but typed as the
+ * `ProviderDirName` literal union used by `stale-provider` helpers.
+ */
+function providerToResidueDirName(
+  provider: SetupTargetProvider,
+): ProviderDirName {
   switch (provider) {
     case "codebuddy":
       return ".codebuddy";
@@ -1035,6 +1057,34 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
       dryRun,
       verbose,
     });
+  }
+
+  // M3 (post-ea0152eb): detect stale project-scope residue from a previous
+  // setup run with a different --provider. OMB cannot auto-delete because
+  // shared-ownership forbids destructive cleanup without explicit user
+  // consent, but it CAN tell the user exactly how to clean up. Only applies
+  // to project scope -- user-scope ~/.<provider>/ dirs routinely co-exist
+  // with non-OMB installs and must not be flagged.
+  if (resolvedScope.scope === "project") {
+    const activeDirNames = setupTargets.map((t) =>
+      providerToResidueDirName(t.provider),
+    );
+    const residues = detectStaleProjectProviderResidue(
+      projectRoot,
+      activeDirNames,
+    );
+    if (residues.length > 0) {
+      const hint = formatStaleProviderResidueHint(residues);
+      if (hint) {
+        console.log(
+          `  warning: stale provider residue detected from a previous setup: ${hint}`,
+        );
+        console.log(
+          "  OMB left these directories in place to avoid destructive cleanup;",
+          "run the suggested uninstall commands above to remove them.\n",
+        );
+      }
+    }
   }
 
   // Step 1: Ensure directories exist

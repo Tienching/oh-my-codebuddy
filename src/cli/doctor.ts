@@ -20,6 +20,11 @@ import { OMB_EXPLORE_CMD_ENV, isExploreCommandRoutingEnabled } from '../hooks/ex
 import { triagePrompt } from '../hooks/triage-heuristic.js';
 import { readTriageConfig } from '../hooks/triage-config.js';
 import { isLeaderRuntimeStale } from '../team/leader-activity.js';
+import {
+  detectStaleProjectProviderResidue,
+  formatStaleProviderResidueHint,
+  type ProviderDirName,
+} from '../setup/stale-provider.js';
 import { CLAUDE_BIN, CODEBUDDY_BIN, CODEX_BIN } from './constants.js';
 
 interface DoctorOptions {
@@ -203,6 +208,23 @@ function providerProjectDirName(provider: DoctorTargetProvider): string {
   }
 }
 
+/**
+ * Same mapping as `providerProjectDirName`, but typed as the
+ * `ProviderDirName` literal used by `stale-provider` helpers.
+ */
+function doctorProviderToResidueDirName(
+  provider: DoctorTargetProvider,
+): ProviderDirName {
+  switch (provider) {
+    case 'codebuddy':
+      return '.codebuddy';
+    case 'codex':
+      return '.codex';
+    case 'claude':
+      return '.claude';
+  }
+}
+
 function resolveDoctorTargets(
   cwd: string,
   scope: DoctorSetupScope,
@@ -324,6 +346,24 @@ export async function doctor(options: DoctorOptions = {}): Promise<void> {
     );
     for (const c of hooksChecks) {
       checks.push(scopedProviderCheck(c, target, multiProvider));
+    }
+  }
+
+  // Check 8.6 (M3): Stale project-scope provider residue from an earlier
+  // setup with a different --provider. Only project scope; user-scope
+  // ~/.<provider>/ dirs legitimately co-exist with non-OMB installs.
+  if (resolvedScope === 'project') {
+    const activeDirNames = targets.map((t) =>
+      doctorProviderToResidueDirName(t.provider),
+    );
+    const residues = detectStaleProjectProviderResidue(cwd, activeDirNames);
+    if (residues.length > 0) {
+      const hint = formatStaleProviderResidueHint(residues);
+      checks.push({
+        name: 'Stale provider residue',
+        status: 'warn',
+        message: hint ?? 'stale provider directories detected',
+      });
     }
   }
 
