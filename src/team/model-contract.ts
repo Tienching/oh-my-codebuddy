@@ -8,6 +8,7 @@ import {
 
 const MADMAX_FLAG = '--madmax';
 const CODEBUDDY_LEGACY_BYPASS_FLAG = '--dangerously-bypass-approvals-and-sandbox';
+const CODEBUDDY_BYPASS_FLAG = '--dangerously-skip-permissions';
 const MODEL_FLAG = '--model';
 const CONFIG_FLAG = '-c';
 const REASONING_KEY = 'model_reasoning_effort';
@@ -75,7 +76,7 @@ export function parseTeamWorkerLaunchArgs(args: string[]): ParsedTeamWorkerLaunc
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === CODEBUDDY_LEGACY_BYPASS_FLAG || arg === MADMAX_FLAG) {
+    if (arg === CODEBUDDY_LEGACY_BYPASS_FLAG || arg === CODEBUDDY_BYPASS_FLAG || arg === MADMAX_FLAG) {
       wantsBypass = true;
       continue;
     }
@@ -123,7 +124,7 @@ export function collectInheritableTeamWorkerArgs(codebuddyArgs: string[]): strin
   const parsed = parseTeamWorkerLaunchArgs(codebuddyArgs);
 
   const inherited: string[] = [];
-  if (parsed.wantsBypass) inherited.push(CODEBUDDY_LEGACY_BYPASS_FLAG);
+  if (parsed.wantsBypass) inherited.push(CODEBUDDY_BYPASS_FLAG);
   if (parsed.reasoningOverride) inherited.push(CONFIG_FLAG, parsed.reasoningOverride);
   if (parsed.modelOverride) inherited.push(MODEL_FLAG, parsed.modelOverride);
   return inherited;
@@ -137,7 +138,7 @@ export function normalizeTeamWorkerLaunchArgs(
   const parsed = parseTeamWorkerLaunchArgs(args);
   const normalized = [...parsed.passthrough];
 
-  if (parsed.wantsBypass) normalized.push(CODEBUDDY_LEGACY_BYPASS_FLAG);
+  if (parsed.wantsBypass) normalized.push(CODEBUDDY_BYPASS_FLAG);
 
   const selectedReasoning = parsed.reasoningOverride
     ?? (normalizeOptionalReasoning(preferredReasoning)

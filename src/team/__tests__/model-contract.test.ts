@@ -24,7 +24,7 @@ describe('team model contract', () => {
         '--model=gpt-5.3',
       ]),
       [
-        '--dangerously-bypass-approvals-and-sandbox',
+        '--dangerously-skip-permissions',
         '-c',
         'model_reasoning_effort="xhigh"',
         '--model',
@@ -58,10 +58,10 @@ describe('team model contract', () => {
     assert.deepEqual(
       resolveTeamWorkerLaunchArgs({
         existingRaw: '--no-alt-screen',
-        inheritedArgs: ['--dangerously-bypass-approvals-and-sandbox'],
+        inheritedArgs: ['--dangerously-skip-permissions'],
         fallbackModel: expectedLowComplexityModel(),
       }),
-      ['--no-alt-screen', '--dangerously-bypass-approvals-and-sandbox', '--model', expectedLowComplexityModel()],
+      ['--no-alt-screen', '--dangerously-skip-permissions', '--model', expectedLowComplexityModel()],
     );
   });
 

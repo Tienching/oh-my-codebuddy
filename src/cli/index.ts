@@ -21,6 +21,9 @@ import { hudCommand } from "../hud/index.js";
 import { teamCommand } from "./team.js";
 import { ralphCommand } from "./ralph.js";
 import { askCommand } from "./ask.js";
+import { handoffCommand } from "./handoff.js";
+import { reviewCommand } from "./review.js";
+import { switchCommand } from "./switch.js";
 import { stateCommand } from "./state.js";
 import { adaptCommand } from "./adapt.js";
 import { questionCommand } from "./question.js";
@@ -139,7 +142,7 @@ function getReasoningUsage(): string {
 
 type CliCommand =
   | "launch" | "exec" | "setup" | "agents" | "agents-init" | "deepinit"
-  | "uninstall" | "doctor" | "cleanup" | "ask" | "adapt" | "question" | "explore" | "sparkshell"
+  | "uninstall" | "doctor" | "cleanup" | "ask" | "handoff" | "review" | "switch" | "adapt" | "question" | "explore" | "sparkshell"
   | "team" | "session" | "resume" | "version" | "tmux-hook" | "hooks"
   | "hud" | "state" | "status" | "cancel" | "help" | "reasoning" | string;
 
@@ -188,6 +191,9 @@ Usage:
   {cmd} cleanup   Kill orphaned {acronym} MCP server processes and remove stale .omb /tmp directories
   {cmd} doctor --team  Check team/swarm runtime health diagnostics
   {cmd} ask       Ask local provider CLI (claude|gemini) and write artifact output
+  {cmd} handoff  Create provider-neutral handoff artifacts under .omb/handoffs
+  {cmd} review   Review a handoff artifact for provider-switch readiness
+  {cmd} switch   Prepare or launch an artifact-based provider leader switch
   {cmd} adapt     Scaffold OMB-owned adapter foundations for persistent external targets
   {cmd} question  Blocking question entrypoint for controlled user questions
   {cmd} resume    Resume a previous interactive {product} session
@@ -231,7 +237,7 @@ Options:
   --xhigh       [DEPRECATED] Use --effort xhigh instead
   --effort <l>  Set reasoning effort: low | medium | high | xhigh
   --madmax      DANGEROUS: bypass {product} approvals and sandbox
-                (alias for --dangerously-skip-permissions)
+                (maps to the selected leader's native bypass-permissions flag)
   --spark       Use the {product} spark model (~1.3x faster) for team workers only
                 Workers get the configured low-complexity team model; leader model unchanged
   --madmax-spark  spark model for workers + bypass approvals for leader and workers
@@ -262,7 +268,7 @@ Options:
 export async function main(args: string[]): Promise<void> {
   const knownCommands = new Set([
     "launch", "exec", "setup", "agents", "agents-init", "deepinit",
-    "uninstall", "doctor", "cleanup", "ask", "adapt", "question", "autoresearch", "explore",
+    "uninstall", "doctor", "cleanup", "ask", "handoff", "review", "switch", "adapt", "question", "autoresearch", "explore",
     "sparkshell", "team", "ralph", "session", "resume", "version",
     "tmux-hook", "hooks", "hud", "state", "status", "cancel", "help",
     "--help", "-h",
@@ -329,6 +335,15 @@ export async function main(args: string[]): Promise<void> {
       }
       case "ask":
         await askCommand(args.slice(1));
+        break;
+      case "handoff":
+        await handoffCommand(args.slice(1));
+        break;
+      case "review":
+        await reviewCommand(args.slice(1));
+        break;
+      case "switch":
+        await switchCommand(args.slice(1));
         break;
       case "adapt":
         await adaptCommand(args.slice(1));

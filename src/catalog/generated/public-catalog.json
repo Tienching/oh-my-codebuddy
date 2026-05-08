@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-03-10T10:43:36.374Z",
+  "generatedAt": "2026-05-06T06:11:56.090Z",
   "version": "2026.02.28.1",
   "counts": {
-    "skillCount": 39,
+    "skillCount": 40,
     "promptCount": 30,
-    "activeSkillCount": 23,
+    "activeSkillCount": 24,
     "activeAgentCount": 18
   },
   "coreSkills": [
@@ -133,6 +133,13 @@
       "category": "shortcut",
       "status": "active",
       "canonical": "code-reviewer",
+      "core": false,
+      "internalRequired": false
+    },
+    {
+      "name": "handoff",
+      "category": "shortcut",
+      "status": "active",
       "core": false,
       "internalRequired": false
     },

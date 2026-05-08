@@ -124,6 +124,13 @@
       "internalRequired": false
     },
     {
+      "name": "handoff",
+      "category": "shortcut",
+      "status": "active",
+      "core": false,
+      "internalRequired": false
+    },
+    {
       "name": "security-review",
       "category": "shortcut",
       "status": "active",

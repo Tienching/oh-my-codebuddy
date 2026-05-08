@@ -132,7 +132,7 @@ Keyword routing is implemented primarily by native `UserPromptSubmit` hooks and 
 
 Fallback behavior when hook context is unavailable:
 - Explicit `$name` invocations run left-to-right and override implicit keywords.
-- Bare skill names do not activate skills by themselves; skill-name activation requires explicit `$skill` invocation. Natural-language routing phrases may still map to a workflow when they are not just the bare skill name. Examples: `analyze` / `investigate` → `$analyze` for read-only deep analysis; `deep interview`, `interview`, `don't assume`, or `ouroboros` → `$deep-interview`; `ralplan` / `consensus plan` → `$ralplan`; `cancel`, `stop`, or `abort` → `$cancel`; `web-clone`, `clone site`, `clone website`, or `copy webpage` → `$web-clone`; `ecomode`, `eco`, or `budget` → routes to `$ultrawork` as a merged compatibility alias.
+- Bare skill names do not activate skills by themselves; skill-name activation requires explicit `$skill` invocation. Natural-language routing phrases may still map to a workflow when they are not just the bare skill name. Examples: `analyze` / `investigate` → `$analyze` for read-only deep analysis; `deep interview`, `interview`, `don't assume`, or `ouroboros` → `$deep-interview`; `ralplan` / `consensus plan` → `$ralplan`; `handoff`, `provider handoff`, or `switch provider` → `$handoff`; `cancel`, `stop`, or `abort` → `$cancel`; `web-clone`, `clone site`, `clone website`, or `copy webpage` → `$web-clone`; `ecomode`, `eco`, or `budget` → routes to `$ultrawork` as a merged compatibility alias.
 - Keep the detailed keyword list in `src/hooks/keyword-registry.ts`; do not duplicate that table here. Provider-specific install paths live in `src/config/codebuddy-hooks.ts` (CodeBuddy: `codebuddy-native-hook.js`) and `src/scripts/codex-native-hook.ts` (Codex: thin re-export of the CodeBuddy implementation).
 - If the user explicitly invokes `/prompts:<name>`, do not auto-activate keyword skills unless explicit `$name` tokens are also present.
 - Keywords are case-insensitive and match anywhere in the user message; if multiple non-explicit keywords match, use the most specific.
@@ -153,7 +153,7 @@ Ralph / Ralplan execution gate:
 
 <skills>
 Skills are workflow commands.
-Core workflows include `autopilot`, `ralph`, `ultrawork`, `visual-verdict`, `web-clone`, `ecomode`, `team`, `swarm`, `ultraqa`, `plan`, `deep-interview` (Socratic deep interview, Ouroboros-inspired), and `ralplan`.
+Core workflows include `autopilot`, `ralph`, `ultrawork`, `visual-verdict`, `web-clone`, `handoff`, `ecomode`, `team`, `swarm`, `ultraqa`, `plan`, `deep-interview` (Socratic deep interview, Ouroboros-inspired), and `ralplan`.
 Utilities include `cancel`, `note`, `doctor`, `help`, and `trace`.
 Installed SKILL.md files live under `./.codebuddy/skills/<skill>/SKILL.md` (project scope) or `~/.codebuddy/skills/<skill>/SKILL.md` (user scope); role prompts live under `./.codebuddy/prompts/<role>.md` or `~/.codebuddy/prompts/<role>.md`.
 </skills>

@@ -663,7 +663,7 @@ function minimalOmbWorkflowFallback(): string {
     "OMB workflow routing fallback:",
     "- This session is running through OMB, but full OMB AGENTS.md workflow guidance was not found in user/project instructions.",
     "- For `team`, `swarm`, or `coordinated team` requests, do not use CodeBuddy's native TeamCreate surface. Run `omb team ...` from the shell so OMB creates tmux worker panes and `.omb/state/team/...` coordination state.",
-    "- For other OMB workflow keywords (`ralph`, `autopilot`, `ralplan`, `ultrawork`, `ultraqa`, `ecomode`, `cancel`), prefer the matching `omb <workflow> ...` runtime command when available.",
+    "- For other OMB workflow keywords (`ralph`, `autopilot`, `ralplan`, `ultrawork`, `ultraqa`, `handoff`, `ecomode`, `cancel`), prefer the matching `omb <workflow> ...` runtime command when available.",
     "- CodeBuddy native subagents may help with bounded local work, but they do not replace OMB's tmux team runtime when the user asks for an OMB/team workflow.",
     "</omb_workflow_fallback>",
     WORKFLOW_FALLBACK_END_MARKER,

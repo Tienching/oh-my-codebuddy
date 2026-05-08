@@ -473,8 +473,7 @@ export function normalizeCodexLaunchArgs(args: string[]): string[] {
 
   for (let index = 0; index < launchPolicyParsed.remainingArgs.length; index++) {
     const arg = launchPolicyParsed.remainingArgs[index];
-    if (arg === MADMAX_FLAG || arg === YOLO_FLAG || arg === CODEBUDDY_LEGACY_BYPASS_FLAG) { wantsBypass = true; continue; }
-    if (arg === CODEBUDDY_BYPASS_FLAG) { wantsBypass = true; if (!hasBypass) { normalized.push(arg); hasBypass = true; } continue; }
+    if (arg === MADMAX_FLAG || arg === YOLO_FLAG || arg === CODEBUDDY_LEGACY_BYPASS_FLAG || arg === CODEBUDDY_BYPASS_FLAG) { wantsBypass = true; continue; }
     // Deprecated --high/--xhigh → map to effort (with warning)
     if (arg === HIGH_REASONING_FLAG) { reasoningMode = "high"; deprecationWarnings.push(DEPRECATED_HIGH_REASONING_MSG); continue; }
     if (arg === XHIGH_REASONING_FLAG) { reasoningMode = "xhigh"; deprecationWarnings.push(DEPRECATED_XHIGH_REASONING_MSG); continue; }

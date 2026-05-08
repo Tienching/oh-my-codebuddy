@@ -99,7 +99,7 @@ describe("normalizeCodexLaunchArgs", () => {
   it("avoids duplicate bypass flags when both are present", () => {
     assert.deepEqual(
       normalizeCodexLaunchArgs([
-        "--dangerously-skip-permissions",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--madmax",
       ]),
       ["--dangerously-skip-permissions"],
@@ -110,9 +110,9 @@ describe("normalizeCodexLaunchArgs", () => {
     assert.deepEqual(
       normalizeCodexLaunchArgs([
         "--madmax",
-        "--dangerously-skip-permissions",
+        "--dangerously-bypass-approvals-and-sandbox",
         "--madmax",
-        "--dangerously-skip-permissions",
+        "--dangerously-bypass-approvals-and-sandbox",
       ]),
       ["--dangerously-skip-permissions"],
     );
@@ -2428,7 +2428,7 @@ describe("team worker launch arg inheritance helpers", () => {
         "gpt-5",
       ]),
       [
-        "--dangerously-bypass-approvals-and-sandbox",
+        "--dangerously-skip-permissions",
         "-c",
         'model_reasoning_effort="xhigh"',
         "--model",
@@ -2447,17 +2447,17 @@ describe("team worker launch arg inheritance helpers", () => {
   it("resolveTeamWorkerLaunchArgsEnv merges and normalizes with de-dupe + last reasoning/model wins", () => {
     assert.equal(
       resolveTeamWorkerLaunchArgsEnv(
-        '--dangerously-skip-permissions -c model_reasoning_effort="high" --model old-a --no-alt-screen --model=old-b',
+        '--dangerously-bypass-approvals-and-sandbox -c model_reasoning_effort="high" --model old-a --no-alt-screen --model=old-b',
         [
           "-c",
           'model_reasoning_effort="xhigh"',
-          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
           "--model",
           "gpt-5",
         ],
         true,
       ),
-      '--dangerously-skip-permissions --no-alt-screen -c model_reasoning_effort="xhigh" --model old-b',
+      '--no-alt-screen --dangerously-skip-permissions -c model_reasoning_effort="xhigh" --model old-b',
     );
   });
 
@@ -2466,7 +2466,7 @@ describe("team worker launch arg inheritance helpers", () => {
       resolveTeamWorkerLaunchArgsEnv(
         "--no-alt-screen",
         [
-          "--dangerously-skip-permissions",
+          "--dangerously-bypass-approvals-and-sandbox",
           "-c",
           'model_reasoning_effort="xhigh"',
         ],
@@ -2495,7 +2495,7 @@ describe("team worker launch arg inheritance helpers", () => {
         true,
         DEFAULT_FRONTIER_MODEL,
       ),
-      `--no-alt-screen --dangerously-bypass-approvals-and-sandbox --model ${DEFAULT_FRONTIER_MODEL}`,
+      `--no-alt-screen --dangerously-skip-permissions --model ${DEFAULT_FRONTIER_MODEL}`,
     );
   });
 

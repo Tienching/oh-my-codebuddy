@@ -39,7 +39,7 @@ Options:
   --xhigh       [DEPRECATED] Use --effort xhigh instead
   --effort <l>  Set reasoning effort: low | medium | high | xhigh
   --madmax      DANGEROUS: bypass CodeBuddy approvals and sandbox
-                (alias for --dangerously-skip-permissions)
+                (maps to the selected leader's native bypass-permissions flag)
   --spark       Use the CodeBuddy spark model (~1.3x faster) for team workers only
                 Workers get the configured low-complexity team model; leader model unchanged
   --madmax-spark  spark model for workers + bypass approvals for leader and workers

@@ -61,6 +61,9 @@ Usage:
   {cmd} cleanup   Kill orphaned {acronym} MCP server processes and remove stale .omb /tmp directories
   {cmd} doctor --team  Check team/swarm runtime health diagnostics
   {cmd} ask       Ask local provider CLI (claude|gemini) and write artifact output
+  {cmd} handoff  Create provider-neutral handoff artifacts under .omb/handoffs
+  {cmd} review   Review a handoff artifact for provider-switch readiness
+  {cmd} switch   Prepare or launch an artifact-based provider leader switch
   {cmd} adapt     Scaffold OMB-owned adapter foundations for persistent external targets
   {cmd} question  Blocking question entrypoint for controlled user questions
   {cmd} resume    Resume a previous interactive {product} session
@@ -104,7 +107,7 @@ Options:
   --xhigh       [DEPRECATED] Use --effort xhigh instead
   --effort <l>  Set reasoning effort: low | medium | high | xhigh
   --madmax      DANGEROUS: bypass {product} approvals and sandbox
-                (alias for --dangerously-skip-permissions)
+                (maps to the selected leader's native bypass-permissions flag)
   --spark       Use the {product} spark model (~1.3x faster) for team workers only
                 Workers get the configured low-complexity team model; leader model unchanged
   --madmax-spark  spark model for workers + bypass approvals for leader and workers
@@ -134,6 +137,9 @@ Options:
 /** Commands that own their own help output (i.e. don't delegate to top-level help). */
 const NESTED_HELP_COMMAND_NAMES = new Set([
   "ask",
+  "handoff",
+  "review",
+  "switch",
   "adapt",
   "question",
   "cleanup",
@@ -168,6 +174,9 @@ export function buildCommandRegistry(): CommandRegistry {
   registry.register({ name: "doctor", aliases: [], helpText: "Check installation health" });
   registry.register({ name: "cleanup", aliases: [], helpText: "Kill orphaned OMB MCP server processes", ownsLocalHelp: true });
   registry.register({ name: "ask", aliases: [], helpText: "Ask local provider CLI and write artifact output", ownsLocalHelp: true });
+  registry.register({ name: "handoff", aliases: [], helpText: "Create provider-neutral handoff artifacts", ownsLocalHelp: true });
+  registry.register({ name: "review", aliases: [], helpText: "Review a handoff artifact for provider-switch readiness", ownsLocalHelp: true });
+  registry.register({ name: "switch", aliases: [], helpText: "Prepare or launch an artifact-based provider leader switch", ownsLocalHelp: true });
   registry.register({ name: "adapt", aliases: [], helpText: "Scaffold OMB-owned adapter foundations for persistent external targets", ownsLocalHelp: true });
   registry.register({ name: "question", aliases: [], helpText: "Blocking question entrypoint for controlled user questions", ownsLocalHelp: true });
   registry.register({ name: "explore", aliases: [], helpText: "Default read-only exploration entrypoint" });

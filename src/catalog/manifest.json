@@ -97,6 +97,11 @@
       "canonical": "code-reviewer"
     },
     {
+      "name": "handoff",
+      "category": "shortcut",
+      "status": "active"
+    },
+    {
       "name": "security-review",
       "category": "shortcut",
       "status": "active",

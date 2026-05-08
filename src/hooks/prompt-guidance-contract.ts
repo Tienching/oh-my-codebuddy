@@ -177,6 +177,7 @@ export const SKILL_CONTRACTS: GuidanceSurfaceContract[] = [
   'autopilot',
   'build-fix',
   'code-review',
+  'handoff',
   'plan',
   'ralph',
   'ralplan',
