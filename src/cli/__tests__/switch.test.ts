@@ -44,12 +44,20 @@ describe("omb switch", () => {
 
   it("dry-run previews creating a new handoff and launch command without writing files", async () => {
     await withTempDir("omb-switch-cli-dry-", async (cwd) => {
-      const res = runOmb(cwd, ["switch", "--to", "claude", "--dry-run", "--reason", "provider handoff"]);
+      const res = runOmb(cwd, ["switch", "--to", "claude", "--dry-run", "--task", "provider handoff"]);
       assert.equal(res.status, 0, res.stderr || res.stdout);
       assert.match(res.stdout, /Switch dry run/);
       assert.match(res.stdout, /Would create handoff/);
       assert.match(res.stdout, /omb --leader-cli claude/);
       assert.equal(existsSync(join(cwd, ".omb")), false);
+    });
+  });
+
+  it("rejects the removed --reason flag", async () => {
+    await withTempDir("omb-switch-cli-no-reason-", async (cwd) => {
+      const res = runOmb(cwd, ["switch", "--to", "claude", "--reason", "provider handoff"]);
+      assert.notEqual(res.status, 0);
+      assert.match(res.stderr || res.stdout, /Unknown switch argument: --reason/);
     });
   });
 
@@ -90,6 +98,217 @@ describe("omb switch", () => {
 
       const state = JSON.parse(await readFile(join(cwd, ".omb", "state", "leader-lock.json"), "utf-8"));
       assert.equal(state.launch_command, "omb --leader-cli codex --madmax");
+    });
+  });
+
+  it("does NOT infer madmax from env when session.json is authoritative and explicitly has no bypass", async () => {
+    await withTempDir("omb-switch-cli-session-overrides-env-", async (cwd) => {
+      // Session.json explicitly belongs to the current runtime AND its
+      // pid_cmdline carries no bypass marker — that is the leader's
+      // authoritative truth. A stale shell-exported OMB_TEAM_WORKER_LAUNCH_ARGS
+      // must NOT silently upgrade the new leader to bypass.
+      await mkdir(join(cwd, ".omb", "state"), { recursive: true });
+      await writeFile(
+        join(cwd, ".omb", "state", "session.json"),
+        JSON.stringify({
+          session_id: "old-session-no-bypass",
+          pid_cmdline: "node /home/ubuntu/.local/bin/omb --leader-cli codex",
+        }, null, 2),
+      );
+
+      const lines: string[] = [];
+      await switchCommand(["--to", "claude", "--task", "continue"], {
+        cwd,
+        env: {
+          ...process.env,
+          OMB_SESSION_ID: "old-session-no-bypass",
+          OMB_TEAM_WORKER_LAUNCH_ARGS: "--dangerously-skip-permissions",
+        },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      assert.match(output, /Next: omb --leader-cli claude\b/);
+      assert.doesNotMatch(output, /Next: omb --leader-cli claude --madmax/);
+    });
+  });
+
+  it("emits a stderr warning when inferring madmax from env fallback", async () => {
+    await withTempDir("omb-switch-cli-env-warning-", async (cwd) => {
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      const stderrChunks: string[] = [];
+      process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+        stderrChunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8"));
+        return true;
+      }) as typeof process.stderr.write;
+
+      try {
+        await switchCommand(["--to", "claude", "--task", "continue"], {
+          cwd,
+          env: {
+            ...process.env,
+            OMB_TEAM_WORKER_LAUNCH_ARGS: "--dangerously-skip-permissions",
+          },
+          stdout: () => {},
+        });
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+
+      const stderrOutput = stderrChunks.join("");
+      assert.match(stderrOutput, /inferred --madmax from env/);
+    });
+  });
+
+  it("does NOT emit env-warning when --madmax is passed explicitly", async () => {
+    await withTempDir("omb-switch-cli-explicit-no-warning-", async (cwd) => {
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      const stderrChunks: string[] = [];
+      process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+        stderrChunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8"));
+        return true;
+      }) as typeof process.stderr.write;
+
+      try {
+        await switchCommand(["--to", "claude", "--task", "continue", "--madmax"], {
+          cwd,
+          env: {
+            ...process.env,
+            // Even with env signal also present, explicit flag should win
+            // and there is no reason to print the inference notice.
+            OMB_TEAM_WORKER_LAUNCH_ARGS: "--dangerously-skip-permissions",
+          },
+          stdout: () => {},
+        });
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+
+      const stderrOutput = stderrChunks.join("");
+      assert.doesNotMatch(stderrOutput, /inferred --madmax from env/);
+    });
+  });
+
+  it("inherits madmax from OMB_TEAM_WORKER_LAUNCH_ARGS env when session.json is missing", async () => {
+    await withTempDir("omb-switch-cli-env-fallback-madmax-", async (cwd) => {
+      // Do NOT write session.json — simulates the failure seen when codebuddy
+      // was started via a non-tmux path and writeSessionStart never fired.
+      const lines: string[] = [];
+      await switchCommand(["--to", "claude", "--task", "continue"], {
+        cwd,
+        env: {
+          ...process.env,
+          OMB_SESSION_ID: "omb-session-without-session-json",
+          OMB_TEAM_WORKER_LAUNCH_ARGS: "--dangerously-skip-permissions",
+        },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      assert.match(output, /Prepared switch/);
+      assert.match(output, /Next: omb --leader-cli claude --madmax/);
+
+      const state = JSON.parse(await readFile(join(cwd, ".omb", "state", "leader-lock.json"), "utf-8"));
+      assert.equal(state.launch_command, "omb --leader-cli claude --madmax");
+    });
+  });
+
+  it("inherits madmax from OMB_LEADER_LAUNCH_ARGS env when session.json is missing", async () => {
+    await withTempDir("omb-switch-cli-env-fallback-leader-args-", async (cwd) => {
+      const lines: string[] = [];
+      await switchCommand(["--to", "codex", "--task", "continue"], {
+        cwd,
+        env: {
+          ...process.env,
+          OMB_LEADER_LAUNCH_ARGS: "--madmax",
+        },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      assert.match(output, /Next: omb --leader-cli codex --madmax/);
+    });
+  });
+
+  it("recognises --yolo as a bypass signal in env fallback", async () => {
+    await withTempDir("omb-switch-cli-env-fallback-yolo-", async (cwd) => {
+      const lines: string[] = [];
+      await switchCommand(["--to", "claude", "--task", "continue"], {
+        cwd,
+        env: {
+          ...process.env,
+          OMB_TEAM_WORKER_LAUNCH_ARGS: "--yolo",
+        },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      assert.match(output, /Next: omb --leader-cli claude --madmax/);
+    });
+  });
+
+  it("recognises --yolo as a bypass signal in pid_cmdline", async () => {
+    await withTempDir("omb-switch-cli-cmdline-yolo-", async (cwd) => {
+      await mkdir(join(cwd, ".omb", "state"), { recursive: true });
+      await writeFile(
+        join(cwd, ".omb", "state", "session.json"),
+        JSON.stringify({
+          session_id: "old-session-yolo",
+          pid_cmdline: "node /home/ubuntu/.local/bin/omb --leader-cli codex --yolo",
+        }, null, 2),
+      );
+
+      const lines: string[] = [];
+      await switchCommand(["--to", "claude", "--task", "continue"], {
+        cwd,
+        env: { ...process.env, OMB_SESSION_ID: "old-session-yolo" },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      assert.match(output, /Next: omb --leader-cli claude --madmax/);
+    });
+  });
+
+  it("honours explicit --madmax passed to switch even when no session or env signals bypass", async () => {
+    await withTempDir("omb-switch-cli-explicit-madmax-", async (cwd) => {
+      const lines: string[] = [];
+      await switchCommand(["--to", "claude", "--task", "continue", "--madmax"], {
+        cwd,
+        env: {
+          // No session.json. No OMB_TEAM_WORKER_LAUNCH_ARGS. No OMB_LEADER_LAUNCH_ARGS.
+          // Only the explicit CLI flag should drive bypass.
+          PATH: process.env.PATH ?? "",
+        },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      assert.match(output, /Next: omb --leader-cli claude --madmax/);
+
+      const state = JSON.parse(await readFile(join(cwd, ".omb", "state", "leader-lock.json"), "utf-8"));
+      assert.equal(state.launch_command, "omb --leader-cli claude --madmax");
+    });
+  });
+
+  it("deduplicates inherited madmax when the user also passes --madmax explicitly", async () => {
+    await withTempDir("omb-switch-cli-dedup-madmax-", async (cwd) => {
+      const lines: string[] = [];
+      await switchCommand(["--to", "claude", "--task", "continue", "--madmax"], {
+        cwd,
+        env: {
+          ...process.env,
+          OMB_TEAM_WORKER_LAUNCH_ARGS: "--dangerously-skip-permissions",
+        },
+        stdout: (line) => lines.push(line),
+      });
+
+      const output = lines.join("\n");
+      // Should be "--madmax" exactly once, not "--madmax --madmax"
+      const matches = output.match(/--madmax/g) ?? [];
+      // Appears once in "Next:" and possibly echoed in prompt; minimum: does not appear twice in launch command.
+      assert.match(output, /Next: omb --leader-cli claude --madmax\n/);
+      assert.ok(!/--madmax --madmax/.test(output), `expected --madmax to appear once in launch command, got: ${matches.length} matches. Output:\n${output}`);
     });
   });
 
@@ -158,6 +377,8 @@ describe("omb switch", () => {
             assert.deepEqual(input.leaderLaunchArgs, ["--madmax"]);
             assert.match(input.prompt, /You are taking over as the OMB leader provider/);
             assert.match(input.prompt, /\.omb\/handoffs\/latest\.md/);
+            assert.match(input.prompt, /## Original \/ Current Task/);
+            assert.match(input.prompt, /continue tests/);
             return {
               sessionId: "new-session-1",
               sessionName: "omb-new-session-1",
@@ -193,6 +414,23 @@ describe("omb switch", () => {
         join(fakeBin, "tmux"),
         `#!/bin/sh
 printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  new-session)
+    printf 'demo-detached\t%%55\n'
+    ;;
+  display-message)
+    if [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%55" ]; then
+      printf '0\t12345\tnode\n'
+    else
+      printf '\n'
+    fi
+    ;;
+  capture-pane)
+    printf 'ready\n'
+    ;;
+  *)
+    ;;
+esac
 exit 0
 `,
       );
@@ -217,6 +455,140 @@ exit 0
       assert.match(tmuxLog, /--leader-cli/);
       assert.match(tmuxLog, /codex/);
       assert.match(tmuxLog, /--madmax/);
+      assert.match(tmuxLog, /new-session -d -P -F/);
+    });
+  });
+
+  it("claude wrapper propagates OMB_SESSION_ID and OMB_TEAM_WORKER_LAUNCH_ARGS into the spawned process env", async () => {
+    await withTempDir("omb-switch-cli-launch-claude-env-", async (cwd) => {
+      const fakeBin = join(cwd, "bin");
+      const logPath = join(cwd, "tmux.log");
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "tmux"),
+        `#!/bin/sh
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  new-session)
+    printf 'demo-detached\t%%77\n'
+    ;;
+  display-message)
+    if [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%77" ]; then
+      printf '0\t54321\tnode\n'
+    else
+      printf '\n'
+    fi
+    ;;
+  capture-pane)
+    printf '> \n'
+    ;;
+  load-buffer|paste-buffer|delete-buffer|send-keys)
+    ;;
+  *)
+    ;;
+esac
+exit 0
+`,
+      );
+      await chmod(join(fakeBin, "tmux"), 0o755);
+
+      const previousPath = process.env.PATH;
+      const previousSessionId = process.env.OMB_SESSION_ID;
+      const previousWorkerArgs = process.env.OMB_TEAM_WORKER_LAUNCH_ARGS;
+      process.env.PATH = `${fakeBin}:${previousPath || ""}`;
+      process.env.OMB_SESSION_ID = "omb-real-session-777";
+      process.env.OMB_TEAM_WORKER_LAUNCH_ARGS = "--dangerously-skip-permissions";
+      try {
+        await launchDetachedHandoffSession({
+          cwd,
+          to: "claude",
+          prompt: "take over safely",
+          handoffId: "handoff-test-claude-env",
+          leaderLaunchArgs: ["--madmax"],
+        });
+      } finally {
+        if (typeof previousPath === "string") process.env.PATH = previousPath;
+        else delete process.env.PATH;
+        if (typeof previousSessionId === "string") process.env.OMB_SESSION_ID = previousSessionId;
+        else delete process.env.OMB_SESSION_ID;
+        if (typeof previousWorkerArgs === "string") process.env.OMB_TEAM_WORKER_LAUNCH_ARGS = previousWorkerArgs;
+        else delete process.env.OMB_TEAM_WORKER_LAUNCH_ARGS;
+      }
+
+      const tmuxLog = await readFile(logPath, "utf-8");
+      // The claude wrapper script should embed env assignments for the propagated vars.
+      assert.match(tmuxLog, /env\.OMB_SESSION_ID = "omb-real-session-777"/);
+      assert.match(tmuxLog, /env\.OMB_TEAM_WORKER_LAUNCH_ARGS = "--dangerously-skip-permissions"/);
+      // And the resolved claude-native bypass flag must reach the spawn argv.
+      assert.match(tmuxLog, /--dangerously-skip-permissions/);
+      // claude binary is spawned directly (no omb --leader-cli wrapper).
+      assert.match(tmuxLog, /'claude'/);
+    });
+  });
+
+  it("auto-dismisses detached-session trust prompts before returning", async () => {
+    await withTempDir("omb-switch-cli-launch-detached-trust-", async (cwd) => {
+      const fakeBin = join(cwd, "bin");
+      const logPath = join(cwd, "tmux.log");
+      const trustClearedPath = join(cwd, "trust-cleared");
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "tmux"),
+        `#!/bin/sh
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  new-session)
+    printf 'demo-detached\t%%55\n'
+    ;;
+  display-message)
+    if [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%55" ]; then
+      printf '0\t12345\tnode\n'
+    else
+      printf '\n'
+    fi
+    ;;
+  capture-pane)
+    if [ -f "${trustClearedPath}" ]; then
+      printf '❯ \n'
+    else
+      cat <<'EOF'
+Quick safety check: Is this a project you created or one you trust?
+❯ 1. Yes, I trust this folder
+2. No, exit
+Enter to confirm · Esc to cancel
+EOF
+    fi
+    ;;
+  send-keys)
+    touch "${trustClearedPath}"
+    ;;
+  *)
+    ;;
+esac
+exit 0
+`,
+      );
+      await chmod(join(fakeBin, "tmux"), 0o755);
+
+      const previousPath = process.env.PATH;
+      process.env.PATH = `${fakeBin}:${previousPath || ""}`;
+      try {
+        const result = await launchDetachedHandoffSession({
+          cwd,
+          to: "claude",
+          prompt: "take over safely",
+          handoffId: "handoff-test-detached-trust",
+          leaderLaunchArgs: ["--madmax"],
+        });
+        assert.match(result.launchCommand, /^tmux attach -t /);
+      } finally {
+        if (typeof previousPath === "string") process.env.PATH = previousPath;
+        else delete process.env.PATH;
+      }
+
+      const tmuxLog = await readFile(logPath, "utf-8");
+      assert.match(tmuxLog, /capture-pane -t %55 -p/);
+      assert.match(tmuxLog, /send-keys -t %55 C-m/);
     });
   });
 
@@ -241,6 +613,9 @@ case "$1" in
     ;;
   new-window)
     printf '7\t%%77\n'
+    ;;
+  capture-pane)
+    printf '❯ \n'
     ;;
   select-window)
     ;;
@@ -291,6 +666,178 @@ exit 0
       assert.match(tmuxLog, /--madmax/);
       assert.match(tmuxLog, /display-message -t %42 -- codex ready in demo:7; switching current tmux session now/);
       assert.match(tmuxLog, /select-window -t demo:7/);
+    });
+  });
+
+  it("auto-dismisses same-session trust prompts before selecting the new window", async () => {
+    await withTempDir("omb-switch-cli-same-session-trust-", async (cwd) => {
+      const fakeBin = join(cwd, "bin");
+      const logPath = join(cwd, "tmux.log");
+      const trustClearedPath = join(cwd, "trust-cleared");
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "tmux"),
+        `#!/bin/sh
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  display-message)
+    if [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%42" ]; then
+      printf 'demo\t3\t%%42\n'
+    elif [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%77" ]; then
+      printf '0\t12345\tnode\n'
+    else
+      printf '\n'
+    fi
+    ;;
+  new-window)
+    printf '7\t%%77\n'
+    ;;
+  capture-pane)
+    if [ -f "${trustClearedPath}" ]; then
+      printf '❯ \n'
+    else
+      cat <<'EOF'
+Quick safety check: Is this a project you created or one you trust?
+❯ 1. Yes, I trust this folder
+2. No, exit
+Enter to confirm · Esc to cancel
+EOF
+    fi
+    ;;
+  send-keys)
+    touch "${trustClearedPath}"
+    ;;
+  select-window)
+    ;;
+  *)
+    ;;
+ esac
+exit 0
+`,
+      );
+      await chmod(join(fakeBin, "tmux"), 0o755);
+
+      const previousPath = process.env.PATH;
+      const previousTmux = process.env.TMUX;
+      const previousTmuxPane = process.env.TMUX_PANE;
+      const previousCountdown = process.env.OMB_SWITCH_COUNTDOWN_MS;
+      process.env.PATH = `${fakeBin}:${previousPath || ""}`;
+      process.env.TMUX = "tmux,123,0";
+      process.env.TMUX_PANE = "%42";
+      process.env.OMB_SWITCH_COUNTDOWN_MS = "0";
+      try {
+        const result = await launchHandoffSession({
+          cwd,
+          to: "claude",
+          prompt: "take over safely",
+          handoffId: "handoff-test-same-session-trust",
+          leaderLaunchArgs: ["--madmax"],
+        });
+        assert.equal(result.sameTmuxSession, true);
+        assert.equal(result.newWindowTarget, "demo:7");
+      } finally {
+        if (typeof previousPath === "string") process.env.PATH = previousPath;
+        else delete process.env.PATH;
+        if (typeof previousTmux === "string") process.env.TMUX = previousTmux;
+        else delete process.env.TMUX;
+        if (typeof previousTmuxPane === "string") process.env.TMUX_PANE = previousTmuxPane;
+        else delete process.env.TMUX_PANE;
+        if (typeof previousCountdown === "string") process.env.OMB_SWITCH_COUNTDOWN_MS = previousCountdown;
+        else delete process.env.OMB_SWITCH_COUNTDOWN_MS;
+      }
+
+      const tmuxLog = await readFile(logPath, "utf-8");
+      assert.match(tmuxLog, /capture-pane -t %77 -p/);
+      assert.match(tmuxLog, /send-keys -t %77 C-m/);
+      assert.match(tmuxLog, /select-window -t demo:7/);
+    });
+  });
+
+  it("loads takeover prompt from file via a safe tmux wrapper", async () => {
+    await withTempDir("omb-switch-cli-same-session-direct-argv-", async (cwd) => {
+      const fakeBin = join(cwd, "bin");
+      const logPath = join(cwd, "tmux.log");
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "tmux"),
+        `#!/bin/sh
+printf '%s\n' "$*" >> "${logPath}"
+case "$1" in
+  display-message)
+    if [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%42" ]; then
+      printf 'demo\t3\t%%42\n'
+    elif [ "$2" = "-p" ] && [ "$3" = "-t" ] && [ "$4" = "%77" ]; then
+      printf '0\t12345\tnode\n'
+    else
+      printf '\n'
+    fi
+    ;;
+  new-window)
+    printf '7\t%%77\n'
+    ;;
+  capture-pane)
+    printf '❯ \n'
+    ;;
+  select-window)
+    ;;
+  *)
+    ;;
+ esac
+exit 0
+`,
+      );
+      await chmod(join(fakeBin, "tmux"), 0o755);
+
+      const previousPath = process.env.PATH;
+      const previousTmux = process.env.TMUX;
+      const previousTmuxPane = process.env.TMUX_PANE;
+      const previousCountdown = process.env.OMB_SWITCH_COUNTDOWN_MS;
+      const previousSessionId = process.env.OMB_SESSION_ID;
+      const previousWorkerArgs = process.env.OMB_TEAM_WORKER_LAUNCH_ARGS;
+      process.env.PATH = `${fakeBin}:${previousPath || ""}`;
+      process.env.TMUX = "tmux,123,0";
+      process.env.TMUX_PANE = "%42";
+      process.env.OMB_SWITCH_COUNTDOWN_MS = "0";
+      process.env.OMB_SESSION_ID = "omb-interactive-session-42";
+      process.env.OMB_TEAM_WORKER_LAUNCH_ARGS = "--dangerously-skip-permissions";
+      try {
+        await launchHandoffSession({
+          cwd,
+          to: "claude",
+          prompt: "take over safely\nliteral $(uname)\nliteral `whoami`",
+          handoffId: "handoff-test-safe-wrapper",
+          leaderLaunchArgs: ["--madmax"],
+        });
+      } finally {
+        if (typeof previousPath === "string") process.env.PATH = previousPath;
+        else delete process.env.PATH;
+        if (typeof previousTmux === "string") process.env.TMUX = previousTmux;
+        else delete process.env.TMUX;
+        if (typeof previousTmuxPane === "string") process.env.TMUX_PANE = previousTmuxPane;
+        else delete process.env.TMUX_PANE;
+        if (typeof previousCountdown === "string") process.env.OMB_SWITCH_COUNTDOWN_MS = previousCountdown;
+        else delete process.env.OMB_SWITCH_COUNTDOWN_MS;
+        if (typeof previousSessionId === "string") process.env.OMB_SESSION_ID = previousSessionId;
+        else delete process.env.OMB_SESSION_ID;
+        if (typeof previousWorkerArgs === "string") process.env.OMB_TEAM_WORKER_LAUNCH_ARGS = previousWorkerArgs;
+        else delete process.env.OMB_TEAM_WORKER_LAUNCH_ARGS;
+      }
+
+      const tmuxLog = await readFile(logPath, "utf-8");
+      assert.match(tmuxLog, /new-window -d -P -F/);
+      assert.match(tmuxLog, /node' '-e'|node" "-e"|node\s+'-e'/);
+      assert.match(tmuxLog, /handoff-test-safe-wrapper-takeover-prompt\.md/);
+      assert.match(tmuxLog, /load-buffer -b omb-switch-/);
+      assert.match(tmuxLog, /paste-buffer -d -b omb-switch-/);
+      assert.doesNotMatch(tmuxLog, /literal \$\(uname\)/);
+      assert.doesNotMatch(tmuxLog, /literal `whoami`/);
+      assert.doesNotMatch(tmuxLog, /bash -lc/);
+      assert.doesNotMatch(tmuxLog, /\$\(cat /);
+      // Interactive (same-session) takeover must propagate session env into the spawned claude wrapper:
+      assert.match(tmuxLog, /env\.OMB_SESSION_ID = "omb-interactive-session-42"/);
+      assert.match(tmuxLog, /env\.OMB_TEAM_WORKER_LAUNCH_ARGS = "--dangerously-skip-permissions"/);
+      // The claude-native bypass flag must reach the spawn argv (translated from --madmax):
+      assert.match(tmuxLog, /--dangerously-skip-permissions/);
     });
   });
 
@@ -424,7 +971,7 @@ case "$1" in
 
       const tmuxLog = await readFile(logPath, "utf-8");
       assert.match(tmuxLog, /new-window -d -P -F/);
-      assert.match(tmuxLog, /new-session -d -s /);
+      assert.match(tmuxLog, /new-session -d -P -F/);
     });
   });
 
