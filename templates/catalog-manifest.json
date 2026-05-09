@@ -124,7 +124,7 @@
       "internalRequired": false
     },
     {
-      "name": "handoff",
+      "name": "switch",
       "category": "shortcut",
       "status": "active",
       "core": false,

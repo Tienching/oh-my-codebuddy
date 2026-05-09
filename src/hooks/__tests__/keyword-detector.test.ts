@@ -77,26 +77,22 @@ describe('keyword detector swarm/team compatibility', () => {
     assert.equal(spaced.skill, 'code-review');
   });
 
-  it('maps explicit provider handoff invocation to handoff skill', () => {
-    const match = detectPrimaryKeyword('$handoff claude --launch');
+  it('maps explicit $switch invocation to the provider-switch skill', () => {
+    const match = detectPrimaryKeyword('$switch claude --launch');
     assert.ok(match);
-    assert.equal(match.skill, 'handoff');
-    assert.equal(match.keyword.toLowerCase(), '$handoff');
+    assert.equal(match.skill, 'switch');
+    assert.equal(match.keyword.toLowerCase(), '$switch');
   });
 
-  it('maps intentional provider handoff prose to handoff skill', () => {
-    const providerHandoff = detectPrimaryKeyword('please run a provider handoff to codex');
-    assert.ok(providerHandoff);
-    assert.equal(providerHandoff.skill, 'handoff');
-
-    const switchProvider = detectPrimaryKeyword('switch provider to claude for review');
-    assert.ok(switchProvider);
-    assert.equal(switchProvider.skill, 'handoff');
-  });
-
-  it('does not trigger handoff from incidental prose', () => {
+  it('does not trigger provider switching from implicit prose', () => {
+    assert.equal(detectPrimaryKeyword('please run a provider handoff to codex'), null);
+    assert.equal(detectPrimaryKeyword('switch provider to claude for review'), null);
     assert.equal(detectPrimaryKeyword('handoff the follow-up notes later'), null);
     assert.equal(detectPrimaryKeyword('this document describes a handoff contract'), null);
+  });
+
+  it('does not accept legacy $handoff explicit activation', () => {
+    assert.equal(detectPrimaryKeyword('$handoff claude --launch'), null);
   });
 
   it('supports explicit multi-skill invocation by prioritizing left-most $skill', () => {
@@ -402,6 +398,7 @@ describe('keyword registry coverage', () => {
     assert.ok(registryKeywords.has("don't assume"));
     assert.ok(registryKeywords.has('interview me'));
     assert.ok(registryKeywords.has('autoresearch'));
+    assert.ok(registryKeywords.has('switch'));
   });
 
   it('registers web-clone activation keywords so clone pipeline can fire from prose', () => {

@@ -65,9 +65,7 @@ export const KEYWORD_TRIGGER_DEFINITIONS: readonly KeywordTriggerDefinition[] = 
   { keyword: 'security review', skill: 'security-review', priority: 6, guidance: 'Activate security-review workflow' },
   { keyword: 'autoresearch', skill: 'autoresearch', priority: 8, guidance: 'Activate autoresearch workflow' },
 
-  { keyword: 'handoff', skill: 'handoff', priority: 10, guidance: 'Activate provider handoff workflow' },
-  { keyword: 'provider handoff', skill: 'handoff', priority: 10, guidance: 'Activate provider handoff workflow' },
-  { keyword: 'switch provider', skill: 'handoff', priority: 10, guidance: 'Activate provider handoff workflow' },
+  { keyword: 'switch', skill: 'switch', priority: 10, guidance: 'Activate provider switch workflow via explicit $switch invocation' },
 
   { keyword: 'web-clone', skill: 'web-clone', priority: 7, guidance: 'Activate web-clone pipeline' },
   { keyword: 'clone site', skill: 'web-clone', priority: 7, guidance: 'Activate web-clone pipeline' },

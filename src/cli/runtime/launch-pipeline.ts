@@ -593,13 +593,78 @@ export function normalizeCodexCliLaunchArgs(args: string[]): string[] {
   return normalized;
 }
 
+export function normalizeClaudeCliLaunchArgs(args: string[]): string[] {
+  const parsed = parseWorktreeMode(args);
+  const launchPolicyParsed = splitLeaderLaunchPolicyArgs(parsed.remainingArgs);
+  const normalized: string[] = [];
+  let wantsBypass = false;
+  let hasBypass = false;
+  let reasoningMode: ReasoningMode | null = null;
+  const deprecationWarnings: string[] = [];
+
+  for (let index = 0; index < launchPolicyParsed.remainingArgs.length; index++) {
+    const arg = launchPolicyParsed.remainingArgs[index];
+    if (arg === MADMAX_FLAG || arg === YOLO_FLAG || arg === MADMAX_SPARK_FLAG) { wantsBypass = true; continue; }
+    if (arg === CODEBUDDY_BYPASS_FLAG) {
+      if (!hasBypass) {
+        normalized.push(arg);
+        hasBypass = true;
+      }
+      continue;
+    }
+    if (arg === CODEBUDDY_LEGACY_BYPASS_FLAG) { wantsBypass = true; continue; }
+    if (arg === HIGH_REASONING_FLAG) { reasoningMode = "high"; deprecationWarnings.push(DEPRECATED_HIGH_REASONING_MSG); continue; }
+    if (arg === XHIGH_REASONING_FLAG) { reasoningMode = "xhigh"; deprecationWarnings.push(DEPRECATED_XHIGH_REASONING_MSG); continue; }
+    if (arg === EFFORT_FLAG) {
+      const next = launchPolicyParsed.remainingArgs[index + 1];
+      if (next && REASONING_MODE_SET.has(next)) { reasoningMode = next as ReasoningMode; index += 1; continue; }
+      normalized.push(arg);
+      if (next) { normalized.push(next); index += 1; }
+      continue;
+    }
+    if (arg === CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG) {
+      const next = launchPolicyParsed.remainingArgs[index + 1];
+      if (typeof next === "string" && next.trim() !== "") {
+        normalized.push(CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(next)}"`);
+        index += 1;
+        continue;
+      }
+      normalized.push(arg);
+      continue;
+    }
+    if (arg.startsWith(`${CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG}=`)) {
+      const value = arg.slice(`${CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG}=`.length).trim();
+      if (value !== "") {
+        normalized.push(CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(parseTomlStringValue(value))}"`);
+        continue;
+      }
+    }
+    if (arg === "--permission-mode" && launchPolicyParsed.remainingArgs[index + 1] === "bypassPermissions") {
+      wantsBypass = true;
+      index += 1;
+      continue;
+    }
+    if (arg === "--permission-mode=bypassPermissions") { wantsBypass = true; continue; }
+    if (arg === SPARK_FLAG) continue;
+    normalized.push(arg);
+  }
+
+  if (wantsBypass && !hasBypass) normalized.push(CODEBUDDY_BYPASS_FLAG);
+  if (reasoningMode) normalized.push(CONFIG_FLAG, `${REASONING_KEY}="${reasoningMode}"`);
+  for (const warning of deprecationWarnings) {
+    process.stderr.write(`[omb] ${warning}\n`);
+  }
+  return normalized;
+}
+
 export function normalizeLeaderLaunchArgs(args: string[], leaderCli: LeaderCli): string[] {
   switch (leaderCli) {
     case "codebuddy":
       return normalizeCodexLaunchArgs(args);
     case "codex":
-    case "claude":
       return normalizeCodexCliLaunchArgs(args);
+    case "claude":
+      return normalizeClaudeCliLaunchArgs(args);
   }
 }
 

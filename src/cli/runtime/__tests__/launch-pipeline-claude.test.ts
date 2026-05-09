@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   buildProviderLeaderEnv,
   mirrorLeaderCliIntoProcessEnv,
+  normalizeLeaderLaunchArgs,
   parseLeaderCliValue,
   providerHomeEnv,
   resolveCodexHomeForLaunch,
@@ -51,6 +52,18 @@ describe("Claude leader launch pipeline", () => {
     const env: NodeJS.ProcessEnv = {};
     mirrorLeaderCliIntoProcessEnv("claude", env);
     assert.equal(env.OMB_LEADER_CLI, "claude");
+  });
+
+  it("normalizes Claude bypass aliases to the supported skip-permissions flag", () => {
+    assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "claude"), ["--dangerously-skip-permissions"]);
+    assert.deepEqual(
+      normalizeLeaderLaunchArgs(["--dangerously-bypass-approvals-and-sandbox"], "claude"),
+      ["--dangerously-skip-permissions"],
+    );
+    assert.deepEqual(
+      normalizeLeaderLaunchArgs(["--dangerously-skip-permissions", "--effort", "high"], "claude"),
+      ["--dangerously-skip-permissions", "-c", 'model_reasoning_effort="high"'],
+    );
   });
 
   it("resolves project-scoped .claude home and treats exec/resume as Codex-like", async () => {

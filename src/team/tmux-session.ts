@@ -30,6 +30,7 @@ import {
   spawnPlatformCommandSync,
 } from '../utils/platform-command.js';
 import { claudeHome, codebuddyHome, codexHome, resolveOmbCliEntryPath } from '../utils/paths.js';
+import { paneHasClaudeBypassPermissionsPrompt, paneHasWorkspaceTrustPrompt } from '../utils/startup-prompts.js';
 
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
@@ -1370,30 +1371,6 @@ function paneTarget(sessionName: string, workerIndex: number, workerPaneId?: str
 export const paneIsBootstrapping = sharedPaneIsBootstrapping;
 export const paneLooksReady = sharedPaneLooksReady;
 
-function paneHasTrustPrompt(captured: string): boolean {
-  const lines = captured
-    .split('\n')
-    .map((line) => line.replace(/\r/g, '').trim())
-    .filter((line) => line.length > 0);
-  const tail = lines.slice(-12);
-  const hasQuestion = tail.some((line) => /Do you trust the contents of this directory\?/i.test(line));
-  const hasActiveChoices = tail.some((line) => /Yes,\s*continue|No,\s*quit|Press enter to continue/i.test(line));
-  return hasQuestion && hasActiveChoices;
-}
-
-function paneHasClaudeBypassPermissionsPrompt(captured: string): boolean {
-  const lines = captured
-    .split('\n')
-    .map((line) => line.replace(/\r/g, '').trim())
-    .filter((line) => line.length > 0);
-  const tail = lines.slice(-20);
-  const hasWarning = tail.some((line) => /Bypass Permissions mode/i.test(line));
-  const hasChoices = tail.some((line) => /No,\s*exit/i.test(line))
-    && tail.some((line) => /Yes,\s*I\s*accept/i.test(line))
-    && tail.some((line) => /Enter\s*to\s*confirm/i.test(line));
-  return hasWarning && hasChoices;
-}
-
 function acceptClaudeBypassPermissionsPrompt(target: string): void {
   runTmux(['send-keys', '-t', target, '-l', '--', '2']);
   sleepFractionalSeconds(0.12);
@@ -1582,7 +1559,7 @@ export function waitForWorkerReady(
     if (paneHasClaudeBypassPermissionsPrompt(result.stdout)) {
       return false;
     }
-    if (paneHasTrustPrompt(result.stdout)) {
+    if (paneHasWorkspaceTrustPrompt(result.stdout)) {
       // Default-on for team workers: they are spawned explicitly by the leader in the same cwd.
       // Opt-out by setting OMB_TEAM_AUTO_TRUST=0 (compat: OMB_TEAM_AUTO_TRUST=0).
       if ((process.env.OMB_TEAM_AUTO_TRUST) !== '0') {
@@ -1638,7 +1615,7 @@ export function dismissTrustPromptIfPresent(
   const target = paneTarget(sessionName, workerIndex, workerPaneId);
   const result = runTmux(sharedBuildVisibleCapturePaneArgv(target));
   if (!result.ok) return false;
-  if (!paneHasTrustPrompt(result.stdout)) return false;
+  if (!paneHasWorkspaceTrustPrompt(result.stdout)) return false;
   // Trust prompt detected; send C-m twice to dismiss (trust + follow-up splash)
   runTmux(['send-keys', '-t', target, 'C-m']);
   sleepFractionalSeconds(0.12);
@@ -1694,7 +1671,7 @@ export async function sendToWorker(
   if (dismissClaudeBypassPermissionsPromptIfPresent(target, capturedStr)) {
     await sleep(200);
   }
-  if (paneHasTrustPrompt(capturedStr)) {
+  if (paneHasWorkspaceTrustPrompt(capturedStr)) {
     await sendKeyAsync(target, 'C-m');
     await sleep(120);
     await sendKeyAsync(target, 'C-m');

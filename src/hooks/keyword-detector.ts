@@ -397,9 +397,9 @@ const KEYWORD_MAP: Array<{ pattern: RegExp; skill: string; priority: number }> =
   priority: entry.priority,
 }));
 
-const KEYWORDS_REQUIRING_INTENT = new Set(['ralph', 'team', 'swarm', 'stop', 'abort', 'parallel', 'autoresearch', 'handoff', 'provider handoff', 'switch provider', 'ecomode', 'eco', 'budget', 'web-clone', 'clone site', 'clone website', 'copy webpage']);
+const KEYWORDS_REQUIRING_INTENT = new Set(['ralph', 'team', 'swarm', 'stop', 'abort', 'parallel', 'autoresearch', 'switch', 'ecomode', 'eco', 'budget', 'web-clone', 'clone site', 'clone website', 'copy webpage']);
 
-type IntentKeyword = 'ralph' | 'team' | 'swarm' | 'stop' | 'abort' | 'parallel' | 'autoresearch' | 'handoff' | 'provider handoff' | 'switch provider' | 'ecomode' | 'eco' | 'budget' | 'web-clone' | 'clone site' | 'clone website' | 'copy webpage';
+type IntentKeyword = 'ralph' | 'team' | 'swarm' | 'stop' | 'abort' | 'parallel' | 'autoresearch' | 'switch' | 'ecomode' | 'eco' | 'budget' | 'web-clone' | 'clone site' | 'clone website' | 'copy webpage';
 
 const DEEP_INTERVIEW_ACTIVATION_PATTERNS: RegExp[] = [
   /(?:^|[^\w])\$(?:deep-interview)\b/i,
@@ -474,23 +474,8 @@ const KEYWORD_INTENT_PATTERNS: Record<IntentKeyword, RegExp[]> = {
     /\b(?:use|run|start|enable|launch|invoke|activate)\s+(?:the\s+)?autoresearch\b/i,
     /\bautoresearch\s+(?:mode|workflow|skill|loop)\b/i,
   ],
-  handoff: [
-    /(?:^|[^\w])\$(?:handoff)\b/i,
-    /\/handoff\b/i,
-    /^(?:please\s+)?handoff(?:\s+now)?[.!]?\s*$/i,
-    /\bhandoff\s+(?:to\s+)?(?:codebuddy|codex|claude|gemini)\b/i,
-    /\bhandoff\s+(?:provider|leader)\s+(?:to\s+)?(?:codebuddy|codex|claude|gemini)?\b/i,
-    /\b(?:use|run|start|invoke|activate)\s+(?:the\s+)?provider\s+handoff\b/i,
-  ],
-  'provider handoff': [
-    /(?:^|[^\w])\$(?:handoff)\b/i,
-    /\/handoff\b/i,
-    /\bprovider\s+handoff\b/i,
-  ],
-  'switch provider': [
-    /(?:^|[^\w])\$(?:handoff)\b/i,
-    /\/handoff\b/i,
-    /\bswitch\s+(?:the\s+)?(?:provider|leader)\s+(?:to\s+)?(?:codebuddy|codex|claude|gemini)?\b/i,
+  switch: [
+    /(?:^|[^\w])\$(?:switch)\b/i,
   ],
   // ecomode/eco/budget need intent because "eco-friendly", "ecological",
   // "budget constraint", "over budget", etc. are common in normal prose and
