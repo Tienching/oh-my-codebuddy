@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "task": "Implement omb team merge subcommand per .omb/plans/team-merge-consensus-plan.md",
+  "specRef": ".omb/plans/team-merge-consensus-plan.md",
+  "nonGoals": [
+    "Cross-repo / remote branch merging",
+    "Squash-merge variant (this PRD only does --no-ff merge commits)",
+    "PR creation (deferred to omb ship integration follow-up)",
+    "Tier 1 LLM-driven self-resolution behavior (treated as known non-deterministic limitation per Risk 7)"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Add merge event types and MergeSession types",
+      "passes": true,
+      "priority": 1,
+      "files": [
+        "src/team/contracts.ts",
+        "src/team/merge-session.ts (NEW)"
+      ],
+      "acceptanceCriteria": [
+        "src/team/contracts.ts adds 6 string literals to TEAM_EVENT_TYPES (BEFORE the closing `] as const` line, AFTER 'worker_stale_stdout'): merge_session_started, merge_session_progress, merge_session_completed, merge_conflict_detected, merge_conflict_dispatched, merge_conflict_resolved",
+        "Same 6 strings are added to TEAM_WAKEABLE_EVENT_TYPES set (BEFORE closing `]);`)",
+        "src/team/merge-session.ts exists and exports: MergeSessionState (interface with teamName, baseBranch, status: 'pending'|'in_progress'|'paused'|'completed'|'failed', startedAt, updatedAt, workers: Array<{name, branch, worktreePath, status: 'pending'|'merging'|'merged'|'conflict'|'skipped', mergeCommit?, conflictReportPath?}>, options: {cleanup, detach, dryRun, only?, nonInteractive}), ConflictReport (interface with conflictId, workerName, branch, conflictingFiles[], mergeTreeOutput, suggestedCommands[], createdAt), MergeTier ('leader-online'|'cli-interactive'|'non-interactive'), MergeFlowOptions (input options interface)",
+        "merge-session.ts also exports type guard isMergeSessionState(value: unknown): value is MergeSessionState",
+        "merge-session.ts exports helper readMergeSession(teamName, cwd): Promise<MergeSessionState | null> and writeMergeSession(state, cwd): Promise<void> with atomic write (temp + rename)",
+        "merge-session.ts exports writeConflictReport(report, teamName, cwd): Promise<{markdownPath: string, jsonPath: string}> writing both .md and .json forms; .md must contain the suggested commands",
+        "TypeScript compiles cleanly: npm run build exits 0 with no errors related to contracts.ts or merge-session.ts",
+        "Unit test src/team/__tests__/merge-session.test.ts exercises round-trip serialization, atomic write, isMergeSessionState type guard for valid + invalid inputs"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Add withMergeLock to state/locks.ts",
+      "passes": true,
+      "priority": 2,
+      "files": [
+        "src/team/state/locks.ts"
+      ],
+      "acceptanceCriteria": [
+        "src/team/state/locks.ts exports `withMergeLock<T>(teamName: string, cwd: string, lockStaleMs: number, deps: TeamPathDeps, fn: () => Promise<T>): Promise<T>` reusing the same mkdir-atomic + owner-token + stale-recovery pattern as withScalingLock",
+        "Lock directory is .omb/team/<sanitized-name>/merge/.lock (relative to cwd repo root)",
+        "Lock is acquired BEFORE any read/write to session.json and released even if fn throws",
+        "Default lockStaleMs is 300_000 (5 min) when caller passes 0/undefined; documented in JSDoc",
+        "Unit test src/team/__tests__/merge-lock.test.ts: (a) two concurrent withMergeLock calls on same team are serialized (no race on a counter file); (b) stale lock (>lockStaleMs old) is recovered; (c) lock is released after fn throws",
+        "TypeScript compiles cleanly: npm run build exits 0",
+        "node --test dist/team/__tests__/merge-lock.test.js passes"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Implement merge-orchestrator.ts core (tier detection + 3 tier loops)",
+      "passes": true,
+      "priority": 3,
+      "files": [
+        "src/team/merge-orchestrator.ts (NEW)"
+      ],
+      "acceptanceCriteria": [
+        "Exports detectMergeTier({teamName, cwd, options}): Promise<MergeTier> using paneLooksReady + isPaneIdle + tmux has-session checks; gracefully handles ENOENT from execFile when tmux binary missing → returns 'non-interactive' (or 'cli-interactive' if stdin is TTY)",
+        "Exports runMergeFlow(options: MergeFlowOptions): Promise<MergeFlowResult> wrapped in withMergeLock; result has shape {success: boolean, tier: MergeTier, sessionPath: string, merged: string[], conflicts: string[], skipped: string[], delegated?: boolean}",
+        "runMergeFlow internally branches on detected tier: runTier1MergeLoop (leader-online) / runTier2MergeLoop (cli-interactive) / runTier3MergeLoop (non-interactive)",
+        "All three tier loops reuse merge-coordinator.ts: checkMergeConflicts() before merging each worker, mergeWorkerBranch() to actually merge",
+        "Tier 1 default behavior: notify leader via notifyLeaderMailboxAsync, emit merge_session_started wakeable event, then poll waitForTeamEvent for merge_session_completed (or timeout 300s); on timeout fall back to Tier 2",
+        "Tier 1 with options.detach=true: notify leader, emit event, return {success: true, delegated: true} immediately without polling",
+        "Tier 2 conflict path: leader uses mailbox + isPaneIdle precheck before sendToWorker; if worker pane not idle, falls back to leader self-resolution path (logged as 'leader-self')",
+        "Tier 3 (non-interactive): pure sequential, on first conflict writes conflict report file, sets remaining workers to 'skipped', returns success=false",
+        "Exports cleanupMergedWorker(workerName, repoRoot, worktreePath, branch, cleanup: boolean): default cleanup=false is no-op; cleanup=true calls removeWorktreeForce + git branch -D",
+        "Resume behavior: if session.json exists with status='paused' and options.resume=true, picks up from first non-merged worker",
+        "Unit test src/team/__tests__/merge-orchestrator.test.ts (using fixtures + mocked child_process / tmux env) covers: tier detection paths (incl. ENOENT), session file write+resume round-trip, conflict report generation, idle precheck gating, --cleanup default false",
+        "Integration test src/team/__tests__/merge-orchestrator-integration.test.ts: creates a temp git repo with 3 worker branches (1 clean, 1 conflicting, 1 clean), runs Tier 3, asserts: 1 merged commit on base, 1 conflict report at .omb/team/<name>/conflicts/*.md, 1 worker untouched, exit semantic correct",
+        "TypeScript compiles cleanly: npm run build exits 0",
+        "node --test dist/team/__tests__/merge-orchestrator.test.js dist/team/__tests__/merge-orchestrator-integration.test.js passes"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Wire CLI: omb team merge subcommand + flag parsing + help text",
+      "passes": true,
+      "priority": 4,
+      "files": [
+        "src/cli/team.ts"
+      ],
+      "acceptanceCriteria": [
+        "TEAM_HELP includes a `team merge <team-name>` usage line and the 8 flags (--base, --detach, --status, --cleanup, --resume, --only, --dry-run, --non-interactive)",
+        "runTeamCommand switch case adds 'merge' branch positioned AFTER the existing 'shutdown' case",
+        "Flag parser handles: --base <branch>, --base=<branch>, --detach, --status, --cleanup, --resume, --only <worker>, --only=<worker>, --dry-run, --non-interactive; unknown flags exit 1 with clear stderr",
+        "--status flag short-circuits before runMergeFlow; reads session.json and prints {\"status\":\"none\"} JSON if absent, else prints session JSON; always exit 0",
+        "Default mode (no --detach) blocks until merge completes (calls runMergeFlow + awaits) → exit code mirrors result.success (0/2)",
+        "--detach mode: prints `merge_delegated session=<path>` machine marker to stdout, exits 4",
+        "Unknown team name → exit 1 with stderr 'team_not_found: <name>'",
+        "Default --base resolved from `git symbolic-ref refs/remotes/origin/HEAD` then falls back to 'main'",
+        "TypeScript compiles cleanly: npm run build exits 0",
+        "src/cli/__tests__/team-merge.test.ts spawns the built CLI and asserts exit codes, stdout markers, stderr for: unknown team, dry-run, --status with no session, --status with mock session, --detach exit 4"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Full 18-AC test sweep + verification",
+      "passes": true,
+      "priority": 5,
+      "files": [
+        "src/team/__tests__/merge-orchestrator.test.ts",
+        "src/team/__tests__/merge-orchestrator-integration.test.ts",
+        "src/team/__tests__/merge-lock.test.ts",
+        "src/team/__tests__/merge-session.test.ts",
+        "src/cli/__tests__/team-merge.test.ts"
+      ],
+      "acceptanceCriteria": [
+        "AC-1: unknown team → exit 1 (covered in team-merge.test.ts)",
+        "AC-2: 3 clean workers + --non-interactive → 3 merge commits, default keeps worktrees (covered in integration test)",
+        "AC-3: middle worker conflict + --non-interactive → first merged, conflict report written, third skipped, exit 2 (integration test)",
+        "AC-4: --resume picks up after manual conflict fix (integration test)",
+        "AC-5: --dry-run no git/fs writes outside session.json read (integration test)",
+        "AC-6: conflict report .md contains 'omb team merge --resume --only worker-N' suggested command (merge-session.test.ts)",
+        "AC-7: orchestrator does not prompt readline when --non-interactive (orchestrator.test.ts)",
+        "AC-8: --cleanup deletes worktree + branch; default keeps both (integration test)",
+        "AC-9: partial success summary in result.json includes merged + skipped lists (integration test)",
+        "AC-10: detectMergeTier returns expected tier for {tmux + leader idle / tmux + leader busy / no tmux / no team} (orchestrator.test.ts with mocks)",
+        "AC-11: Tier 1 default blocks polling waitForTeamEvent; on completion event, exit 0 (orchestrator.test.ts)",
+        "AC-12: orchestrator never reads stdin when --non-interactive (orchestrator.test.ts)",
+        "AC-13: all new exports are imported by at least one test file (verified via grep audit in test)",
+        "AC-14: writeMergeSession is atomic (temp+rename) — interrupting mid-write doesn't leave partial JSON (merge-session.test.ts uses fs.rename mock to verify temp path)",
+        "AC-15: two concurrent withMergeLock invocations on same team serialize correctly via shared counter increment test (merge-lock.test.ts)",
+        "AC-16: sendToWorker is gated by isPaneIdle precheck — non-idle path triggers leader-self fallback log (orchestrator.test.ts)",
+        "AC-17: --detach mode exits with code 4 and prints `merge_delegated session=<path>` machine marker (team-merge.test.ts)",
+        "AC-18: tmux binary ENOENT in detectMergeTier degrades to non-interactive (orchestrator.test.ts simulates ENOENT via mocked execFile)",
+        "All 18 ACs have at least one passing assertion in the test suite",
+        "Full `npm test` (= npm run build && npm run test:node && catalog-check) passes with no regressions",
+        "deslop pass on changed files leaves no follow-up regressions"
+      ]
+    }
+  ]
+}

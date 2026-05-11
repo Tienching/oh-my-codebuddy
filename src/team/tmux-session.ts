@@ -31,6 +31,7 @@ import {
 } from '../utils/platform-command.js';
 import { claudeHome, codebuddyHome, codexHome, resolveOmbCliEntryPath } from '../utils/paths.js';
 import { paneHasClaudeBypassPermissionsPrompt, paneHasWorkspaceTrustPrompt } from '../utils/startup-prompts.js';
+import { ensureCodebuddyTrust } from '../utils/codebuddy-trust.js';
 
 const execFileAsync = promisify(execFile);
 import { HUD_RESIZE_RECONCILE_DELAY_SECONDS, HUD_TMUX_TEAM_HEIGHT_LINES } from '../hud/constants.js';
@@ -1139,6 +1140,13 @@ export function createTeamSession(
     for (let i = 1; i <= workerCount; i++) {
       const startup = workerStartups[i - 1] || {};
       const workerCwd = startup.cwd || cwd;
+      // Pre-register worker cwd in CodeBuddy's trust DB so the worker's first
+      // launch doesn't deadlock on the TTY-only "Trust folder?" dialog.
+      try {
+        ensureCodebuddyTrust(workerCwd);
+      } catch {
+        // Non-fatal — dialog will fall back to interactive mode.
+      }
       const tmuxWorkerCwd = translatePathForMsys(workerCwd);
       const workerEnv = startup.env || {};
       const launchArgsForWorker = startup.launchArgs || workerLaunchArgs;

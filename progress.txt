@@ -1,0 +1,23 @@
+Iteration: 2026-05-09T18:33:12+08:00 - US-001 through US-004 implementation complete by 4 parallel workers. W1: contracts.ts (6 events) + merge-session.ts (types/helpers) + 18 unit tests pass. W2: withMergeLock in state/locks.ts + 3 lock tests pass. W3: merge-orchestrator.ts (~630 LOC) + 6 unit tests + 7 integration tests pass. W4: CLI merge case in team.ts + TEAM_HELP entry + 5 e2e tests pass. Total 38 new tests across the 5 test files. git diff --stat: 3 modified (contracts.ts, locks.ts, team.ts) + 2 new src + 5 new tests. npm run build exits 0.
+
+Iteration 2: Architect REJECTED with 7 FAIL ACs (AC-2/3 dry-run not gated, AC-4 result.json missing, AC-5 stop-on-failure missing, AC-8 cleanup unconditional, AC-11 Tier 1 not blocking, AC-17 detach not returning delegated:true). Fix-up worker addressed all 7 in merge-orchestrator.ts:
+- AC-2/3: dry-run early return printing 'merge tier=X success=true' + 'conflict: worker=N files=...' lines
+- AC-4: writeResultFile helper writes result.json with full schema
+- AC-5: indexed for-loop with break + remaining-skipped pattern
+- AC-8: gated worktree+branch deletion behind session.options.cleanup
+- AC-11: waitForTeamEvent for merge_session_completed with 300s timeout, fallback to Tier 3
+- AC-17: detach early return with delegated:true before lock
+3 new tests added. Tests now 41 pass / 0 fail.
+Architect VERDICT: APPROVED (re-review).
+ai-slop-cleaner: removed redundant `as MergeFlowResult` cast and 2 noise comments. 41/41 still green.
+
+Iteration 2: Architect REJECTED with 7 FAIL ACs (AC-2/3 dry-run not gated, AC-4 result.json missing, AC-5 stop-on-failure missing, AC-8 cleanup unconditional, AC-11 Tier 1 not blocking, AC-17 detach not returning delegated:true). Fix-up worker addressed all 7 in merge-orchestrator.ts:
+- AC-2/3: dry-run early return printing 'merge tier=X success=true' + 'conflict: worker=N files=...' lines
+- AC-4: writeResultFile helper writes result.json with full schema
+- AC-5: indexed for-loop with break + remaining-skipped pattern
+- AC-8: gated worktree+branch deletion behind session.options.cleanup
+- AC-11: waitForTeamEvent for merge_session_completed with 300s timeout, fallback to Tier 3
+- AC-17: detach early return with delegated:true before lock
+3 new tests added. Tests now 41 pass / 0 fail.
+Architect VERDICT: APPROVED (re-review).
+ai-slop-cleaner: removed redundant `as MergeFlowResult` cast and 2 noise comments. 41/41 still green.

@@ -1016,6 +1016,25 @@ export async function setup(options: SetupOptions = {}): Promise<void> {
   } = options;
   const pkgRoot = getPackageRoot();
   const projectRoot = process.cwd();
+
+  // Pre-register the project root + common parents in CodeBuddy/Claude Code's
+  // shared trust DB (~/.claude.json) so non-TTY launches (e.g. e2e tests,
+  // detached panes) don't deadlock on the "Trust folder?" interactive dialog.
+  if (!dryRun) {
+    try {
+      const { ensureCodebuddyTrustMany, defaultTrustedPaths } = await import(
+        "../utils/codebuddy-trust.js"
+      );
+      const added = ensureCodebuddyTrustMany(defaultTrustedPaths(projectRoot));
+      if (verbose && added > 0) {
+        console.log(`  Pre-registered ${added} path(s) in ~/.claude.json trust map`);
+      }
+    } catch {
+      // Non-fatal: if the trust pre-write fails, the dialog will still appear
+      // interactively (acceptable degradation).
+    }
+  }
+
   const resolvedScope = await resolveSetupScope(projectRoot, requestedScope);
   const resolvedProvider = await resolveSetupProvider(
     projectRoot,

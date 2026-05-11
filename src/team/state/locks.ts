@@ -234,3 +234,65 @@ export async function withMailboxLock<T>(
     }
   }
 }
+
+/**
+ * File-based lock to serialize concurrent `omb team merge` invocations on the
+ * same team. Uses the same mkdir-atomic + owner-token + stale-recovery pattern
+ * as withScalingLock. Lock directory: .omb/team/<sanitized-name>/merge/.lock
+ * (relative to the team state root).
+ *
+ * @param teamName - Team name (must be sanitized by caller; teamDir handles path)
+ * @param cwd - Working directory used to resolve the team state root
+ * @param lockStaleMs - Milliseconds before a held lock is considered stale and
+ *   forcibly recovered. Defaults to 300_000 (5 min) when 0/undefined is passed.
+ * @param deps - Path helpers (teamDir, taskClaimLockDir, mailboxLockDir).
+ *   Same shape used by other lock helpers in this module.
+ * @param fn - Async function to run while holding the lock.
+ * @returns Result of `fn`. Lock is released even if `fn` throws.
+ */
+export async function withMergeLock<T>(
+  teamName: string,
+  cwd: string,
+  lockStaleMs: number,
+  deps: TeamPathDeps,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const effectiveStaleMs = lockStaleMs && lockStaleMs > 0 ? lockStaleMs : 300_000;
+  const lockDir = join(deps.teamDir(teamName, cwd), 'merge', '.lock');
+  const ownerPath = join(lockDir, 'owner');
+  const ownerToken = lockOwnerToken();
+  const deadline = Date.now() + 10_000;
+  await mkdir(dirname(lockDir), { recursive: true });
+  while (true) {
+    try {
+      await mkdir(lockDir);
+      try {
+        await writeFile(ownerPath, ownerToken, 'utf8');
+      } catch (error) {
+        await rm(lockDir, { recursive: true, force: true });
+        throw error;
+      }
+      break;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'EEXIST') throw error;
+      if (await maybeRecoverStaleLock(lockDir, effectiveStaleMs)) continue;
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out acquiring merge lock for team ${teamName}`);
+      }
+      await sleep(LOCK_OWNER_RETRY_MS);
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    try {
+      const currentOwner = await readFile(ownerPath, 'utf8');
+      if (currentOwner.trim() === ownerToken) {
+        await rm(lockDir, { recursive: true, force: true });
+      }
+    } catch {
+    }
+  }
+}

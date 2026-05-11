@@ -138,6 +138,7 @@ Usage: omb team [N:agent-type] "<task description>"
        omb team shutdown <team-name> [--force] [--confirm-issues]
        omb team api <operation> [--input <json>] [--json]
        omb team api --help
+       omb team merge <team-name> [--base <branch>] [--detach] [--status] [--cleanup] [--resume] [--only <worker>] [--dry-run] [--non-interactive]
 
 Notes:
   team workers use dedicated worktrees automatically by default.
@@ -1664,6 +1665,155 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
       console.log(`commit_hygiene_context_json: ${summary.commitHygieneArtifacts.jsonPath}`);
       console.log(`commit_hygiene_context_md: ${summary.commitHygieneArtifacts.markdownPath}`);
     }
+    return;
+  }
+
+  if (subcommand === 'merge') {
+    const name = teamArgs[1];
+    if (!name || name.startsWith('--')) {
+      process.stderr.write('Usage: omb team merge <team-name> [--base <branch>] [--detach] [--status] [--cleanup] [--resume] [--only <worker>] [--dry-run] [--non-interactive]\n');
+      process.exitCode = 1;
+      return;
+    }
+
+    // Flag parsing — accept `--flag value` and `--flag=value` forms
+    const flagsAccepted = new Set([
+      '--base', '--detach', '--status', '--cleanup', '--resume', '--only', '--dry-run', '--non-interactive',
+    ]);
+    const flagsRequiringValue = new Set(['--base', '--only']);
+    function readFlag(flag: string): string | null {
+      for (let i = 2; i < teamArgs.length; i++) {
+        const arg = teamArgs[i];
+        if (arg === flag) {
+          const value = teamArgs[i + 1];
+          return value && !value.startsWith('--') ? value : null;
+        }
+        if (arg.startsWith(`${flag}=`)) {
+          const value = arg.slice(flag.length + 1);
+          return value !== '' ? value : null;
+        }
+      }
+      return null;
+    }
+    function hasFlag(flag: string): boolean {
+      return teamArgs.includes(flag) || teamArgs.some(a => a.startsWith(`${flag}=`));
+    }
+
+    // Validate unknown flags and missing flag values
+    for (let i = 2; i < teamArgs.length; i++) {
+      const arg = teamArgs[i];
+      if (!arg.startsWith('--')) {
+        // Could be a value to a previous flag — best-effort: allow any non-flag token
+        continue;
+      }
+      const eqIndex = arg.indexOf('=');
+      const baseFlag = eqIndex === -1 ? arg : arg.slice(0, eqIndex);
+      if (!flagsAccepted.has(baseFlag)) {
+        process.stderr.write(`unknown flag: ${baseFlag}\n`);
+        process.exitCode = 1;
+        return;
+      }
+      if (!flagsRequiringValue.has(baseFlag)) continue;
+      if (eqIndex !== -1) {
+        const value = arg.slice(eqIndex + 1);
+        if (value !== '') continue;
+        process.stderr.write(`missing value for flag: ${baseFlag}\n`);
+        process.exitCode = 1;
+        return;
+      }
+      const value = teamArgs[i + 1];
+      if (!value || value.startsWith('--')) {
+        process.stderr.write(`missing value for flag: ${baseFlag}\n`);
+        process.exitCode = 1;
+        return;
+      }
+      i += 1;
+    }
+
+    // --status: short-circuit, prints session JSON or {"status":"none"}
+    if (hasFlag('--status')) {
+      const { readMergeSession } = await import('../team/merge-orchestrator.js');
+      const session = await readMergeSession(name, cwd);
+      if (!session) {
+        console.log(JSON.stringify({ status: 'none' }));
+        return;
+      }
+      console.log(JSON.stringify(session, null, 2));
+      return;
+    }
+
+    // Validate team exists for non-status operations
+    const { readTeamConfig } = await import('../team/state.js');
+    const teamConfig = await readTeamConfig(name, cwd);
+    if (!teamConfig) {
+      process.stderr.write(`team_not_found: ${name}\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const baseBranch = readFlag('--base');
+    const onlyWorker = readFlag('--only');
+    const cleanup = hasFlag('--cleanup');
+    const detach = hasFlag('--detach');
+    const resume = hasFlag('--resume');
+    const dryRun = hasFlag('--dry-run');
+    const nonInteractive = hasFlag('--non-interactive');
+
+    const mode: 'auto' | 'resume' | 'non-interactive' = resume
+      ? 'resume'
+      : nonInteractive
+        ? 'non-interactive'
+        : 'auto';
+
+    const { runMergeFlow } = await import('../team/merge-orchestrator.js');
+    let result;
+    try {
+      result = await runMergeFlow({
+        teamName: name,
+        baseBranch: baseBranch || null,
+        mode,
+        dryRun,
+        cleanup,
+        detach,
+        onlyWorker: onlyWorker || null,
+        cwd,
+        nonInteractive,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.startsWith('team_not_found:')) {
+        process.stderr.write(`${msg}\n`);
+        process.exitCode = 1;
+        return;
+      }
+      process.stderr.write(`merge failed: ${msg}\n`);
+      process.exitCode = 1;
+      return;
+    }
+
+    // Render result
+    console.log(`merge tier=${result.tier} success=${result.success}`);
+    if (result.merged.length) console.log(`merged: ${result.merged.join(' ')}`);
+    if (result.skipped.length) console.log(`skipped: ${result.skipped.join(' ')}`);
+    if (result.conflicts.length) console.log(`conflicts: ${result.conflicts.join(' ')}`);
+    if (result.sessionPath) console.log(`session_path: ${result.sessionPath}`);
+    if (result.resultPath) console.log(`result_path: ${result.resultPath}`);
+
+    // Exit codes:
+    // 0 = success
+    // 2 = conflicts (resumable)
+    // 4 = delegated (--detach)
+    // 1 = other failure
+    if (result.delegated) {
+      console.log(`merge_delegated session=${result.sessionPath}`);
+      process.exitCode = 4;
+      return;
+    }
+    if (!result.success) {
+      process.exitCode = result.conflicts.length > 0 ? 2 : 1;
+      return;
+    }
+    // success: exit 0 (no explicit exitCode needed)
     return;
   }
 

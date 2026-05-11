@@ -90,6 +90,12 @@ export const TEAM_EVENT_TYPES = [
   'worker_stale_diff',
   'worker_stale_heartbeat',
   'worker_stale_stdout',
+  'merge_session_started',
+  'merge_session_progress',
+  'merge_session_completed',
+  'merge_conflict_detected',
+  'merge_conflict_dispatched',
+  'merge_conflict_resolved',
 ] as const;
 export type TeamEventType = (typeof TEAM_EVENT_TYPES)[number];
 
@@ -110,6 +116,12 @@ export const TEAM_WAKEABLE_EVENT_TYPES: ReadonlySet<TeamEventType> = new Set([
   'worker_stale_diff',
   'worker_stale_heartbeat',
   'worker_stale_stdout',
+  'merge_session_started',
+  'merge_session_progress',
+  'merge_session_completed',
+  'merge_conflict_detected',
+  'merge_conflict_dispatched',
+  'merge_conflict_resolved',
 ]);
 
 export function isWakeableTeamEventType(type: TeamEventType): boolean {
