@@ -43,10 +43,16 @@ function applyTmuxEnv(snapshot: TmuxEnvSnapshot): void {
 
 function runTmux(
   args: string[],
-  options: { ignoreTmuxEnv?: boolean; env?: NodeJS.ProcessEnv; serverName?: string } = {},
+  options: { ignoreTmuxEnv?: boolean; env?: NodeJS.ProcessEnv; serverName?: string; tmuxTmpdir?: string } = {},
 ): string {
-  const env = options.env
+  let env: NodeJS.ProcessEnv = options.env
     ?? (options.ignoreTmuxEnv ? { ...process.env, TMUX: undefined, TMUX_PANE: undefined } : process.env);
+  // Isolate fixture sockets into a dedicated TMUX_TMPDIR so they don't pollute
+  // (or get poisoned by) the shared /tmp/tmux-{uid}/ directory used by the
+  // user's interactive tmux server.
+  if (options.tmuxTmpdir) {
+    env = { ...env, TMUX_TMPDIR: options.tmuxTmpdir };
+  }
   const argv = options.serverName ? ['-L', options.serverName, ...args] : args;
   const result = spawnSync('tmux', argv, {
     encoding: 'utf-8',
@@ -71,11 +77,12 @@ export function isRealTmuxAvailable(): boolean {
   }
 }
 
-export function tmuxSessionExists(sessionName: string, serverName?: string): boolean {
+export function tmuxSessionExists(sessionName: string, serverName?: string, tmuxTmpdir?: string): boolean {
   try {
     runTmux(['has-session', '-t', sessionName], {
       ignoreTmuxEnv: true,
       serverName,
+      tmuxTmpdir,
     });
     return true;
   } catch {
@@ -103,10 +110,22 @@ export async function withTempTmuxSession<T>(
 
   const previousEnv = snapshotTmuxEnv(process.env);
   const fixtureCwd = await mkdtemp(join(tmpdir(), 'omb-tmux-fixture-'));
+  // Per-fixture TMUX_TMPDIR — socket files land under this dir (not the
+  // user's shared /tmp/tmux-{uid}/), so an abnormal teardown cannot leak
+  // sockets into the interactive server's directory and the rm below
+  // sweeps everything atomically. Only used for synthetic servers; ambient
+  // mode intentionally shares the user's TMUX_TMPDIR.
+  const fixtureSocketDir = options.useAmbientServer
+    ? null
+    : await mkdtemp(join(tmpdir(), 'omb-tmux-sock-'));
   const sessionName = uniqueTmuxIdentifier('omb-test');
   const serverName = options.useAmbientServer ? '' : uniqueTmuxIdentifier('omb-fixture');
   const serverKind: TempTmuxSessionFixture['serverKind'] = options.useAmbientServer ? 'ambient' : 'synthetic';
-  const tmuxOptions = { ignoreTmuxEnv: true, serverName: serverName || undefined } as const;
+  const tmuxOptions = {
+    ignoreTmuxEnv: true,
+    serverName: serverName || undefined,
+    tmuxTmpdir: fixtureSocketDir || undefined,
+  } as const;
 
   const created = runTmux([
     'new-session',
@@ -130,6 +149,7 @@ export async function withTempTmuxSession<T>(
       }
     } catch {}
     await rm(fixtureCwd, { recursive: true, force: true });
+    if (fixtureSocketDir) await rm(fixtureSocketDir, { recursive: true, force: true });
     throw new Error(`failed to create temporary tmux fixture: ${created}`);
   }
 
@@ -148,7 +168,8 @@ export async function withTempTmuxSession<T>(
       TMUX: process.env.TMUX,
       TMUX_PANE: leaderPaneId,
     },
-    sessionExists: (targetSessionName = sessionName) => tmuxSessionExists(targetSessionName, serverName || undefined),
+    sessionExists: (targetSessionName = sessionName) =>
+      tmuxSessionExists(targetSessionName, serverName || undefined, fixtureSocketDir || undefined),
   };
 
   try {
@@ -163,5 +184,8 @@ export async function withTempTmuxSession<T>(
     } catch {}
     applyTmuxEnv(previousEnv);
     await rm(fixtureCwd, { recursive: true, force: true });
+    // Sweep the per-fixture socket dir last — this also cleans up socket
+    // files left behind by a tmux server that exited abnormally.
+    if (fixtureSocketDir) await rm(fixtureSocketDir, { recursive: true, force: true });
   }
 }

@@ -296,3 +296,63 @@ export async function withMergeLock<T>(
     }
   }
 }
+
+/**
+ * Generic mkdir-atomic + owner-token + stale-recovery lock anchored at an
+ * arbitrary lock directory path. Use this for shared resources outside the
+ * team-state hierarchy (e.g. ~/.codebuddy state files, project-level
+ * .omb/state/session.json) where the team-scoped lock helpers don't fit.
+ *
+ * - lockStaleMs <= 0 falls back to 5 minutes (matches the team-state default).
+ * - acquireTimeoutMs <= 0 falls back to 10 seconds.
+ *
+ * Lock release respects the owner token, so a process whose lock was reclaimed
+ * during stale recovery won't blow away another process's lock on cleanup.
+ */
+export async function withPathLock<T>(
+  lockDir: string,
+  options: { lockStaleMs?: number; acquireTimeoutMs?: number; label?: string } | null,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const lockStaleMs = options?.lockStaleMs && options.lockStaleMs > 0 ? options.lockStaleMs : 300_000;
+  const acquireTimeoutMs = options?.acquireTimeoutMs && options.acquireTimeoutMs > 0 ? options.acquireTimeoutMs : 10_000;
+  const label = options?.label ?? lockDir;
+  const ownerPath = join(lockDir, 'owner');
+  const ownerToken = lockOwnerToken();
+  const deadline = Date.now() + acquireTimeoutMs;
+
+  await mkdir(dirname(lockDir), { recursive: true });
+  while (true) {
+    try {
+      await mkdir(lockDir);
+      try {
+        await writeFile(ownerPath, ownerToken, 'utf8');
+      } catch (error) {
+        await rm(lockDir, { recursive: true, force: true });
+        throw error;
+      }
+      break;
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== 'EEXIST') throw error;
+      if (await maybeRecoverStaleLock(lockDir, lockStaleMs)) continue;
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out acquiring lock at ${label}`);
+      }
+      await sleep(LOCK_OWNER_RETRY_MS);
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    try {
+      const currentOwner = await readFile(ownerPath, 'utf8');
+      if (currentOwner.trim() === ownerToken) {
+        await rm(lockDir, { recursive: true, force: true });
+      }
+    } catch {
+      // best-effort lock cleanup
+    }
+  }
+}

@@ -20,6 +20,7 @@ import {
   getProcessIdentityAdapter,
   normalizeCmdline,
 } from '../runtime/process-identity.js';
+import { withPathLock } from '../team/state/locks.js';
 
 export interface SessionState {
   session_id: string;
@@ -33,11 +34,17 @@ export interface SessionState {
 
 const SESSION_FILE = 'session.json';
 const HISTORY_FILE = 'session-history.jsonl';
+const SESSION_LOCK_DIR = '.lock.session';
+const SESSION_LOCK_STALE_MS = 30_000;
 // No age-based threshold: staleness is determined by PID liveness/identity.
 // Long-running sessions (>2h) are legitimate and should not be reaped.
 
 function sessionPath(cwd: string): string {
   return join(ombStateDir(cwd), SESSION_FILE);
+}
+
+function sessionLockDir(cwd: string): string {
+  return join(ombStateDir(cwd), SESSION_LOCK_DIR);
 }
 
 function historyPath(cwd: string): string {
@@ -51,6 +58,9 @@ function legacySessionPath(cwd: string): string {
 /**
  * Reset session-scoped HUD/metrics files at launch so stale values do not leak
  * into a new CodeBuddy session.
+ *
+ * Serialized via withPathLock against the session lock dir to prevent
+ * concurrent omb launches from interleaving partial metric resets.
  */
 export async function resetSessionMetrics(cwd: string): Promise<void> {
   const ombDir = join(cwd, '.omb');
@@ -58,24 +68,30 @@ export async function resetSessionMetrics(cwd: string): Promise<void> {
   await mkdir(ombDir, { recursive: true });
   await mkdir(stateDir, { recursive: true });
 
-  const now = new Date().toISOString();
-  await writeFile(join(ombDir, 'metrics.json'), JSON.stringify({
-    total_turns: 0,
-    session_turns: 0,
-    last_activity: now,
-    session_input_tokens: 0,
-    session_output_tokens: 0,
-    session_total_tokens: 0,
-    five_hour_limit_pct: 0,
-    weekly_limit_pct: 0,
-  }, null, 2));
+  await withPathLock(
+    sessionLockDir(cwd),
+    { lockStaleMs: SESSION_LOCK_STALE_MS, label: 'session-metrics' },
+    async () => {
+      const now = new Date().toISOString();
+      await writeFile(join(ombDir, 'metrics.json'), JSON.stringify({
+        total_turns: 0,
+        session_turns: 0,
+        last_activity: now,
+        session_input_tokens: 0,
+        session_output_tokens: 0,
+        session_total_tokens: 0,
+        five_hour_limit_pct: 0,
+        weekly_limit_pct: 0,
+      }, null, 2));
 
-  await writeFile(join(stateDir, 'hud-state.json'), JSON.stringify({
-    last_turn_at: now,
-    last_progress_at: now,
-    turn_count: 0,
-    last_agent_output: '',
-  }, null, 2));
+      await writeFile(join(stateDir, 'hud-state.json'), JSON.stringify({
+        last_turn_at: now,
+        last_progress_at: now,
+        turn_count: 0,
+        last_agent_output: '',
+      }, null, 2));
+    },
+  );
 }
 
 /**
@@ -149,6 +165,9 @@ export function isSessionStale(
 /**
  * Write session start state.
  * Writes to canonical path always; writes to legacy path only when dual-write is active.
+ *
+ * Serialized via withPathLock so two concurrent launches in the same cwd
+ * don't clobber each other's session.json or interleave partial writes.
  */
 export async function writeSessionStart(
   cwd: string,
@@ -182,10 +201,16 @@ export async function writeSessionStart(
   };
 
   const serialized = JSON.stringify(state, null, 2);
-  await writeFile(sessionPath(cwd), serialized);
-  if (dualWriteOmb) {
-    await writeFile(legacySessionPath(cwd), serialized);
-  }
+  await withPathLock(
+    sessionLockDir(cwd),
+    { lockStaleMs: SESSION_LOCK_STALE_MS, label: 'session-start' },
+    async () => {
+      await writeFile(sessionPath(cwd), serialized);
+      if (dualWriteOmb) {
+        await writeFile(legacySessionPath(cwd), serialized);
+      }
+    },
+  );
   await appendToLog(cwd, {
     event: 'session_start',
     session_id: sessionId,
@@ -196,6 +221,10 @@ export async function writeSessionStart(
 
 /**
  * Write session end: archive to history, delete session.json.
+ *
+ * Read + delete is wrapped in a lock so that a writeSessionStart from a
+ * concurrent launch can't race the delete (which would leave the new
+ * session orphaned with no session.json on disk).
  */
 export async function writeSessionEnd(cwd: string, sessionId: string): Promise<void> {
   const state = await readSessionState(cwd);
@@ -215,13 +244,27 @@ export async function writeSessionEnd(cwd: string, sessionId: string): Promise<v
 
   await appendFile(historyPath(cwd), JSON.stringify(historyEntry) + '\n');
 
-  // Delete session.json
-  try {
-    await unlink(sessionPath(cwd));
-  } catch { /* already gone */ }
-  try {
-    await unlink(legacySessionPath(cwd));
-  } catch { /* already gone */ }
+  await withPathLock(
+    sessionLockDir(cwd),
+    { lockStaleMs: SESSION_LOCK_STALE_MS, label: 'session-end' },
+    async () => {
+      // Delete session.json — only the owning session_id should clear it,
+      // so a stale writeSessionEnd from a previous run can't wipe a new
+      // session's state file.
+      const candidates = [sessionPath(cwd)];
+      const legacy = legacySessionPath(cwd);
+      if (legacy !== sessionPath(cwd)) candidates.push(legacy);
+      for (const path of candidates) {
+        try {
+          const current = await readFile(path, 'utf-8');
+          const parsed = JSON.parse(current) as { session_id?: unknown };
+          if (typeof parsed.session_id !== 'string' || parsed.session_id === sessionId) {
+            await unlink(path);
+          }
+        } catch { /* file may already be gone or unreadable */ }
+      }
+    },
+  );
 
   await appendToLog(cwd, {
     event: 'session_end',

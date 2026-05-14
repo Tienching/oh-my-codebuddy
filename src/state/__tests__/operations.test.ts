@@ -485,3 +485,81 @@ describe('state operations directory initialization', () => {
     }
   });
 });
+
+describe('state_write cross-process safety', () => {
+  it('serializes concurrent state_write calls without losing updates', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-state-write-race-'));
+    try {
+      // Race many writes to the same mode/key. Without the cross-process
+      // withPathLock, the per-process queue alone could leave merges torn
+      // when invoked from multiple processes; this test exercises the
+      // in-process race that the lock also covers (queue + lock both
+      // in play). Without ANY lock, all 10 writes would interleave and
+      // overwrite each other; the final counter would not equal 10.
+      const writes = Array.from({ length: 10 }).map((_, i) =>
+        executeStateOperation('state_write', {
+          mode: 'autopilot',
+          workingDirectory: wd,
+          fields: { counter_value: i },
+          // Stamp a unique key per write so we can tell if any write was lost.
+          [`tag_${i}`]: true,
+        }),
+      );
+      const results = await Promise.all(writes);
+      for (const r of results) {
+        assert.equal(r.isError ?? false, false, JSON.stringify(r.payload));
+      }
+
+      const stateFile = join(wd, '.omb', 'state', 'autopilot-state.json');
+      assert.ok(existsSync(stateFile), 'state file must exist after concurrent writes');
+      const parsed = JSON.parse(await readFile(stateFile, 'utf-8')) as Record<string, unknown>;
+      // Each write tagged tag_<i>=true. After all writes, all 10 tags must
+      // be present in the merged file (proves no write was lost to a torn
+      // read-modify-write race).
+      for (let i = 0; i < 10; i++) {
+        assert.equal(parsed[`tag_${i}`], true, `tag_${i} missing — write was lost to a race`);
+      }
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('state_write cross-process safety', () => {
+  it('serializes concurrent state_write calls without losing updates', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-state-write-race-'));
+    try {
+      // Race many writes to the same mode/key. Without the cross-process
+      // withPathLock, the per-process queue alone could leave merges torn
+      // when invoked from multiple processes; this test exercises the
+      // in-process race that the lock also covers (queue + lock both
+      // in play). Without ANY lock, all 10 writes would interleave and
+      // overwrite each other; the final counter would not equal 10.
+      const writes = Array.from({ length: 10 }).map((_, i) =>
+        executeStateOperation('state_write', {
+          mode: 'autopilot',
+          workingDirectory: wd,
+          fields: { counter_value: i },
+          // Stamp a unique key per write so we can tell if any write was lost.
+          [`tag_${i}`]: true,
+        }),
+      );
+      const results = await Promise.all(writes);
+      for (const r of results) {
+        assert.equal(r.isError ?? false, false, JSON.stringify(r.payload));
+      }
+
+      const stateFile = join(wd, '.omb', 'state', 'autopilot-state.json');
+      assert.ok(existsSync(stateFile), 'state file must exist after concurrent writes');
+      const parsed = JSON.parse(await readFile(stateFile, 'utf-8')) as Record<string, unknown>;
+      // Each write tagged tag_<i>=true. After all writes, all 10 tags must
+      // be present in the merged file (proves no write was lost to a torn
+      // read-modify-write race).
+      for (let i = 0; i < 10; i++) {
+        assert.equal(parsed[`tag_${i}`], true, `tag_${i} missing — write was lost to a race`);
+      }
+    } finally {
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+});

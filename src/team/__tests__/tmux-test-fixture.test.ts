@@ -137,4 +137,47 @@ describe('withTempTmuxSession', () => {
 
     assert.equal(ambientSessionExists(sessionName), false);
   });
+
+  it('isolates synthetic-server sockets into a dedicated TMUX_TMPDIR (no shared /tmp/tmux-{uid} pollution)', async (t) => {
+    skipUnlessTmux(t);
+    // Snapshot the user's shared tmux socket dir before/after to confirm we
+    // do not leak fixture sockets into it. This guards against regression of
+    // the orphan-socket bug (an abnormal teardown previously left socket
+    // files in /tmp/tmux-{uid}/, accumulating over many test runs).
+    const sharedDir = process.env.TMUX_TMPDIR || `/tmp/tmux-${process.getuid?.() ?? 0}`;
+    const before = (() => {
+      try { return execFileSync('ls', [sharedDir], { encoding: 'utf-8' }).split('\n').filter(Boolean); }
+      catch { return []; }
+    })();
+    let observedSocketPath = '';
+
+    await withTempTmuxSession(async (fixture) => {
+      observedSocketPath = fixture.socketPath;
+      const sharedRe = new RegExp(`^${sharedDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`);
+      assert.ok(
+        !sharedRe.test(fixture.socketPath),
+        `fixture socket must NOT live under ${sharedDir} (got: ${fixture.socketPath})`,
+      );
+      assert.match(
+        fixture.socketPath,
+        /omb-tmux-sock-/,
+        'fixture socket must live under an isolated omb-tmux-sock-* dir',
+      );
+    });
+
+    const after = (() => {
+      try { return execFileSync('ls', [sharedDir], { encoding: 'utf-8' }).split('\n').filter(Boolean); }
+      catch { return []; }
+    })();
+    assert.deepEqual(
+      after.filter((f) => f.startsWith('omb-fixture-')),
+      before.filter((f) => f.startsWith('omb-fixture-')),
+      `no new omb-fixture-* sockets should be created in ${sharedDir}`,
+    );
+    // The isolated socket file is gone after teardown.
+    let socketStillExists = true;
+    try { execFileSync('test', ['-e', observedSocketPath], { stdio: 'ignore' }); }
+    catch { socketStillExists = false; }
+    assert.equal(socketStillExists, false, 'fixture socket file must be removed on teardown');
+  });
 });

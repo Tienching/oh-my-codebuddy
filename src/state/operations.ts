@@ -27,6 +27,7 @@ import { applyRunOutcomeContract } from '../runtime/run-outcome.js';
 import { syncRunStateFromModeState } from '../runtime/run-state.js';
 import { isTrackedWorkflowMode } from './workflow-transition.js';
 import { reconcileWorkflowTransition } from './workflow-transition-reconcile.js';
+import { withPathLock } from '../team/state/locks.js';
 
 export const SUPPORTED_STATE_READ_MODES = [
   'autopilot',
@@ -199,6 +200,13 @@ export async function executeStateOperation(
         let ensureRalphArtifacts = false;
 
         await writeQueue.withWriteLock(path, async () => {
+          // Cross-process lock: writeQueue serializes within this process,
+          // withPathLock serializes across processes (e.g. concurrent
+          // `omb state write` invocations from different shells).
+          // Lock dir lives next to the state file and uses the canonical
+          // mkdir-atomic + owner-token + stale-recovery pattern.
+          const lockDir = `${path}.lock`;
+          await withPathLock(lockDir, { lockStaleMs: 30_000, label: `state-write:${mode}` }, async () => {
           let existing: Record<string, unknown> = {};
           if (existsSync(path)) {
             try {
@@ -301,6 +309,7 @@ export async function executeStateOperation(
           const merged = withModeRuntimeContext(existing, mergedRaw);
           const serialized = JSON.stringify(merged, null, 2);
           await writeAtomicFile(path, serialized);
+          });
         });
 
         if (validationError) {

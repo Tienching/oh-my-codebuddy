@@ -210,3 +210,65 @@ describe('isSessionStale', () => {
     assert.equal(stale, false);
   });
 });
+
+describe('session writes are serialized via withPathLock', () => {
+  it('two concurrent writeSessionStart calls do not corrupt session.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-session-lock-'));
+    try {
+      // Race two concurrent writeSessionStart with different sessionIds.
+      // Without locking the file could be torn or contain a mix.
+      // With the path lock, it must end up as a valid JSON whose session_id
+      // matches one of the inputs (last writer wins, but no garbage).
+      const a = writeSessionStart(cwd, 'sess-A', { pid: 1001 });
+      const b = writeSessionStart(cwd, 'sess-B', { pid: 1002 });
+      await Promise.all([a, b]);
+
+      const state = await readSessionState(cwd);
+      assert.ok(state, 'session.json must exist after concurrent writes');
+      assert.match(state!.session_id, /^sess-(A|B)$/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('writeSessionEnd only deletes session.json owned by the matching sessionId', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-session-end-'));
+    try {
+      // Session A starts.
+      await writeSessionStart(cwd, 'sess-A', { pid: 2001 });
+      // Session B starts (overwrites A's session.json).
+      await writeSessionStart(cwd, 'sess-B', { pid: 2002 });
+      // A late writeSessionEnd from session A should NOT delete session B's
+      // session.json — the owner-id check inside writeSessionEnd guards this.
+      await writeSessionEnd(cwd, 'sess-A');
+
+      const state = await readSessionState(cwd);
+      assert.ok(state, 'session.json must still exist (B owns it)');
+      assert.equal(state!.session_id, 'sess-B', 'B must not be wiped by stale A end');
+
+      // Now end the real owner — this should clear it.
+      await writeSessionEnd(cwd, 'sess-B');
+      const after = await readSessionState(cwd);
+      assert.equal(after, null, 'session.json must be gone after owning sessionEnd');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('resetSessionMetrics holds the session lock end-to-end', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-session-metrics-'));
+    try {
+      // Concurrent resets must not produce a torn metrics.json.
+      const a = resetSessionMetrics(cwd);
+      const b = resetSessionMetrics(cwd);
+      await Promise.all([a, b]);
+
+      const metrics = JSON.parse(await readFile(join(cwd, '.omb', 'metrics.json'), 'utf8'));
+      assert.equal(metrics.total_turns, 0);
+      assert.equal(metrics.session_turns, 0);
+      assert.ok(typeof metrics.last_activity === 'string');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
