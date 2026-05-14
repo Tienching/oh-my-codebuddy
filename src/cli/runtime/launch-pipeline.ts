@@ -246,6 +246,62 @@ export function parseLeaderCliValue(raw: string | undefined, source: string): Le
   throw new Error(`Invalid ${source} value "${raw ?? ""}". Expected: codebuddy, codex, claude`);
 }
 
+function resolveLeaderCliFromEnv(
+  env: NodeJS.ProcessEnv,
+  defaultLeaderCli: LeaderCli,
+): LeaderCli {
+  const raw = env[LEADER_CLI_ENV];
+  if (typeof raw !== "string" || raw.trim() === "") return defaultLeaderCli;
+  return parseLeaderCliValue(raw, LEADER_CLI_ENV);
+}
+
+function tryParsePersistedLeaderCli(raw: unknown, source: string): LeaderCli | undefined {
+  if (typeof raw !== "string") return undefined;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "") return undefined;
+  if (normalized === "codebuddy" || normalized === "codex" || normalized === "claude") {
+    return normalized;
+  }
+  process.stderr.write(`[cli/index] operation failed: Invalid ${source} value "${raw}". Expected: codebuddy, codex, claude\n`);
+  return undefined;
+}
+
+function mapSetupProviderToLeaderCli(provider: SetupProvider | undefined): LeaderCli | undefined {
+  if (provider === "codebuddy" || provider === "codex" || provider === "claude") return provider;
+  return undefined;
+}
+
+function readPersistedResumeLeaderCli(cwd: string): LeaderCli | undefined {
+  const sessionStatePath = join(getBaseStateDir(cwd), "session.json");
+  if (existsSync(sessionStatePath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(sessionStatePath, "utf-8")) as { leader_cli?: unknown };
+      const persistedSessionCli = tryParsePersistedLeaderCli(parsed.leader_cli, `${sessionStatePath} leader_cli`);
+      if (persistedSessionCli) return persistedSessionCli;
+    } catch {
+      // Ignore malformed or unreadable session state and continue falling back.
+    }
+  }
+
+  const historyPath = join(cwd, ".omb", "logs", "session-history.jsonl");
+  if (existsSync(historyPath)) {
+    try {
+      const lines = readFileSync(historyPath, "utf-8").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index];
+        if (!line) continue;
+        const parsed = JSON.parse(line) as { leader_cli?: unknown };
+        const persistedHistoryCli = tryParsePersistedLeaderCli(parsed.leader_cli, `${historyPath} leader_cli`);
+        if (persistedHistoryCli) return persistedHistoryCli;
+      }
+    } catch {
+      // Ignore malformed or unreadable history and continue falling back.
+    }
+  }
+
+  return mapSetupProviderToLeaderCli(readPersistedSetupPreferences(cwd)?.provider);
+}
+
 function isLeaderCliFlag(arg: string): boolean {
   return arg === LEADER_CLI_FLAG || arg === LEGACY_LEADER_CLI_FLAG;
 }
@@ -262,8 +318,9 @@ function splitInlineLeaderCliFlag(arg: string): { flag: string; value: string } 
 export function extractLeaderCliArgs(
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
+  defaultLeaderCli: LeaderCli = "codebuddy",
 ): { leaderCli: LeaderCli; remainingArgs: string[] } {
-  let leaderCli = parseLeaderCliValue(env[LEADER_CLI_ENV], LEADER_CLI_ENV);
+  let leaderCli = resolveLeaderCliFromEnv(env, defaultLeaderCli);
   const remainingArgs: string[] = [];
   let passthroughOnly = false;
 
@@ -740,22 +797,56 @@ export function translateCodeBuddyExecArgs(args: string[]): string[] {
   return hasPrint ? translated : [CODEBUDDY_PRINT_FLAG, ...translated];
 }
 
+export function translateClaudeResumeArgs(args: string[]): string[] {
+  if (args[0] !== "resume") return [...args];
+  const rest = args.slice(1);
+  const translated: string[] = [];
+  let useContinue = false;
+
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index];
+    if (arg === "--last") {
+      useContinue = true;
+      continue;
+    }
+    if (arg === "--all" || arg === "--include-non-interactive") {
+      warnDroppedCodexOnlyArg(`resume ${arg}`);
+      continue;
+    }
+    translated.push(arg);
+  }
+
+  return [useContinue ? "--continue" : "--resume", ...translated];
+}
+
 export function translateLeaderResumeArgs(args: string[], leaderCli: LeaderCli): string[] {
   switch (leaderCli) {
     case "codebuddy":
       return translateCodeBuddyResumeArgs(args);
-    case "codex":
     case "claude":
+      return translateClaudeResumeArgs(args);
+    case "codex":
+      // codex CLI accepts `resume` as a real subcommand — pass through unchanged.
       return [...args];
   }
+}
+
+export function translateClaudeExecArgs(args: string[]): string[] {
+  // claude doesn't accept an `exec` subcommand — it uses -p/--print for
+  // non-interactive runs. Inject --print only if the caller didn't already
+  // supply it (or its short alias -p) so we don't duplicate the flag.
+  const hasPrint = args.includes("--print") || args.includes("-p");
+  return hasPrint ? [...args] : ["--print", ...args];
 }
 
 export function translateLeaderExecArgs(args: string[], leaderCli: LeaderCli): string[] {
   switch (leaderCli) {
     case "codebuddy":
       return translateCodeBuddyExecArgs(args);
-    case "codex":
     case "claude":
+      return translateClaudeExecArgs(args);
+    case "codex":
+      // codex CLI accepts `exec` as a real subcommand — pass through.
       return ["exec", ...args];
   }
 }
@@ -1199,6 +1290,32 @@ function buildDetachedSessionLeaderCommand(cwd: string, sessionName: string, cod
 export interface DetachedSessionTmuxStep {
   name: string;
   args: string[];
+}
+
+function summarizeTmuxStepStream(stream: unknown): string | null {
+  if (typeof stream === "string") {
+    const trimmed = stream.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (Buffer.isBuffer(stream)) {
+    const trimmed = stream.toString("utf-8").trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  return null;
+}
+
+export function formatDetachedTmuxStepFailure(step: DetachedSessionTmuxStep, error: unknown): string {
+  const command = `tmux ${step.args.map((arg) => JSON.stringify(arg)).join(" ")}`;
+  if (!(error instanceof Error)) return `tmux step failed (${step.name}): ${command}: ${String(error)}`;
+  const execError = error as Error & { status?: unknown; signal?: unknown; stdout?: unknown; stderr?: unknown };
+  const details = [execError.message];
+  if (typeof execError.status === "number") details.push(`status=${execError.status}`);
+  if (typeof execError.signal === "string" && execError.signal.length > 0) details.push(`signal=${execError.signal}`);
+  const stderr = summarizeTmuxStepStream(execError.stderr);
+  if (stderr) details.push(`stderr=${stderr}`);
+  const stdout = summarizeTmuxStepStream(execError.stdout);
+  if (stdout) details.push(`stdout=${stdout}`);
+  return `tmux step failed (${step.name}): ${command}: ${details.join(" | ")}`;
 }
 
 export function buildHudPaneCleanupTargets(
@@ -1998,7 +2115,7 @@ async function preLaunch(
 
   // 3. Write session state
   await resetSessionMetrics(cwd);
-  await writeSessionStart(cwd, sessionId);
+  await writeSessionStart(cwd, sessionId, { leaderCli });
 
   // 4. Start notify fallback watcher (best effort)
   try { await startNotifyFallbackWatcher(cwd, { codexHomeOverride, enableAuthority: enableNotifyFallbackAuthority, sessionId, leaderCli }); } catch (err) { process.stderr.write(`[cli/index] operation failed: ${err}\n`); }
@@ -2096,7 +2213,12 @@ function runCodex(
     try {
       const bootstrapSteps = buildDetachedSessionBootstrapSteps(sessionName, cwd, codexCmd, hudCmd, workerLaunchArgs, codexHomeOverride, notifyTempContractRaw, nativeWindows, sessionId, leaderCli);
       for (const step of bootstrapSteps) {
-        const output = execFileSync("tmux", step.args, { stdio: "pipe", encoding: "utf-8" });
+        let output = "";
+        try {
+          output = execFileSync("tmux", step.args, { stdio: "pipe", encoding: "utf-8" });
+        } catch (err) {
+          throw new Error(formatDetachedTmuxStepFailure(step, err));
+        }
         if (step.name === "new-session") { createdDetachedSession = true; parsePaneIdFromTmuxOutput(output || ""); }
         if (step.name === "split-and-capture-hud-pane") {
           const hudPaneId = parsePaneIdFromTmuxOutput(output || "");
@@ -2109,8 +2231,9 @@ function runCodex(
           for (const finalizeStep of finalizeSteps) {
             const stdio = finalizeStep.name === "attach-session" ? "inherit" : "ignore";
             try { execFileSync("tmux", finalizeStep.args, { stdio }); } catch (err) {
-              process.stderr.write(`[cli/index] operation failed: ${err}\n`);
-              if (finalizeStep.name === "attach-session") throw new Error("failed to attach detached tmux session");
+              const detail = formatDetachedTmuxStepFailure(finalizeStep, err);
+              process.stderr.write(`[cli/index] operation failed: ${detail}\n`);
+              if (finalizeStep.name === "attach-session") throw new Error(detail);
               continue;
             }
             if (finalizeStep.name === "register-resize-hook" && hookTarget && hookName) { registeredHookTarget = hookTarget; registeredHookName = hookName; }
@@ -2198,7 +2321,10 @@ export async function launchWithHud(args: string[]): Promise<void> {
   }
 
   const launchCwd = process.cwd();
-  const leaderCliResult = extractLeaderCliArgs(args, process.env);
+  const defaultLeaderCli = args[0] === "resume"
+    ? (readPersistedResumeLeaderCli(launchCwd) ?? "codebuddy")
+    : "codebuddy";
+  const leaderCliResult = extractLeaderCliArgs(args, process.env, defaultLeaderCli);
   const parsedWorktree = parseWorktreeMode(leaderCliResult.remainingArgs);
   const notifyTempResult = resolveNotifyTempContract(parsedWorktree.remainingArgs, process.env);
   const explicitLaunchPolicy = resolveLeaderLaunchPolicyOverride(notifyTempResult.passthroughArgs);

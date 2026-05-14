@@ -43,6 +43,7 @@ import {
   buildDetachedTmuxSessionName,
   buildDetachedSessionFinalizeSteps,
   buildDetachedSessionRollbackSteps,
+  formatDetachedTmuxStepFailure,
   resolveNotifyTempContract,
   buildNotifyTempStartupMessages,
   buildNotifyFallbackWatcherEnv,
@@ -388,10 +389,10 @@ describe("leader CLI selection", () => {
   it("dispatches normalization by selected leader CLI", () => {
     assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "codebuddy"), ["--dangerously-skip-permissions"]);
     assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "codex"), ["--dangerously-bypass-approvals-and-sandbox"]);
-    assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "claude"), ["--dangerously-bypass-approvals-and-sandbox"]);
+    assert.deepEqual(normalizeLeaderLaunchArgs(["--madmax"], "claude"), ["--dangerously-skip-permissions"]);
   });
 
-  it("preserves Codex resume and exec subcommands while translating CodeBuddy", () => {
+  it("preserves Codex resume and exec subcommands while translating CodeBuddy and Claude", () => {
     assert.deepEqual(
       translateLeaderResumeArgs(["resume", "--last"], "codex"),
       ["resume", "--last"],
@@ -404,13 +405,18 @@ describe("leader CLI selection", () => {
       translateLeaderExecArgs(["--json", "say hi"], "codex"),
       ["exec", "--json", "say hi"],
     );
+    // Claude does NOT have a `resume` subcommand — it must be translated to
+    // --resume / --continue. The leading "resume" literal must never be
+    // passed through to claude or it will be echoed as a prompt.
     assert.deepEqual(
       translateLeaderResumeArgs(["resume", "--last"], "claude"),
-      ["resume", "--last"],
+      ["--continue"],
     );
+    // Claude does NOT have an `exec` subcommand — non-interactive mode is
+    // --print/-p. Inject --print only if the caller didn't already supply it.
     assert.deepEqual(
       translateLeaderExecArgs(["--json", "say hi"], "claude"),
-      ["exec", "--json", "say hi"],
+      ["--print", "--json", "say hi"],
     );
     assert.deepEqual(
       translateLeaderExecArgs(["--json", "say hi"], "codebuddy"),
@@ -1899,6 +1905,31 @@ describe("detached tmux new-session sequencing", () => {
     assert.match(leaderCmd!, /tmux kill-session -t/);
     assert.match(leaderCmd!, /"omb-demo"/);
     assert.match(leaderCmd!, /exit \$status/);
+  });
+
+  it("formatDetachedTmuxStepFailure includes step name, command, and error details", () => {
+    const detail = formatDetachedTmuxStepFailure(
+      { name: "attach-session", args: ["attach-session", "-t", "omb-demo"] },
+      Object.assign(new Error("Command failed: tmux attach-session -t omb-demo"), {
+        status: 1,
+        stderr: "open terminal failed: not a terminal\n",
+      }),
+    );
+    assert.match(detail, /tmux step failed \(attach-session\)/);
+    assert.match(detail, /"attach-session" "-t" "omb-demo"/);
+    assert.match(detail, /status=1/);
+    assert.match(detail, /stderr=open terminal failed: not a terminal/);
+  });
+
+  it("formatDetachedTmuxStepFailure falls back cleanly for non-Error values", () => {
+    const detail = formatDetachedTmuxStepFailure(
+      { name: "new-session", args: ["new-session", "-d", "-s", "omb-demo"] },
+      "tmux unavailable",
+    );
+    assert.equal(
+      detail,
+      'tmux step failed (new-session): tmux "new-session" "-d" "-s" "omb-demo": tmux unavailable',
+    );
   });
 
   it("detached leader command executes codex and cleanup without shell-quote breakage", async () => {

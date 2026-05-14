@@ -19,6 +19,7 @@ interface SessionHistoryEntry {
   ended_at: string;
   cwd: string;
   pid: number;
+  leader_cli?: 'codebuddy' | 'codex' | 'claude';
 }
 
 function todayIsoDate(): string {
@@ -66,13 +67,14 @@ describe('session lifecycle manager', () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-session-lifecycle-'));
     const sessionId = 'sess-lifecycle-1';
     try {
-      await writeSessionStart(cwd, sessionId);
+      await writeSessionStart(cwd, sessionId, { leaderCli: 'claude' });
 
       const state = await readSessionState(cwd);
       assert.ok(state);
       assert.equal(state.session_id, sessionId);
       assert.equal(state.cwd, cwd);
       assert.equal(state.pid, process.pid);
+      assert.equal(state.leader_cli, 'claude');
       assert.equal(isSessionStale(state), false);
 
       const sessionPath = join(cwd, '.omb', 'state', 'session.json');
@@ -94,6 +96,7 @@ describe('session lifecycle manager', () => {
       const historyEntry = JSON.parse(historyLines[0]) as SessionHistoryEntry;
       assert.equal(historyEntry.session_id, sessionId);
       assert.equal(historyEntry.cwd, cwd);
+      assert.equal(historyEntry.leader_cli, 'claude');
       assert.equal(typeof historyEntry.started_at, 'string');
       assert.equal(typeof historyEntry.ended_at, 'string');
 

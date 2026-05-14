@@ -63,6 +63,7 @@ export {
   buildDetachedTmuxSessionName,
   buildDetachedSessionFinalizeSteps,
   buildDetachedSessionRollbackSteps,
+  formatDetachedTmuxStepFailure,
   resolveNotifyTempContract,
   buildNotifyTempStartupMessages,
   buildNotifyFallbackWatcherEnv,
@@ -101,10 +102,10 @@ export {
   launchWithHud,
   execWithOverlay,
   buildWindowsMsysBackgroundHelperBootstrapScript,
-  DetachedSessionTmuxStep,
-  CodexLaunchPolicy,
-  LeaderCli,
-  CodexExecFailureClassification,
+  type DetachedSessionTmuxStep,
+  type CodexLaunchPolicy,
+  type LeaderCli,
+  type CodexExecFailureClassification,
 } from "./runtime/launch-pipeline.js";
 
 export { buildCommandRegistry, CommandRegistry, type CommandDescriptor, type CommandResult, type CliContext } from "./command-registry.js";

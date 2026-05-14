@@ -22,6 +22,8 @@ import {
 } from '../runtime/process-identity.js';
 import { withPathLock } from '../team/state/locks.js';
 
+export type SessionLeaderCli = 'codebuddy' | 'codex' | 'claude';
+
 export interface SessionState {
   session_id: string;
   started_at: string;
@@ -30,6 +32,7 @@ export interface SessionState {
   platform?: NodeJS.Platform;
   pid_start_ticks?: number;
   pid_cmdline?: string;
+  leader_cli?: SessionLeaderCli;
 }
 
 const SESSION_FILE = 'session.json';
@@ -122,6 +125,7 @@ interface SessionStaleCheckOptions {
 interface SessionStartOptions {
   pid?: number;
   platform?: NodeJS.Platform;
+  leaderCli?: SessionLeaderCli;
 }
 
 // Process identity logic has been extracted to src/runtime/process-identity.ts
@@ -198,6 +202,7 @@ export async function writeSessionStart(
     platform,
     pid_start_ticks: linuxIdentity?.startTicks,
     pid_cmdline: linuxIdentity?.cmdline ?? undefined,
+    leader_cli: options.leaderCli,
   };
 
   const serialized = JSON.stringify(state, null, 2);
@@ -240,6 +245,7 @@ export async function writeSessionEnd(cwd: string, sessionId: string): Promise<v
     ended_at: endTime,
     cwd,
     pid: state?.pid || process.pid,
+    leader_cli: state?.leader_cli,
   };
 
   await appendFile(historyPath(cwd), JSON.stringify(historyEntry) + '\n');

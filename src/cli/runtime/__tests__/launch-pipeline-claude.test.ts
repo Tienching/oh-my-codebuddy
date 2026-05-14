@@ -79,10 +79,72 @@ describe("Claude leader launch pipeline", () => {
         resolveCodexHomeForLaunch(wd, { CLAUDE_HOME: "/tmp/explicit-claude" }, "claude"),
         "/tmp/explicit-claude",
       );
-      assert.deepEqual(translateLeaderResumeArgs(["resume", "--last"], "claude"), ["resume", "--last"]);
-      assert.deepEqual(translateLeaderExecArgs(["--json", "say hi"], "claude"), ["exec", "--json", "say hi"]);
     } finally {
       await rm(wd, { recursive: true, force: true });
     }
+  });
+
+  it("translates `omb resume` for claude to --resume / --continue (NOT a literal `resume` token)", () => {
+    // Bug fixture: previously these returned the leading "resume" verbatim,
+    // which claude treated as a prompt literal and echoed into the session.
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume"], "claude"),
+      ["--resume"],
+    );
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--last"], "claude"),
+      ["--continue"],
+    );
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "session-id-123"], "claude"),
+      ["--resume", "session-id-123"],
+    );
+    // Extra flags after `resume` are preserved.
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--last", "-c", "k=v"], "claude"),
+      ["--continue", "-c", "k=v"],
+    );
+    // codex-only flags are stripped with a warning.
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--all"], "claude"),
+      ["--resume"],
+    );
+    // Non-resume args are passed through untouched.
+    assert.deepEqual(
+      translateLeaderResumeArgs(["--print", "hi"], "claude"),
+      ["--print", "hi"],
+    );
+  });
+
+  it("translates `omb exec` for claude to --print (claude has no exec subcommand)", () => {
+    // claude uses -p/--print for non-interactive mode, NOT an exec subcommand.
+    assert.deepEqual(
+      translateLeaderExecArgs(["--json", "say hi"], "claude"),
+      ["--print", "--json", "say hi"],
+    );
+    // If --print is already present, do not duplicate it.
+    assert.deepEqual(
+      translateLeaderExecArgs(["--print", "say hi"], "claude"),
+      ["--print", "say hi"],
+    );
+    assert.deepEqual(
+      translateLeaderExecArgs(["-p", "say hi"], "claude"),
+      ["-p", "say hi"],
+    );
+  });
+
+  it("preserves codex resume/exec subcommands (codex CLI accepts them natively)", () => {
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume"], "codex"),
+      ["resume"],
+    );
+    assert.deepEqual(
+      translateLeaderResumeArgs(["resume", "--last"], "codex"),
+      ["resume", "--last"],
+    );
+    assert.deepEqual(
+      translateLeaderExecArgs(["--json", "say hi"], "codex"),
+      ["exec", "--json", "say hi"],
+    );
   });
 });

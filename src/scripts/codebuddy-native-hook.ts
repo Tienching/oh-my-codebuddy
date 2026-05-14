@@ -1133,6 +1133,10 @@ export async function dispatchCodexNativeHook(
   if (hookEventName === "SessionStart" && sessionId) {
     await writeSessionStart(cwd, sessionId, {
       pid: options.sessionOwnerPid ?? resolveSessionOwnerPid(payload),
+      leaderCli: (() => {
+        const raw = safeString(process.env.OMB_LEADER_CLI).trim().toLowerCase();
+        return raw === 'codebuddy' || raw === 'codex' || raw === 'claude' ? raw : undefined;
+      })(),
     });
   }
 
