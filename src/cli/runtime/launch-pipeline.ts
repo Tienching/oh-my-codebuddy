@@ -656,8 +656,16 @@ export function normalizeClaudeCliLaunchArgs(args: string[]): string[] {
   const normalized: string[] = [];
   let wantsBypass = false;
   let hasBypass = false;
-  let reasoningMode: ReasoningMode | null = null;
+  // NOTE: claude's `-c` is `--continue` (resume last session), NOT codex's
+  // `--config key=value`. Reusing CONFIG_FLAG/MODEL_INSTRUCTIONS_FILE_KEY here
+  // (as codex/codebuddy do) makes claude treat `-c` as continue and exit 1
+  // with "No deferred tool marker found in the resumed session". Therefore:
+  //   - `--system-prompt-file` is dropped (claude auto-reads cwd AGENTS.md/CLAUDE.md)
+  //   - `--effort` / `--reasoning-effort` are dropped (claude has no equivalent flag)
+  // Both emit a one-line stderr warning so users notice the no-op.
   const deprecationWarnings: string[] = [];
+  let droppedSystemPromptFile = false;
+  let droppedEffort = false;
 
   for (let index = 0; index < launchPolicyParsed.remainingArgs.length; index++) {
     const arg = launchPolicyParsed.remainingArgs[index];
@@ -670,31 +678,34 @@ export function normalizeClaudeCliLaunchArgs(args: string[]): string[] {
       continue;
     }
     if (arg === CODEBUDDY_LEGACY_BYPASS_FLAG) { wantsBypass = true; continue; }
-    if (arg === HIGH_REASONING_FLAG) { reasoningMode = "high"; deprecationWarnings.push(DEPRECATED_HIGH_REASONING_MSG); continue; }
-    if (arg === XHIGH_REASONING_FLAG) { reasoningMode = "xhigh"; deprecationWarnings.push(DEPRECATED_XHIGH_REASONING_MSG); continue; }
+    if (arg === HIGH_REASONING_FLAG) { droppedEffort = true; deprecationWarnings.push(DEPRECATED_HIGH_REASONING_MSG); continue; }
+    if (arg === XHIGH_REASONING_FLAG) { droppedEffort = true; deprecationWarnings.push(DEPRECATED_XHIGH_REASONING_MSG); continue; }
     if (arg === EFFORT_FLAG) {
       const next = launchPolicyParsed.remainingArgs[index + 1];
-      if (next && REASONING_MODE_SET.has(next)) { reasoningMode = next as ReasoningMode; index += 1; continue; }
-      normalized.push(arg);
-      if (next) { normalized.push(next); index += 1; }
+      if (next && REASONING_MODE_SET.has(next)) {
+        droppedEffort = true;
+        index += 1;
+        continue;
+      }
+      // Bare `--effort` with no recognized value: drop the flag (claude has
+      // no --effort), advancing past any opaque value to avoid leaking it.
+      droppedEffort = true;
+      if (next) index += 1;
       continue;
     }
     if (arg === CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG) {
       const next = launchPolicyParsed.remainingArgs[index + 1];
       if (typeof next === "string" && next.trim() !== "") {
-        normalized.push(CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(next)}"`);
+        droppedSystemPromptFile = true;
         index += 1;
         continue;
       }
-      normalized.push(arg);
+      droppedSystemPromptFile = true;
       continue;
     }
     if (arg.startsWith(`${CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG}=`)) {
-      const value = arg.slice(`${CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG}=`.length).trim();
-      if (value !== "") {
-        normalized.push(CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(parseTomlStringValue(value))}"`);
-        continue;
-      }
+      droppedSystemPromptFile = true;
+      continue;
     }
     if (arg === "--permission-mode" && launchPolicyParsed.remainingArgs[index + 1] === "bypassPermissions") {
       wantsBypass = true;
@@ -707,7 +718,15 @@ export function normalizeClaudeCliLaunchArgs(args: string[]): string[] {
   }
 
   if (wantsBypass && !hasBypass) normalized.push(CODEBUDDY_BYPASS_FLAG);
-  if (reasoningMode) normalized.push(CONFIG_FLAG, `${REASONING_KEY}="${reasoningMode}"`);
+  // Intentionally do NOT emit `-c model_reasoning_effort=...` for claude —
+  // see the comment block at the top of this function. Same for
+  // `model_instructions_file=...`.
+  if (droppedSystemPromptFile) {
+    process.stderr.write(`[omb] --system-prompt-file is ignored for claude (claude auto-reads AGENTS.md / CLAUDE.md from cwd)\n`);
+  }
+  if (droppedEffort) {
+    process.stderr.write(`[omb] --effort / reasoning-effort is ignored for claude (claude has no equivalent flag)\n`);
+  }
   for (const warning of deprecationWarnings) {
     process.stderr.write(`[omb] ${warning}\n`);
   }
@@ -861,13 +880,23 @@ export function injectLeaderModelInstructionsBypassArgs(
   if (args.includes("--help") || args.includes("-h")) return [...args];
   if (!shouldBypassDefaultSystemPrompt(env)) return [...args];
   if (hasModelInstructionsOverride(args)) return [...args];
+  // claude reads AGENTS.md / CLAUDE.md natively from the cwd, and its -c
+  // flag is `--continue` (NOT codex-style `--config key=value`). Reusing the
+  // codex injection here makes claude treat -c as continue and exit 1 with
+  // "No deferred tool marker found in the resumed session". Skip injection.
+  if (leaderCli === "claude") return [...args];
   const modelInstructionsPath = resolveModelInstructionsFilePath(cwd, env, defaultFilePath);
   switch (leaderCli) {
     case "codebuddy":
       return [...args, CODEBUDDY_SYSTEM_PROMPT_FILE_FLAG, modelInstructionsPath];
     case "codex":
-    case "claude":
       return [...args, CONFIG_FLAG, `${MODEL_INSTRUCTIONS_FILE_KEY}="${escapeTomlString(modelInstructionsPath)}"`];
+    default: {
+      // Adding a new LeaderCli without handling it here is a TS compile-time
+      // error. The runtime guard mirrors the type narrowing for safety.
+      const _exhaustive: never = leaderCli;
+      throw new Error(`unhandled leader CLI: ${String(_exhaustive)}`);
+    }
   }
 }
 

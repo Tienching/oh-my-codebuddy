@@ -2655,6 +2655,81 @@ describe("injectModelInstructionsBypassArgs", () => {
       'model_instructions_file="/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md"',
     ]);
   });
+
+  it("does NOT inject anything for claude (claude reads AGENTS.md natively; -c means --continue)", () => {
+    // Regression: previously this path emitted ["-c", 'model_instructions_file="..."'],
+    // but claude treats `-c` as `--continue` and exits 1 with
+    // "No deferred tool marker found in the resumed session" → omb appeared
+    // to "instant-crash". claude picks up AGENTS.md / CLAUDE.md from cwd on
+    // its own, so we must pass argv through untouched here.
+    const args = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      ["--model", "sonnet"],
+      "claude",
+      {},
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(args, ["--model", "sonnet"]);
+  });
+
+  it("does NOT inject anything for claude even with empty args", () => {
+    const args = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      [],
+      "claude",
+      {},
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(args, []);
+  });
+
+  it("does NOT inject anything for claude when --help short-circuit fires first", () => {
+    // Defense: --help and -h short-circuits run BEFORE the claude early-return.
+    // Both must continue to pass args through untouched.
+    const argsHelp = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      ["--help"],
+      "claude",
+      {},
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(argsHelp, ["--help"]);
+    const argsH = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      ["-h"],
+      "claude",
+      {},
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(argsH, ["-h"]);
+  });
+
+  it("does NOT inject anything for claude when shouldBypassDefaultSystemPrompt is disabled", () => {
+    // Defense: even when the bypass-system-prompt feature is turned off,
+    // claude must still get untouched args (no codex-style -c key=value).
+    const args = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      ["--model", "sonnet"],
+      "claude",
+      { OMB_BYPASS_DEFAULT_SYSTEM_PROMPT: "0" },
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(args, ["--model", "sonnet"]);
+  });
+
+  it("does NOT inject anything for claude when args already contain a model instructions override", () => {
+    // Defense: if the caller has already injected a model_instructions_file
+    // via -c, the existing override-detection short-circuit must fire
+    // before the claude early-return — the result must still be safe.
+    const args = injectLeaderModelInstructionsBypassArgs(
+      "/tmp/my-project",
+      ["-c", 'model_instructions_file="/custom/path.md"'],
+      "claude",
+      {},
+      "/tmp/my-project/.omb/state/sessions/session-1/AGENTS.md",
+    );
+    assert.deepEqual(args, ["-c", 'model_instructions_file="/custom/path.md"']);
+  });
 });
 
 describe("upsertTopLevelTomlString", () => {

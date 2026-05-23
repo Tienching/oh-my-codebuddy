@@ -60,10 +60,43 @@ describe("Claude leader launch pipeline", () => {
       normalizeLeaderLaunchArgs(["--dangerously-bypass-approvals-and-sandbox"], "claude"),
       ["--dangerously-skip-permissions"],
     );
+  });
+
+  it("drops --effort / reasoning-effort for claude (claude has no equivalent flag; -c=continue not -c key=value)", () => {
+    // Regression: previously emitted ["-c", 'model_reasoning_effort="high"'],
+    // which claude treats as `--continue` and exits 1 — same crash class as
+    // the model_instructions_file fix in injectLeaderModelInstructionsBypassArgs.
     assert.deepEqual(
       normalizeLeaderLaunchArgs(["--dangerously-skip-permissions", "--effort", "high"], "claude"),
-      ["--dangerously-skip-permissions", "-c", 'model_reasoning_effort="high"'],
+      ["--dangerously-skip-permissions"],
     );
+    assert.deepEqual(
+      normalizeLeaderLaunchArgs(["--effort", "xhigh"], "claude"),
+      [],
+    );
+    // legacy --high / --xhigh aliases are also dropped (no -c emitted).
+    const fromHigh = normalizeLeaderLaunchArgs(["--high"], "claude");
+    assert.equal(fromHigh.includes("-c"), false, "--high must not emit -c for claude");
+    const fromXhigh = normalizeLeaderLaunchArgs(["--xhigh"], "claude");
+    assert.equal(fromXhigh.includes("-c"), false, "--xhigh must not emit -c for claude");
+  });
+
+  it("drops --system-prompt-file for claude (claude auto-reads AGENTS.md/CLAUDE.md from cwd)", () => {
+    // Regression: previously emitted ["-c", 'model_instructions_file="..."'],
+    // which claude treats as `--continue` and exits 1.
+    const fromSpaceForm = normalizeLeaderLaunchArgs(
+      ["--system-prompt-file", "/tmp/agents.md"],
+      "claude",
+    );
+    assert.equal(fromSpaceForm.includes("-c"), false, "must not emit -c for claude");
+    assert.equal(fromSpaceForm.includes("/tmp/agents.md"), false, "path arg must also be consumed");
+
+    const fromEqualsForm = normalizeLeaderLaunchArgs(
+      ["--system-prompt-file=/tmp/agents.md"],
+      "claude",
+    );
+    assert.equal(fromEqualsForm.includes("-c"), false, "must not emit -c for claude (= form)");
+    assert.deepEqual(fromEqualsForm, []);
   });
 
   it("resolves project-scoped .claude home and treats exec/resume as Codex-like", async () => {
