@@ -64,6 +64,8 @@ export {
   buildDetachedSessionFinalizeSteps,
   buildDetachedSessionRollbackSteps,
   formatDetachedTmuxStepFailure,
+  isNoControllingTtyError,
+  buildManualAttachInstructionLines,
   resolveNotifyTempContract,
   buildNotifyTempStartupMessages,
   buildNotifyFallbackWatcherEnv,

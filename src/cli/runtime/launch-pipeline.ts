@@ -143,6 +143,7 @@ const ALLOWED_SHELLS = new Set([
   "/usr/local/bin/bash", "/usr/local/bin/zsh", "/usr/local/bin/fish",
 ]);
 const WINDOWS_DETACHED_BOOTSTRAP_DELAY_MS = 2500;
+const KILL_DETACHED_SESSION_ON_EXIT_ENV = "OMB_KILL_DETACHED_SESSION_ON_EXIT";
 
 // ── Signal / exec error helpers ────────────────────────────────────────────
 
@@ -1304,7 +1305,11 @@ function buildDetachedSessionLeaderCommand(cwd: string, sessionName: string, cod
     "trap - 0 INT TERM HUP;",
     buildTmuxExtendedKeysReleaseShellSnippet(cwd),
     'if [ "$status" -lt 128 ]; then',
+    `case "\${${KILL_DETACHED_SESSION_ON_EXIT_ENV}:-0}" in`,
+    "1|true|TRUE|yes|YES|on|ON)",
     `tmux kill-session -t "${escapeShellDoubleQuotedValue(sessionName)}" >/dev/null 2>&1 || true;`,
+    ";;",
+    "esac;",
     "fi;",
     "exit $status;",
     "};",
@@ -1345,6 +1350,41 @@ export function formatDetachedTmuxStepFailure(step: DetachedSessionTmuxStep, err
   const stdout = summarizeTmuxStepStream(execError.stdout);
   if (stdout) details.push(`stdout=${stdout}`);
   return `tmux step failed (${step.name}): ${command}: ${details.join(" | ")}`;
+}
+
+/**
+ * Detects the tmux "no controlling terminal" failure class. Triggered when
+ * `tmux attach-session` runs from a process whose stdio looked like a TTY at
+ * probe time but cannot acquire a controlling terminal at attach time
+ * (IDE-integrated terminals, GUI launchers, screen-inside-screen, redirected
+ * stdio). tmux's canonical message is "open terminal failed: not a terminal";
+ * the substring sniff covers minor wording variants without overreaching.
+ */
+export function isNoControllingTtyError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const execError = error as Error & { stdout?: unknown; stderr?: unknown };
+  const haystacks: string[] = [];
+  if (typeof execError.message === "string") haystacks.push(execError.message);
+  const stderr = summarizeTmuxStepStream(execError.stderr);
+  if (stderr) haystacks.push(stderr);
+  const stdout = summarizeTmuxStepStream(execError.stdout);
+  if (stdout) haystacks.push(stdout);
+  return haystacks.some((s) => s.toLowerCase().includes("not a terminal"));
+}
+
+/**
+ * Build the user-facing instructional message printed when tmux attach-session
+ * fails because the parent process has no controlling terminal. Uses bare
+ * `tmux` (no absolute path) so the user's shell picks the highest-priority
+ * tmux on PATH.
+ */
+export function buildManualAttachInstructionLines(sessionName: string): string[] {
+  return [
+    `[omb] tmux attach-session failed: this process has no controlling terminal, but the detached session was preserved.`,
+    `[omb] To attach from a real terminal, run:`,
+    `[omb]   tmux attach -t ${sessionName}`,
+    `[omb] The leader process is already running inside the session; unsaved progress is preserved.`,
+  ];
 }
 
 export function buildHudPaneCleanupTargets(
@@ -2241,7 +2281,11 @@ function runCodex(
     let registeredClientAttachedHookName: string | null = null;
     try {
       const bootstrapSteps = buildDetachedSessionBootstrapSteps(sessionName, cwd, codexCmd, hudCmd, workerLaunchArgs, codexHomeOverride, notifyTempContractRaw, nativeWindows, sessionId, leaderCli);
-      for (const step of bootstrapSteps) {
+      // Labeled outer loop: a no-controlling-tty attach failure must abort
+      // BOTH the finalize sub-steps and the outer bootstrap step iteration
+      // without falling through to rollback, so the detached session stays
+      // alive for the user to manually attach.
+      stepLoop: for (const step of bootstrapSteps) {
         let output = "";
         try {
           output = execFileSync("tmux", step.args, { stdio: "pipe", encoding: "utf-8" });
@@ -2262,7 +2306,20 @@ function runCodex(
             try { execFileSync("tmux", finalizeStep.args, { stdio }); } catch (err) {
               const detail = formatDetachedTmuxStepFailure(finalizeStep, err);
               process.stderr.write(`[cli/index] operation failed: ${detail}\n`);
-              if (finalizeStep.name === "attach-session") throw new Error(detail);
+              if (finalizeStep.name === "attach-session") {
+                // No-controlling-terminal: keep the detached session alive and
+                // tell the user how to attach manually. Skips rollback and the
+                // direct-mode fallback below — re-launching the leader in
+                // direct mode would create a second leader writing to the
+                // same workspace.
+                if (isNoControllingTtyError(err)) {
+                  for (const line of buildManualAttachInstructionLines(sessionName)) {
+                    process.stderr.write(`${line}\n`);
+                  }
+                  break stepLoop;
+                }
+                throw new Error(detail);
+              }
               continue;
             }
             if (finalizeStep.name === "register-resize-hook" && hookTarget && hookName) { registeredHookTarget = hookTarget; registeredHookName = hookName; }

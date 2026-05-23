@@ -44,6 +44,8 @@ import {
   buildDetachedSessionFinalizeSteps,
   buildDetachedSessionRollbackSteps,
   formatDetachedTmuxStepFailure,
+  isNoControllingTtyError,
+  buildManualAttachInstructionLines,
   resolveNotifyTempContract,
   buildNotifyTempStartupMessages,
   buildNotifyFallbackWatcherEnv,
@@ -1885,7 +1887,7 @@ describe("detached tmux new-session sequencing", () => {
     assert.equal(steps[1]?.args.at(-1), hudCmd);
   });
 
-  it("buildDetachedSessionBootstrapSteps kills detached tmux session on normal shell exit", () => {
+  it("buildDetachedSessionBootstrapSteps references opt-in detached session cleanup", () => {
     const steps = buildDetachedSessionBootstrapSteps(
       "omb-demo",
       "/tmp/project",
@@ -1902,6 +1904,7 @@ describe("detached tmux new-session sequencing", () => {
     assert.match(leaderCmd!, /trap omb_detached_session_cleanup 0;/);
     assert.match(leaderCmd!, /releaseTmuxExtendedKeysLease/);
     assert.match(leaderCmd!, /if \[ "\$status" -lt 128 \]; then/);
+    assert.match(leaderCmd!, /OMB_KILL_DETACHED_SESSION_ON_EXIT/);
     assert.match(leaderCmd!, /tmux kill-session -t/);
     assert.match(leaderCmd!, /"omb-demo"/);
     assert.match(leaderCmd!, /exit \$status/);
@@ -1932,7 +1935,56 @@ describe("detached tmux new-session sequencing", () => {
     );
   });
 
-  it("detached leader command executes codex and cleanup without shell-quote breakage", async () => {
+  it("isNoControllingTtyError matches tmux's canonical 'not a terminal' message in stderr", () => {
+    const err = Object.assign(new Error("Command failed: tmux attach-session -t omb-demo"), {
+      status: 1,
+      stderr: "open terminal failed: not a terminal\n",
+    });
+    assert.equal(isNoControllingTtyError(err), true);
+  });
+
+  it("isNoControllingTtyError matches when the substring lives in the Error message", () => {
+    const err = new Error("tmux: not a terminal");
+    assert.equal(isNoControllingTtyError(err), true);
+  });
+
+  it("isNoControllingTtyError is case-insensitive for minor wording variants", () => {
+    const err = Object.assign(new Error("Command failed"), {
+      stderr: "Open Terminal Failed: NOT A TERMINAL",
+    });
+    assert.equal(isNoControllingTtyError(err), true);
+  });
+
+  it("isNoControllingTtyError returns false for unrelated tmux failures", () => {
+    const err = Object.assign(new Error("Command failed"), {
+      status: 1,
+      stderr: "can't find session: omb-demo\n",
+    });
+    assert.equal(isNoControllingTtyError(err), false);
+  });
+
+  it("isNoControllingTtyError returns false for non-Error values", () => {
+    assert.equal(isNoControllingTtyError("not a terminal"), false);
+    assert.equal(isNoControllingTtyError(undefined), false);
+    assert.equal(isNoControllingTtyError(null), false);
+  });
+
+  it("buildManualAttachInstructionLines names the session and uses bare 'tmux' (no absolute path)", () => {
+    const lines = buildManualAttachInstructionLines("omb-demo-1234");
+    assert.ok(lines.length >= 2, "should produce multiple instruction lines");
+    const blob = lines.join("\n");
+    // Includes the session name verbatim so the user can copy-paste.
+    assert.match(blob, /omb-demo-1234/);
+    // The recommended command is bare `tmux attach -t ...` so the user's
+    // shell picks the highest-priority tmux on PATH. Any absolute path
+    // (/usr/bin/tmux, /usr/local/bin/tmux, etc.) is a regression.
+    assert.match(blob, /(?:^|\s)tmux attach -t omb-demo-1234\b/m);
+    assert.ok(!/\/usr\/(?:local\/)?bin\/tmux/.test(blob), "must not hardcode absolute tmux path");
+    // Tells the user the session is preserved (not destroyed by rollback).
+    assert.match(blob, /preserved|running/i);
+  });
+
+  it("detached leader command preserves detached tmux session by default", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-"));
     // fakeBin lives inside cwd so the `finally { rm cwd }` cleanup covers it.
     // Keeping it under tmpdir (not repo cwd) avoids polluting the working
@@ -2010,6 +2062,77 @@ exit 0
       assert.match(log, /tmux:show-options -sv extended-keys/);
       assert.match(log, /tmux:set-option -sq extended-keys always/);
       assert.match(log, /tmux:set-option -sq extended-keys off/);
+      assert.doesNotMatch(log, /tmux:kill-session -t omb-demo/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it("detached leader command kills the detached tmux session when explicitly requested", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "omb-detached-leader-kill-opt-in-"));
+    const fakeBin = join(cwd, "bin");
+    const logPath = join(cwd, "leader.log");
+
+    try {
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "codex"),
+        `#!/bin/sh
+printf 'codex:%s\\n' "$*" >> "${logPath}"
+exit 0
+`,
+      );
+      await chmod(join(fakeBin, "codex"), 0o755);
+      await writeFile(
+        join(fakeBin, "tmux"),
+        `#!/bin/sh
+printf 'tmux:%s\\n' "$*" >> "${logPath}"
+case "$1" in
+  display-message)
+    if [ "$3" = '#{socket_path}' ] || [ "$4" = '#{socket_path}' ]; then
+      printf '/tmp/tmux-test.sock\\n'
+    else
+      printf '0\\n'
+    fi
+    ;;
+  show-options)
+    printf 'off\\n'
+    ;;
+  set-option|kill-session)
+    ;;
+esac
+exit 0
+`,
+      );
+      await chmod(join(fakeBin, "tmux"), 0o755);
+
+      const steps = buildDetachedSessionBootstrapSteps(
+        "omb-demo",
+        cwd,
+        buildTmuxPaneCommand(
+          "codex",
+          ["--dangerously-bypass-approvals-and-sandbox"],
+          "/bin/sh",
+        ),
+        "'node' '/tmp/omb.js' 'hud' '--watch'",
+        null,
+      );
+      const leaderCmd = steps[0]?.args.at(-1);
+      assert.equal(typeof leaderCmd, "string");
+
+      execFileSync("/bin/sh", ["-c", leaderCmd!], {
+        cwd,
+        env: {
+          ...process.env,
+          OMB_KILL_DETACHED_SESSION_ON_EXIT: "1",
+          PATH: `${fakeBin}:/usr/bin:/bin`,
+          HOME: cwd,
+        },
+        stdio: "ignore",
+      });
+
+      const log = await readFile(logPath, "utf-8");
+      assert.match(log, /codex:--dangerously-bypass-approvals-and-sandbox/);
       assert.match(log, /tmux:kill-session -t omb-demo/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
