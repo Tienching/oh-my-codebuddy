@@ -126,6 +126,7 @@ interface SessionStartOptions {
   pid?: number;
   platform?: NodeJS.Platform;
   leaderCli?: SessionLeaderCli;
+  staleCheck?: SessionStaleCheckOptions;
 }
 
 // Process identity logic has been extracted to src/runtime/process-identity.ts
@@ -164,6 +165,35 @@ export function isSessionStale(
   }
 
   return false;
+}
+
+async function appendSessionEndArtifacts(
+  cwd: string,
+  sessionId: string,
+  state: SessionState | null,
+  reason?: string,
+): Promise<void> {
+  const endTime = new Date().toISOString();
+  const logsDir = ombLogsDir(cwd);
+  await mkdir(logsDir, { recursive: true });
+
+  const historyEntry = {
+    session_id: sessionId,
+    started_at: state?.started_at || 'unknown',
+    ended_at: endTime,
+    cwd,
+    pid: state?.pid || process.pid,
+    leader_cli: state?.leader_cli,
+    ...(reason ? { reason } : {}),
+  };
+
+  await appendFile(historyPath(cwd), JSON.stringify(historyEntry) + '\n');
+  await appendToLog(cwd, {
+    event: 'session_end',
+    session_id: sessionId,
+    timestamp: endTime,
+    ...(reason ? { reason } : {}),
+  });
 }
 
 /**
@@ -210,6 +240,11 @@ export async function writeSessionStart(
     sessionLockDir(cwd),
     { lockStaleMs: SESSION_LOCK_STALE_MS, label: 'session-start' },
     async () => {
+      const existing = await readSessionState(cwd);
+      if (existing && existing.session_id !== sessionId && isSessionStale(existing, options.staleCheck)) {
+        await appendSessionEndArtifacts(cwd, existing.session_id, existing, 'stale_session_reconciled');
+      }
+
       await writeFile(sessionPath(cwd), serialized);
       if (dualWriteOmb) {
         await writeFile(legacySessionPath(cwd), serialized);
@@ -233,22 +268,7 @@ export async function writeSessionStart(
  */
 export async function writeSessionEnd(cwd: string, sessionId: string): Promise<void> {
   const state = await readSessionState(cwd);
-  const endTime = new Date().toISOString();
-
-  // Archive to session history
-  const logsDir = ombLogsDir(cwd);
-  await mkdir(logsDir, { recursive: true });
-
-  const historyEntry = {
-    session_id: sessionId,
-    started_at: state?.started_at || 'unknown',
-    ended_at: endTime,
-    cwd,
-    pid: state?.pid || process.pid,
-    leader_cli: state?.leader_cli,
-  };
-
-  await appendFile(historyPath(cwd), JSON.stringify(historyEntry) + '\n');
+  await appendSessionEndArtifacts(cwd, sessionId, state);
 
   await withPathLock(
     sessionLockDir(cwd),
@@ -272,11 +292,6 @@ export async function writeSessionEnd(cwd: string, sessionId: string): Promise<v
     },
   );
 
-  await appendToLog(cwd, {
-    event: 'session_end',
-    session_id: sessionId,
-    timestamp: endTime,
-  });
 }
 
 /**

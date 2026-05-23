@@ -110,6 +110,127 @@ describe('session lifecycle manager', () => {
     }
   });
 
+  it('archives stale previous session state before writing a new session start', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-session-stale-archive-'));
+    try {
+      await resetSessionMetrics(cwd);
+      const sessionPath = join(cwd, '.omb', 'state', 'session.json');
+      await writeFile(sessionPath, JSON.stringify({
+        session_id: 'sess-dead',
+        started_at: '2026-05-20T08:32:08.456Z',
+        cwd,
+        pid: 987654321,
+        platform: 'linux',
+        pid_start_ticks: 123,
+        pid_cmdline: 'node /home/ubuntu/.local/bin/omb --madmax',
+        leader_cli: 'codebuddy',
+      }, null, 2));
+
+      await writeSessionStart(cwd, 'sess-new', {
+        pid: process.pid,
+        leaderCli: 'claude',
+        staleCheck: {
+          platform: 'linux',
+          isPidAlive: () => false,
+        },
+      } as any);
+
+      const state = await readSessionState(cwd);
+      assert.ok(state);
+      assert.equal(state.session_id, 'sess-new');
+
+      const historyPath = join(cwd, '.omb', 'logs', 'session-history.jsonl');
+      const historyLines = (await readFile(historyPath, 'utf-8')).trim().split('\n').filter(Boolean);
+      assert.equal(historyLines.length, 1);
+      const archived = JSON.parse(historyLines[0]) as SessionHistoryEntry & { reason?: string };
+      assert.equal(archived.session_id, 'sess-dead');
+      assert.equal(archived.reason, 'stale_session_reconciled');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT archive existing session when isPidAlive returns true (still alive, not stale)', async () => {
+    // Negative path: a future regression that always archives (e.g.
+    // dropping the isSessionStale gate) would otherwise pass the existing
+    // positive test silently. This pins the gate.
+    //
+    // Use platform='darwin' so isSessionStale relies purely on isPidAlive
+    // (linux additionally requires pid_start_ticks/cmdline checks via
+    // readLinuxIdentity, which would need adapter mocking).
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-session-alive-noarchive-'));
+    try {
+      await resetSessionMetrics(cwd);
+      const sessionPath = join(cwd, '.omb', 'state', 'session.json');
+      await writeFile(sessionPath, JSON.stringify({
+        session_id: 'sess-alive',
+        started_at: '2026-05-20T08:32:08.456Z',
+        cwd,
+        pid: 987654321,
+        platform: 'darwin',
+        pid_cmdline: 'node /home/ubuntu/.local/bin/omb --madmax',
+        leader_cli: 'codebuddy',
+      }, null, 2));
+
+      await writeSessionStart(cwd, 'sess-new', {
+        pid: process.pid,
+        leaderCli: 'claude',
+        staleCheck: {
+          platform: 'darwin',
+          isPidAlive: () => true,
+        },
+      } as any);
+
+      const historyPath = join(cwd, '.omb', 'logs', 'session-history.jsonl');
+      // history file should not exist OR be empty — nothing to archive.
+      const historyExists = existsSync(historyPath);
+      if (historyExists) {
+        const content = (await readFile(historyPath, 'utf-8')).trim();
+        assert.equal(content, '', 'expected no archived history entries when previous session is still alive');
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('does NOT archive when existing session_id matches the incoming sessionId (idempotent re-write)', async () => {
+    // Negative path: re-writing the same session must not duplicate-archive
+    // it as if it were a stale predecessor.
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-session-idempotent-'));
+    try {
+      await resetSessionMetrics(cwd);
+      const sessionPath = join(cwd, '.omb', 'state', 'session.json');
+      await writeFile(sessionPath, JSON.stringify({
+        session_id: 'sess-same',
+        started_at: '2026-05-20T08:32:08.456Z',
+        cwd,
+        pid: 987654321,
+        platform: 'darwin',
+        pid_cmdline: 'node /home/ubuntu/.local/bin/omb',
+        leader_cli: 'codebuddy',
+      }, null, 2));
+
+      await writeSessionStart(cwd, 'sess-same', {
+        pid: process.pid,
+        leaderCli: 'codebuddy',
+        staleCheck: {
+          platform: 'darwin',
+          // even with isPidAlive=false, same session_id means no archival
+          isPidAlive: () => false,
+        },
+      } as any);
+
+      const historyPath = join(cwd, '.omb', 'logs', 'session-history.jsonl');
+      const historyExists = existsSync(historyPath);
+      if (historyExists) {
+        const content = (await readFile(historyPath, 'utf-8')).trim();
+        assert.equal(content, '', 'expected no archived history entries when session_id is unchanged');
+      }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('treats invalid session JSON as absent state', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-session-invalid-'));
     try {
