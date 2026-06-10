@@ -716,7 +716,7 @@ describe('exploreCommand', () => {
         assert.match(captured, /BLOCKED_STATUS=(?!0)\d+/);
         assert.match(captured, /--ARGV--[\s\S]*\nexec\n/);
         assert.match(captured, /--ALLOWED_STDOUT--[\s\S]*ripgrep/i);
-        assert.match(captured, /--BLOCKED_STDERR--[\s\S]*not on the (?:omb|omb) explore allowlist/);
+        assert.match(captured, /--BLOCKED_STDERR--[\s\S]*not on the omb explore allowlist/);
       });
     } finally {
       await rm(wd, { recursive: true, force: true });

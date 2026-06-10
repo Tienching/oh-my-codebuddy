@@ -85,6 +85,10 @@ import {
   formatStaleProviderResidueHint,
   type ProviderDirName,
 } from "../setup/stale-provider.js";
+import {
+  getTemplateReplacements,
+  renderTemplate,
+} from "../utils/template-render.js";
 import { CLAUDE_BIN, CODEBUDDY_BIN, CODEX_BIN } from "./constants.js";
 
 interface SetupOptions {
@@ -233,32 +237,8 @@ function applyScopePathRewritesToAgentsTemplate(
   scope: SetupScope,
   provider: SetupProvider,
 ): string {
-  if (scope === "project") {
-    if (provider === "both") {
-      return content
-        .replaceAll("~/.codebuddy", "./.codebuddy")
-        .replaceAll("~/.codex", "./.codex");
-    }
-    if (provider === "all") {
-      return content
-        .replaceAll("~/.codebuddy", "./.codebuddy")
-        .replaceAll("~/.codex", "./.codex")
-        .replaceAll("~/.claude", "./.claude");
-    }
-    const projectHome = providerHomeLabel(provider, "project");
-    return content
-      .replaceAll("~/.codebuddy", projectHome)
-      .replaceAll("~/.codex", projectHome)
-      .replaceAll("~/.claude", projectHome);
-  }
-
-  if (provider === "both") return content;
-  if (provider === "all") return content;
-  const userHome = providerHomeLabel(provider, "user");
-  return content
-    .replaceAll("~/.codebuddy", userHome)
-    .replaceAll("~/.codex", userHome)
-    .replaceAll("~/.claude", userHome);
+  const replacements = getTemplateReplacements(scope, provider);
+  return renderTemplate(content, replacements);
 }
 
 interface PersistedSetupScope {
@@ -296,6 +276,11 @@ interface ResolvedSetupProvider {
   source: "cli" | "persisted" | "default";
 }
 
+/**
+ * @deprecated CR-P1-012: Source-code marker checks are fragile and break during refactoring.
+ * The verifyTeamCliApiInterop function now uses CLI smoke probes instead.
+ * This constant is retained for one version for reference, then will be removed.
+ */
 const REQUIRED_TEAM_CLI_API_MARKERS = [
   "if (subcommand === 'api')",
   "executeTeamApiOperation",
@@ -2257,24 +2242,46 @@ async function setupNotifyHook(
 async function verifyTeamCliApiInterop(
   pkgRoot: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const teamCliPath = join(pkgRoot, "dist", "cli", "team.js");
-  if (!existsSync(teamCliPath)) {
-    return { ok: false, message: `missing ${teamCliPath}` };
+  // CR-P1-012: Use CLI smoke probe instead of source-code marker grep.
+  // Previously this checked for literal strings in dist/cli/team.js which
+  // is fragile and breaks during refactoring.
+  const ombBin = join(pkgRoot, "dist", "cli", "omb.js");
+  if (!existsSync(ombBin)) {
+    return { ok: false, message: `missing ${ombBin}` };
   }
 
   try {
-    const content = await readFile(teamCliPath, "utf-8");
-    const missing = REQUIRED_TEAM_CLI_API_MARKERS.filter(
-      (marker) => !content.includes(marker),
-    );
-    if (missing.length > 0) {
+    // Verify `omb team api --help` works and lists operations
+    const { spawnSync: spawn } = await import("child_process");
+    const result = spawn(process.execPath, [ombBin, "team", "api", "--help"], {
+      encoding: "utf-8",
+      timeout: 10_000,
+      windowsHide: true,
+    });
+
+    if (result.status !== 0) {
       return {
         ok: false,
-        message: `team CLI interop markers missing: ${missing.join(", ")}`,
+        message: `team api --help exited with status ${result.status}: ${(result.stderr || "").slice(0, 200)}`,
       };
     }
+
+    // Verify the help output mentions at least one known operation
+    const helpText = result.stdout || "";
+    const knownOperations = ["send-message", "list-tasks", "create-task"];
+    const found = knownOperations.some((op) => helpText.includes(op));
+    if (!found) {
+      return {
+        ok: false,
+        message: `team api --help output does not contain known operations`,
+      };
+    }
+
     return { ok: true };
-  } catch {
-    return { ok: false, message: `cannot read ${teamCliPath}` };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `team api smoke probe failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
 }

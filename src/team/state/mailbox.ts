@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getDefaultBridge, isBridgeEnabled, resolveBridgeStateDir, type MailboxRecord, type RuntimeCommand } from '../../runtime/bridge.js';
 import { appendTeamDeliveryLogForCwd } from '../delivery-log.js';
+import { safeStateText, redactSensitiveValues, STATE_TEXT_LIMITS } from '../../utils/state-text-safety.js';
 
 export interface TeamMailboxMessage {
   message_id: string;
@@ -66,6 +67,8 @@ export async function sendDirectMessage(
   body: string,
   deps: MailboxDeps,
 ): Promise<TeamMailboxMessage> {
+  // Apply size limit and redaction to body
+  const safeBody = safeStateText(redactSensitiveValues(body), STATE_TEXT_LIMITS.MAX_MAILBOX_BODY_LENGTH);
   let created = false;
   let msg: TeamMailboxMessage | null = null;
   let creationTransport: 'bridge' | 'legacy-json' = 'legacy-json';
@@ -89,7 +92,7 @@ export async function sendDirectMessage(
     const existing = dedupeCandidates.find((candidate) =>
       candidate.from_worker === fromWorker
       && candidate.to_worker === toWorker
-      && candidate.body === body
+      && candidate.body === safeBody
       && !candidate.delivered_at,
     );
     if (existing) {
@@ -103,7 +106,7 @@ export async function sendDirectMessage(
       message_id: msgId,
       from_worker: fromWorker,
       to_worker: toWorker,
-      body,
+      body: safeBody,
     })) {
       const bridgeMailbox = await deps.readMailbox(deps.teamName, toWorker, deps.cwd);
       const bridgeMessage = bridgeMailbox.messages.find((candidate) => candidate.message_id === msgId);
@@ -111,7 +114,7 @@ export async function sendDirectMessage(
         creationTransport = 'bridge';
         msg = {
           ...bridgeMessage,
-          body: bridgeMessage.body || body,
+          body: bridgeMessage.body || safeBody,
         };
         const shadowMailbox = {
           worker: legacyMailbox.worker,
@@ -130,7 +133,7 @@ export async function sendDirectMessage(
       message_id: msgId,
       from_worker: fromWorker,
       to_worker: toWorker,
-      body,
+      body: safeBody,
       created_at: new Date().toISOString(),
     };
     const shadowMailbox = {

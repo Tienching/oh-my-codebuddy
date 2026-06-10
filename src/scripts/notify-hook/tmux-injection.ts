@@ -27,7 +27,7 @@ import {
 } from '../tmux-hook-engine.js';
 
 function isHudPaneStartCommand(startCommand: any): boolean {
-  return /\b(?:omb|omb)\b.*\bhud\b.*--watch/i.test(safeString(startCommand));
+  return /\bomb\b.*\bhud\b.*--watch/i.test(safeString(startCommand));
 }
 
 async function resolvePaneCwdMismatch(paneId: string, expectedCwd: any): Promise<any | null> {

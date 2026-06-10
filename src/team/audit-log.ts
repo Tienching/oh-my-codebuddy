@@ -60,6 +60,7 @@ export interface AuditLogFilter {
 
 const DEFAULT_MAX_LOG_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 const FILE_MODE = 0o600; // Owner read/write only
+let rotationCounter = 0;
 
 // ── Path helpers ───────────────────────────────────────────────────────
 
@@ -90,6 +91,14 @@ export async function logAuditEvent(
     JSON.stringify(fullEvent) + "\n",
     { mode: FILE_MODE },
   );
+
+  // Check rotation after write (only every 50th write to reduce overhead)
+  rotationCounter++;
+  if (rotationCounter % 50 === 0) {
+    try {
+      await rotateAuditLog(cwd, fullEvent.team_name);
+    } catch { /* rotation failure is non-critical */ }
+  }
 }
 
 // ── Read ───────────────────────────────────────────────────────────────

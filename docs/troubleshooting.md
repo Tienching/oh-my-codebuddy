@@ -1,109 +1,150 @@
-# Troubleshooting execution readiness
+# Troubleshooting Guide
 
-Use this page when OMB appears installed but real CodeBuddy/Codex execution still fails.
+Common issues and recovery procedures for oh-my-codebuddy.
 
-## Install success vs real execution success
+> ⚠️ Before any destructive operation, back up your `.omb` directory and check `git status`.
 
-`omb setup` and `omb doctor` validate OMB's local install surface: prompts, skills, AGENTS scaffolding, config files, hooks, and runtime prerequisites. They do not guarantee that the active CodeBuddy/Codex profile can authenticate and complete a model request.
+## Quick Diagnostics
 
-After `omb doctor`, run a real smoke test from the same shell, HOME, and project directory you will use for OMB:
+| Command | Purpose |
+|---------|---------|
+| `omb doctor` | Check overall installation health |
+| `omb doctor --team` | Check team runtime health |
+| `omb team status <name>` | Show team status |
+| `omb cleanup` | Kill orphaned processes and remove stale temp dirs |
 
-```bash
-codex login status
-omb exec --skip-git-repo-check -C . "Reply with exactly OMB-EXEC-OK"
-```
+## Team Issues
 
-Treat the boundary this way:
+### Team appears stuck / not responding
 
-- `omb doctor` green: install and local runtime wiring look sane.
-- `codex login status` green: the active Codex profile can see login state.
-- `omb exec ...` returns `OMB-EXEC-OK`: real execution, auth, provider routing, and current working-directory assumptions are working together.
+**Symptoms:** `omb team status` shows workers as `unknown` or team won't shut down.
 
-## Green doctor, but `omb exec` fails with auth errors
+**Diagnosis:**
+1. Check if tmux session exists: `tmux has-session -t omb-team-<name>`
+2. Check worker heartbeats: `omb team api read-worker-heartbeat --input '{"team_name":"<name>","worker":"worker-1"}'`
+3. Check for stale locks: `ls .omb/state/team/<name>/locks/`
 
-Common failure strings include `401 Unauthorized`, `Missing bearer or basic authentication in header`, or `Incorrect API key provided`.
+**Recovery:**
+- If tmux session is gone: `omb team api orphan-cleanup --input '{"team_name":"<name>"}'`
+- If workers are stale but session exists: `omb team api cleanup --input '{"team_name":"<name>","force":true}'`
+- Manual cleanup (last resort): `rm -rf .omb/state/team/<name>/`
 
-Check the active runtime profile, not only your normal login shell:
+### Corrupt team state
 
-1. Print `HOME` and `CODEX_HOME` in the shell that launches OMB.
-2. Confirm that the active `~/.codex` or `CODEX_HOME` contains the expected auth and `config.toml`.
-3. Re-run `codex login status` from that same shell.
+**Symptoms:** `omb team status` returns unexpected errors or missing data.
 
-Custom HOME, container, profile, CI, and service-user environments often have a different `~/.codex` from the machine's main user. A working Codex setup in one home does not automatically make another home ready.
+**Diagnosis:**
+1. Check corruption log: `cat .omb/state/corruption-log.jsonl`
+2. Verify team config exists: `cat .omb/state/team/<name>/config.json`
 
-## Local proxy or `openai_base_url` mismatch
+**Recovery:**
+- For corrupt config: Back up and delete `config.json`, then re-create the team
+- For corrupt task files: Check `corruption-log.jsonl` for affected file paths
+- Manual cleanup: `rm .omb/state/team/<name>/tasks/<task-id>.json` (only if confirmed corrupt)
 
-If your setup depends on an OpenAI-compatible local proxy or gateway, verify that the active runtime config contains the matching base URL:
+## Worktree Issues
 
-```toml
-openai_base_url = "http://localhost:8317/v1"
-```
+### worktree_dirty: Worktree has uncommitted changes
 
-Use your actual proxy URL. If the profile-local `~/.codex/config.toml` is missing `openai_base_url`, Codex may send the proxy-issued key to the default endpoint. That can make setup and doctor look fine while real execution fails with 401-style auth errors.
+**Symptoms:** `omb team start` or worktree operations fail with `worktree_dirty`.
 
-## Stale `doctor --team` or dead tmux session state
+**Recovery:**
+1. Enter the worktree directory
+2. Check status: `git status`
+3. Commit or stash changes: `git stash` or `git add . && git commit -m "wip"`
+4. Retry the operation
 
-`omb doctor --team`, `omb team resume`, or startup diagnostics can fail when a previous team state references a tmux session that no longer exists. The state may mention `resume_blocker`, or the dead session may be recorded under `.omb/state/team/<team-name>/config.json` or `manifest.v2.json` (legacy `.omb/state/...` copies may also exist).
+### worktree_owner_mismatch: Worktree belongs to a different team/worker
 
-If the team is intentionally abandoned and no live tmux session remains, clean it up with:
+**Symptoms:** Error message indicates owner metadata doesn't match current context.
 
-```bash
-omb team shutdown <team-name> --force --confirm-issues
-omb cancel
-omb doctor --team
-```
+**Recovery:**
+1. Check owner metadata: `cat <worktree-path>/.omb-worktree-owner.json`
+2. If the worktree is from an old session: `omb doctor --worktrees`
+3. Manual cleanup: `git worktree remove <worktree-path>`
 
-Do not force-shutdown a team that may still have useful live panes or worker state. Prefer `omb team status <team-name>` and `tmux ls` first when unsure.
+### worktree_not_git: Directory exists but is not a git worktree
 
-## Shift+Enter submits instead of inserting a newline in tmux-backed OMB sessions
+**Symptoms:** A non-git directory or file exists at the expected worktree path.
 
-This is usually **not** a net-new OMB feature gap.
+**Recovery:**
+1. Check what's at the path: `ls -la <path>`
+2. If it's a stale directory: `rm -rf <path>`
+3. If it contains important data: Back up first, then remove
+4. Retry the operation
 
-OMB already carries the tmux-side preservation work from issue `#1271` / PR `#1273` (`4405f582`, “Preserve Shift+Enter inside tmux-backed OMB launches”), and current `dev` still enables tmux `extended-keys=always` around OMB-owned Codex launch paths:
+### worktree_stale_entry: Git worktree entry points to missing directory
 
-- in-tmux launches wrap Codex with `withTmuxExtendedKeys(...)` in `src/cli/runtime/launch-pipeline.ts`
-- detached tmux launches acquire the same protection through the detached leader bootstrap/cleanup path in `src/cli/index.ts`
-- regression tests still cover the enable/restore/lease behavior in `src/cli/__tests__/index.test.ts`
+**Symptoms:** `git worktree list` shows an entry but the directory doesn't exist.
 
-So if `Shift+Enter` still behaves like plain `Enter`, the narrowest likely causes are:
+**Recovery:**
+1. Prune stale entries: `git worktree prune`
+2. Or use OMB cleanup: `omb doctor --worktrees`
 
-1. **tmux is not actually forwarding extended keys for the reporter's terminal path**
-   - tmux only forwards the richer key event when the attached terminal is detected as supporting extended keys
-   - `tmux show -gv extended-keys` can say `always`, but forwarding can still fail if the terminal capability is missing or not detected
-2. **the reporter is not in the OMB-owned tmux launch path**
-   - for example, reproducing in a different pane/session than the one OMB launched or after attaching through a different client path
-3. **terminal-specific capability mismatch**
-   - some terminals need an explicit tmux `terminal-features` hint for `extkeys`
+### worktree_branch_in_use: Branch already checked out in another worktree
 
-### Operator checks
+**Recovery:**
+1. Check where the branch is checked out: `git worktree list`
+2. Either remove the other worktree or use a different branch name
+3. For OMB team worktrees, the branch format is `<branch-name>/<worker-name>`
 
-Run these from the same tmux client/session where the failure happens:
+## State Lock Issues
 
-```bash
-tmux show -gv extended-keys
-tmux info | grep extkeys
-tmux show -gv terminal-features
-printf '%s\n' "$TERM" "$TERM_PROGRAM"
-```
+### Stale lock files
 
-Expected first check: `always` while OMB is actively running Codex in that tmux-managed path.
+**Symptoms:** Operations fail with lock errors even when no other OMB process is running.
 
-If `extended-keys` is **not** `always` during the failing session, that points to an OMB launch-path bug/regression.
+**Diagnosis:**
+1. Check for running OMB processes: `ps aux | grep omb`
+2. List lock files: `ls .omb/state/team/<name>/locks/`
 
-If `extended-keys` **is** `always`, but `Shift+Enter` still submits, the likely problem is terminal capability discovery or upstream Codex terminal-input interpretation rather than OMB submission logic.
+**Recovery:**
+- If no OMB process is running: `rm .omb/state/team/<name>/locks/*.lock`
+- ⚠️ Only remove lock files when you're certain no other process needs them
 
-### Typical environment fix
+## Log Issues
 
-If your terminal supports extended keys but tmux does not detect it automatically, add an `extkeys` feature hint in `~/.tmux.conf` and restart tmux:
+### Oversized log files
 
-```tmux
-set -as terminal-features ',xterm-256color:extkeys'
-```
+**Symptoms:** `.omb/state/` directory is very large.
 
-Adjust the terminal pattern if your client advertises a different terminfo name.
+**Diagnosis:**
+1. Check sizes: `du -sh .omb/state/team/<name>/events/`
+2. Check corruption log: `wc -l .omb/state/corruption-log.jsonl`
 
-### Maintainer triage guidance
+**Recovery:**
+- Event logs auto-rotate when they exceed 10MB (every 100th write)
+- Delivery logs are sharded by day
+- Manual cleanup of old logs: `rm .omb/logs/team-delivery-2025-*.jsonl`
 
-- **Open a code fix** only if you can show current `dev` fails to set `extended-keys=always` on the live OMB-owned tmux launch path.
-- **Close as environment limitation** if current `dev` sets the tmux option correctly but the reporter's terminal path still does not forward the richer key event.
-- **Prefer a docs follow-up** when the root problem is discoverability/operator guidance rather than a broken OMB codepath.
+## Lease Issues
+
+### Task claim never expires
+
+**Symptoms:** Task appears permanently claimed by a worker that's no longer running.
+
+**Diagnosis:**
+1. Check task claim: `omb team api read-task --input '{"team_name":"<name>","task_id":"1"}'`
+2. Check if `leased_until` is a valid date
+
+**Recovery:**
+- Invalid lease dates are now auto-expired (treated as expired)
+- Wait for the 15-minute lease TTL to expire, then: `omb team api release-task-claim --input '...'`
+
+## Error Code Reference
+
+| Error Code | Category | Recovery |
+|-----------|----------|----------|
+| `worktree_dirty` | Worktree | Commit/stash changes |
+| `worktree_owner_mismatch` | Worktree | Check owner metadata, use doctor |
+| `worktree_not_git` | Worktree | Remove non-git directory |
+| `worktree_stale_entry` | Worktree | Run `git worktree prune` |
+| `worktree_branch_in_use` | Worktree | Use different branch or remove other worktree |
+| `worktree_path_conflict` | Worktree | Remove conflicting directory |
+| `worktree_target_mismatch` | Worktree | Verify branch/HEAD matches expected |
+| `claim_corrupt` | Task | Auto-reclaimed; check corruption log |
+| `lease_corrupt_reclaimed` | Task | Auto-recovered; no action needed |
+
+---
+
+Also see [Troubleshooting execution readiness](#) for install-vs-execution issues, auth errors, proxy mismatches, and tmux key handling.

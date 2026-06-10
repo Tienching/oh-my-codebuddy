@@ -7,6 +7,7 @@ import {
   isTeamDispatchRequestStatus,
   type TeamDispatchRequestStatus,
 } from '../contracts.js';
+import { safeStateText, redactSensitiveValues, STATE_TEXT_LIMITS } from '../../utils/state-text-safety.js';
 
 export type TeamDispatchRequestKind = 'inbox' | 'mailbox' | 'nudge';
 export type TeamDispatchTransportPreference = 'hook_preferred_with_fallback' | 'transport_direct' | 'prompt_stdin';
@@ -106,7 +107,7 @@ export function normalizeDispatchRequest(
     to_worker: raw.to_worker,
     worker_index: typeof raw.worker_index === 'number' ? raw.worker_index : undefined,
     pane_id: typeof raw.pane_id === 'string' && raw.pane_id !== '' ? raw.pane_id : undefined,
-    trigger_message: raw.trigger_message,
+    trigger_message: safeStateText(redactSensitiveValues(raw.trigger_message), STATE_TEXT_LIMITS.MAX_TRIGGER_MESSAGE_LENGTH),
     intent: isTeamReminderIntent(raw.intent) ? raw.intent : undefined,
     message_id: typeof raw.message_id === 'string' && raw.message_id !== '' ? raw.message_id : undefined,
     inbox_correlation_key:
@@ -123,7 +124,9 @@ export function normalizeDispatchRequest(
     notified_at: typeof raw.notified_at === 'string' && raw.notified_at !== '' ? raw.notified_at : undefined,
     delivered_at: typeof raw.delivered_at === 'string' && raw.delivered_at !== '' ? raw.delivered_at : undefined,
     failed_at: typeof raw.failed_at === 'string' && raw.failed_at !== '' ? raw.failed_at : undefined,
-    last_reason: typeof raw.last_reason === 'string' && raw.last_reason !== '' ? raw.last_reason : undefined,
+    last_reason: typeof raw.last_reason === 'string' && raw.last_reason !== ''
+      ? safeStateText(redactSensitiveValues(raw.last_reason), STATE_TEXT_LIMITS.MAX_DISPATCH_REASON_LENGTH)
+      : undefined,
   });
 }
 

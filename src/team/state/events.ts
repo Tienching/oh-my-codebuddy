@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, rename, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { TeamEvent } from './types.js';
 import { isWakeableTeamEventType } from '../contracts.js';
 import { teamEventLogPath, appendTeamEvent } from '../state.js';
@@ -84,6 +86,45 @@ function matchesEventQuery(event: TeamEvent, opts: TeamEventReadOptions): boolea
   if (opts.taskId && event.task_id !== opts.taskId) return false;
   return true;
 }
+
+// ── Rotation ──────────────────────────────────────────────────────────
+
+const DEFAULT_MAX_EVENT_LOG_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Rotate the team event log if it exceeds the size limit.
+ * Keeps the most recent half of entries. Uses atomic write via temp file.
+ */
+export async function rotateTeamEventLog(
+  teamName: string,
+  cwd: string,
+  maxBytes: number = DEFAULT_MAX_EVENT_LOG_SIZE_BYTES,
+): Promise<boolean> {
+  const p = teamEventLogPath(teamName, cwd);
+  if (!existsSync(p)) return false;
+
+  try {
+    const stats = await stat(p);
+    if (stats.size <= maxBytes) return false;
+
+    const content = await readFile(p, 'utf8');
+    const lines = content.trim().split('\n');
+    if (lines.length < 2) return false;
+
+    // Keep the most recent half
+    const keepCount = Math.ceil(lines.length / 2);
+    const kept = lines.slice(-keepCount);
+
+    const tmp = join(join(p, '..'), `events-rotate-${randomUUID()}.tmp`);
+    await writeFile(tmp, kept.join('\n') + '\n', 'utf8');
+    await rename(tmp, p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ── Read ─────────────────────────────────────────────────────────────
 
 export async function readTeamEvents(
   teamName: string,

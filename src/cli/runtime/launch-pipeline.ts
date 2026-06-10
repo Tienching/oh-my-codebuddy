@@ -1088,7 +1088,7 @@ export function buildTmuxSessionName(cwd: string, sessionId: string): string {
   let branchToken = "detached";
   const branch = tryReadGitValue(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
   if (branch) branchToken = sanitizeTmuxToken(branch);
-  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^(?:omb|omb)-/, ""));
+  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^omb-/, ""));
   const prefix = `omb-${dirToken}-${branchToken}`;
   const name = `${prefix}-${sessionToken}`;
   if (name.length <= 120) return name;

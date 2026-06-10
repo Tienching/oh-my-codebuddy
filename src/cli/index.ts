@@ -252,8 +252,10 @@ Options:
   --telegram     Select Telegram provider for temporary notification mode
   --custom <name>
                 Select custom/OpenClaw gateway name for temporary notification mode
-  -w, --worktree[=<name>]
-                Launch {product} in a git worktree (detached when no name is given)
+  -w, --worktree
+                Launch {product} in a detached git worktree
+  --worktree=<name>
+                Launch in a named git worktree branch
   --force       Force reinstall (overwrite existing files)
   --dry-run     Show what would be done without doing it
   --keep-config Skip settings.json cleanup during uninstall

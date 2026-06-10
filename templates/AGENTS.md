@@ -224,7 +224,7 @@ Ralph / Ralplan execution gate:
 Skills are workflow commands.
 Core workflows include `autopilot`, `ralph`, `ultrawork`, `visual-verdict`, `web-clone`, `switch`, `ecomode`, `team`, `swarm`, `ultraqa`, `plan`, `deep-interview` (Socratic deep interview, Ouroboros-inspired), and `ralplan`.
 Utilities include `cancel`, `note`, `doctor`, `help`, and `trace`.
-Installed SKILL.md files live under `~/.codex/skills/<skill>/SKILL.md` in the active provider home; role prompts live under `~/.codex/prompts/<role>.md`. Setup rewrites those template paths to the actual install scope (project-local `.codex` / `.codebuddy` vs user home) based on provider.
+Installed SKILL.md files live under `{{CODEX_HOME}}/skills/<skill>/SKILL.md` in the active provider home; role prompts live under `{{CODEX_HOME}}/prompts/<role>.md`. Setup rewrites those template paths to the actual install scope (project-local `.codex` / `.codebuddy` vs user home) based on provider.
 </skills>
 
 ---

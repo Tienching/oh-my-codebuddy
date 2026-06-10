@@ -34,7 +34,7 @@ export function isHudWatchPane(pane: TmuxPaneSnapshot): boolean {
   return (
     /\bhud\b/.test(command)
     && /--watch\b/.test(command)
-    && (/\b(?:omb|omb)(?:\.js)?\b/.test(command) || /\bnode\b/.test(command))
+    && (/\bomb(?:\.js)?\b/.test(command) || /\bnode\b/.test(command))
   );
 }
 

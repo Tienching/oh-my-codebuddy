@@ -11,6 +11,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lockfile-drift:
+    name: Lockfile Drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify lockfile is in sync
+        run: |
+          npm install --package-lock-only
+          if ! git diff --exit-code package-lock.json; then
+            echo "::error::package-lock.json is out of sync with package.json"
+            exit 1
+          fi
+
   rustfmt:
     name: Rust Format
     runs-on: ubuntu-latest
@@ -325,11 +344,41 @@ jobs:
       - name: Run Ralph persistence verification matrix
         run: npm run test:ralph-persistence:compiled
 
+  pack-smoke:
+    name: Pack Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build-dist]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Download prebuilt dist artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ci-dist-node20
+          path: dist
+      - name: Verify npm pack includes required assets
+        run: |
+          TARBALL=$(npm pack --dry-run --json 2>/dev/null | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8');const j=JSON.parse(d);console.log(j[0]?.filename||'')")
+          echo "Pack tarball: $TARBALL"
+          npm pack --dry-run 2>&1 | grep -E '(dist/cli/omb\.js|dist/team/|templates/|skills/|prompts/|crates/)' || {
+            echo "::error::npm pack is missing required assets"
+            exit 1
+          }
+      - name: Verify CLI help works from packed artifact
+        run: |
+          node dist/cli/omb.js --help | head -5
+          node dist/cli/omb.js team api --help | head -5
+
   build:
     name: Build (Full Source Build)
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [rustfmt, clippy, lint, typecheck, build-dist, test, ralph-persistence-gate]
+    needs: [lockfile-drift, rustfmt, clippy, lint, typecheck, build-dist, test, ralph-persistence-gate, pack-smoke]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
@@ -352,11 +401,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [rustfmt, clippy, lint, typecheck, test, coverage-team-critical, coverage-ts-full, coverage-rust, ralph-persistence-gate, build]
+    needs: [lockfile-drift, rustfmt, clippy, lint, typecheck, test, coverage-team-critical, coverage-ts-full, coverage-rust, ralph-persistence-gate, pack-smoke, build]
     steps:
       - name: Check required job results
         run: |
-          if [[ "${{ needs.rustfmt.result }}" != "success" ]] ||
+          if [[ "${{ needs.lockfile-drift.result }}" != "success" ]] ||
+             [[ "${{ needs.rustfmt.result }}" != "success" ]] ||
              [[ "${{ needs.clippy.result }}" != "success" ]] ||
              [[ "${{ needs.lint.result }}" != "success" ]] ||
              [[ "${{ needs.typecheck.result }}" != "success" ]] ||
@@ -365,8 +415,10 @@ jobs:
              [[ "${{ needs.coverage-ts-full.result }}" != "success" ]] ||
              [[ "${{ needs.coverage-rust.result }}" != "success" ]] ||
              [[ "${{ needs.ralph-persistence-gate.result }}" != "success" ]] ||
+             [[ "${{ needs.pack-smoke.result }}" != "success" ]] ||
              [[ "${{ needs.build.result }}" != "success" ]]; then
             echo "::error::One or more required CI jobs failed"
+            echo "  lockfile-drift: ${{ needs.lockfile-drift.result }}"
             echo "  rustfmt: ${{ needs.rustfmt.result }}"
             echo "  clippy: ${{ needs.clippy.result }}"
             echo "  lint: ${{ needs.lint.result }}"
@@ -376,6 +428,7 @@ jobs:
             echo "  coverage-ts-full: ${{ needs.coverage-ts-full.result }}"
             echo "  coverage-rust: ${{ needs.coverage-rust.result }}"
             echo "  ralph-persistence-gate: ${{ needs.ralph-persistence-gate.result }}"
+            echo "  pack-smoke: ${{ needs.pack-smoke.result }}"
             echo "  build: ${{ needs.build.result }}"
             exit 1
           fi

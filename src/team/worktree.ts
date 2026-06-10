@@ -1,6 +1,8 @@
 import { execFile as execFileCb, execFileSync, spawnSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { basename, dirname, join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 import {
   assertCurrentTaskBranchAvailable,
@@ -36,6 +38,8 @@ export interface PlannedWorktreeTarget {
   detached: boolean;
   baseRef: string;
   branchName: string | null;
+  teamName: string;
+  workerName: string;
 }
 
 export interface EnsureWorktreeResult {
@@ -63,6 +67,95 @@ interface GitWorktreeEntry {
 
 const BRANCH_IN_USE_PATTERN = /already checked out|already used by worktree|is already checked out/i;
 
+export const WORKTREE_ERROR_CODES = {
+  WORKTREE_DIRTY: 'worktree_dirty',
+  WORKTREE_OWNER_MISMATCH: 'worktree_owner_mismatch',
+  WORKTREE_NOT_GIT: 'worktree_not_git',
+  WORKTREE_STALE_ENTRY: 'worktree_stale_entry',
+  WORKTREE_BRANCH_IN_USE: 'worktree_branch_in_use',
+  WORKTREE_PATH_CONFLICT: 'worktree_path_conflict',
+  WORKTREE_TARGET_MISMATCH: 'worktree_target_mismatch',
+} as const;
+
+export type WorktreeErrorCode = typeof WORKTREE_ERROR_CODES[keyof typeof WORKTREE_ERROR_CODES];
+
+export type DirectoryType = 'empty' | 'git_worktree' | 'git_repo' | 'non_git_directory' | 'does_not_exist';
+
+export function classifyDirectory(path: string): DirectoryType {
+  if (!existsSync(path)) return 'does_not_exist';
+  try {
+    const stat = statSync(path);
+    if (!stat.isDirectory()) return 'non_git_directory';
+  } catch {
+    return 'does_not_exist';
+  }
+
+  const gitDir = join(path, '.git');
+  if (!existsSync(gitDir)) return 'non_git_directory';
+
+  try {
+    const gitStat = statSync(gitDir);
+    if (gitStat.isFile()) {
+      // .git file means this is a worktree (points to main repo)
+      return 'git_worktree';
+    }
+    if (gitStat.isDirectory()) {
+      return 'git_repo';
+    }
+  } catch {
+    return 'non_git_directory';
+  }
+
+  return 'non_git_directory';
+}
+
+export interface WorktreeOwnerMetadata {
+  team_name: string;
+  worker_name: string;
+  repo_root: string;
+  base_ref: string;
+  mode: 'detached' | 'named';
+  branch_name: string | null;
+  created_at: string;
+  omb_version: string;
+}
+
+const WORKTREE_OWNER_FILE = '.omb-worktree-owner.json';
+
+function writeWorktreeOwnerMetadata(
+  worktreePath: string,
+  meta: WorktreeOwnerMetadata,
+): void {
+  writeFileSync(
+    join(worktreePath, WORKTREE_OWNER_FILE),
+    JSON.stringify(meta, null, 2),
+    'utf8',
+  );
+}
+
+export function readWorktreeOwnerMetadata(
+  worktreePath: string,
+): WorktreeOwnerMetadata | null {
+  const p = join(worktreePath, WORKTREE_OWNER_FILE);
+  try {
+    const raw = readFileSync(p, 'utf8');
+    return JSON.parse(raw) as WorktreeOwnerMetadata;
+  } catch {
+    return null;
+  }
+}
+
+function getOmbVersion(): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const pkgPath = join(dirname(__filename), '..', '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version?: string };
+    return pkg.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 export function isGitRepository(cwd: string): boolean {
   const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd,
@@ -72,13 +165,16 @@ export function isGitRepository(cwd: string): boolean {
   return result.status === 0;
 }
 
-function sanitizePathToken(value: string): string {
+export function sanitizePathToken(value: string): string {
   const normalized = value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
-  return normalized || 'default';
+  const base = normalized || 'default';
+  // Add 6-char hash of original value for collision resistance
+  const hash = createHash('sha256').update(value).digest('hex').slice(0, 6);
+  return `${base}-${hash}`;
 }
 
 function readGit(repoRoot: string, args: string[]): string {
@@ -129,7 +225,10 @@ export function isWorktreeDirty(worktreePath: string): boolean {
     const stderr = (result.stderr || '').trim();
     throw new Error(stderr || `worktree_status_failed:${worktreePath}`);
   }
-  return (result.stdout || '').trim() !== '';
+  const lines = (result.stdout || '').trim().split('\n').filter(Boolean);
+  // Ignore our own owner metadata file in dirty detection
+  const nonOwnerLines = lines.filter(line => !line.includes(WORKTREE_OWNER_FILE));
+  return nonOwnerLines.length > 0;
 }
 
 export function readWorkspaceStatusLines(cwd: string): string[] {
@@ -308,17 +407,11 @@ export function parseWorktreeMode(args: string[]): ParsedWorktreeMode {
     const arg = String(rawArg || '');
 
     if (arg === '--worktree' || arg === '-w') {
-      // Peek at the next argument: if it looks like a git branch name (not a
-      // flag and not a team worker spec like "3:debugger"), consume it as the
-      // branch name. Colons are not valid in git branch names, so we use that
-      // to distinguish branch names from other positional args.
-      const next = args[i + 1];
-      if (typeof next === 'string' && next.length > 0 && !next.startsWith('-') && !next.includes(':')) {
-        mode = { enabled: true, detached: false, name: next };
-        i += 1;
-      } else {
-        mode = { enabled: true, detached: true, name: null };
-      }
+      // Bare --worktree/-w always means detached mode.
+      // Named branches must use --worktree=<name> or -w=<name>.
+      // Previously, space-separated --worktree <name> consumed the next
+      // positional arg as a branch name, which could swallow task text.
+      mode = { enabled: true, detached: true, name: null };
       continue;
     }
 
@@ -371,6 +464,8 @@ export function planWorktreeTarget(input: WorktreePlanInput): PlannedWorktreeTar
     detached: input.mode.detached,
     baseRef,
     branchName,
+    teamName: input.teamName || '',
+    workerName: input.workerName || '',
   };
 }
 
@@ -391,17 +486,39 @@ export function ensureWorktree(
   const expectedBranchRef = plan.branchName ? `refs/heads/${plan.branchName}` : null;
 
   if (existingAtPath) {
+    // Validate owner metadata before reusing
+    const ownerMeta = readWorktreeOwnerMetadata(plan.worktreePath);
+    if (ownerMeta) {
+      if (ownerMeta.team_name !== plan.teamName ||
+          ownerMeta.worker_name !== plan.workerName) {
+        throw new Error(
+          `worktree_owner_mismatch: path ${plan.worktreePath} owned by team=${ownerMeta.team_name} worker=${ownerMeta.worker_name}, ` +
+          `but current context is team=${plan.teamName} worker=${plan.workerName}. ` +
+          `To fix: remove the stale worktree or reassign ownership, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+        );
+      }
+    }
+
     if (plan.detached) {
       if (!existingAtPath.detached || existingAtPath.head !== plan.baseRef) {
-        throw new Error(`worktree_target_mismatch:${plan.worktreePath}`);
+        throw new Error(
+          `worktree_target_mismatch: path ${plan.worktreePath} HEAD or detached mode does not match expected target. ` +
+          `To fix: remove the mismatched worktree, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+        );
       }
     } else if (existingAtPath.branchRef !== expectedBranchRef) {
-      throw new Error(`worktree_target_mismatch:${plan.worktreePath}`);
+      throw new Error(
+        `worktree_target_mismatch: path ${plan.worktreePath} branch ${existingAtPath.branchRef} does not match expected ${expectedBranchRef}. ` +
+        `To fix: remove the mismatched worktree, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+      );
     }
 
     const dirty = isWorktreeDirty(plan.worktreePath);
     if (dirty && !options.allowDirtyReuse) {
-      throw new Error(`worktree_dirty:${plan.worktreePath}`);
+      throw new Error(
+        `worktree_dirty: path ${plan.worktreePath} has uncommitted changes. ` +
+        `To fix: commit or stash changes, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+      );
     }
 
     const reused = {
@@ -429,11 +546,24 @@ export function ensureWorktree(
   }
 
   if (existsSync(plan.worktreePath)) {
-    throw new Error(`worktree_path_conflict:${plan.worktreePath}`);
+    const dirType = classifyDirectory(plan.worktreePath);
+    if (dirType === 'non_git_directory' || dirType === 'git_repo') {
+      throw new Error(
+        `worktree_not_git: path ${plan.worktreePath} exists but is not a git worktree (classified as ${dirType}). ` +
+        `To fix: remove or relocate the directory, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+      );
+    }
+    throw new Error(
+      `worktree_path_conflict: path ${plan.worktreePath} already exists (classified as ${dirType}). ` +
+      `To fix: remove the conflicting directory, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+    );
   }
 
   if (plan.branchName && hasBranchInUse(allWorktrees, plan.branchName, plan.worktreePath)) {
-    throw new Error(`branch_in_use:${plan.branchName}`);
+    throw new Error(
+      `worktree_branch_in_use: branch ${plan.branchName} is already checked out in another worktree. ` +
+      `To fix: remove the other worktree first, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+    );
   }
 
   if (plan.branchName) {
@@ -461,7 +591,10 @@ export function ensureWorktree(
   if (result.status !== 0) {
     const stderr = (result.stderr || '').trim();
     if (plan.branchName && BRANCH_IN_USE_PATTERN.test(stderr)) {
-      throw new Error(`branch_in_use:${plan.branchName}`);
+      throw new Error(
+        `worktree_branch_in_use: branch ${plan.branchName} is already checked out in another worktree. ` +
+        `To fix: remove the other worktree first, or run 'omb doctor --worktrees' for cleanup suggestions.`,
+      );
     }
     throw new Error(stderr || `worktree_add_failed:${addArgs.join(' ')}`);
   }
@@ -476,6 +609,42 @@ export function ensureWorktree(
     reused: false,
     createdBranch: Boolean(plan.branchName && !branchAlreadyExisted),
   } satisfies EnsureWorktreeResult;
+
+  // Write ownership metadata
+  writeWorktreeOwnerMetadata(ensured.worktreePath, {
+    team_name: plan.teamName,
+    worker_name: plan.workerName,
+    repo_root: plan.repoRoot,
+    base_ref: plan.baseRef,
+    mode: plan.detached ? 'detached' : 'named',
+    branch_name: plan.branchName,
+    created_at: new Date().toISOString(),
+    omb_version: getOmbVersion(),
+  });
+
+  // Add owner file to the worktree's info/exclude so git ignores it without
+  // creating a tracked .gitignore entry (which would make the worktree dirty).
+  // Use `git rev-parse --git-path` to resolve the correct path for worktrees
+  // where .git is a file, not a directory.
+  try {
+    const excludePath = readGit(ensured.worktreePath, ['rev-parse', '--git-path', 'info/exclude']);
+    if (excludePath) {
+      const gitInfoDir = dirname(excludePath);
+      mkdirSync(gitInfoDir, { recursive: true });
+      let excludeContent = '';
+      if (existsSync(excludePath)) {
+        excludeContent = readFileSync(excludePath, 'utf8');
+      }
+      if (!excludeContent.split(/\r?\n/).includes(WORKTREE_OWNER_FILE)) {
+        const appended = excludeContent
+          ? (excludeContent.endsWith('\n') ? excludeContent : excludeContent + '\n') + WORKTREE_OWNER_FILE + '\n'
+          : WORKTREE_OWNER_FILE + '\n';
+        writeFileSync(excludePath, appended, 'utf8');
+      }
+    }
+  } catch {
+    // Non-critical: if exclude update fails, the worktree is still functional
+  }
 
   if (plan.branchName) {
     upsertCurrentTaskBaseline(plan.repoRoot, {
@@ -548,4 +717,39 @@ export async function removeWorktreeForce(repoRoot: string, worktreePath: string
     cwd: repoRoot,
     encoding: 'utf-8',
   });
+}
+
+export interface StaleWorktreeEntry {
+  path: string;
+  branchRef: string | null;
+  head: string;
+}
+
+export function findStaleWorktreeEntries(repoRoot: string): StaleWorktreeEntry[] {
+  const entries = listWorktrees(repoRoot);
+  return entries
+    .filter(entry => !existsSync(entry.path))
+    .map(entry => ({
+      path: entry.path,
+      branchRef: entry.branchRef,
+      head: entry.head,
+    }));
+}
+
+export function pruneStaleWorktrees(repoRoot: string): StaleWorktreeEntry[] {
+  const stale = findStaleWorktreeEntries(repoRoot);
+  if (stale.length === 0) return [];
+  const result = spawnSync('git', ['worktree', 'prune'], {
+    cwd: repoRoot,
+    encoding: 'utf-8',
+      windowsHide: true,
+    });
+  if (result.status !== 0) {
+    const stderr = (result.stderr || '').trim();
+    throw new Error(
+      `worktree_stale_entry: failed to prune stale worktree entries: ${stderr || 'unknown error'}. ` +
+      `To fix: run 'git worktree prune' manually, or use 'omb doctor --worktrees' for cleanup suggestions.`,
+    );
+  }
+  return stale;
 }

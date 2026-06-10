@@ -18,8 +18,8 @@ const SIGTERM_GRACE_MS = 5_000;
 const STALE_TMP_MAX_AGE_MS = 60 * 60 * 1000;
 const OMB_MCP_SERVER_PATTERN = /(?:^|[\\/])dist[\\/]mcp[\\/](?:state|memory|code-intel|trace)-server\.(?:[cm]?js|ts)\b/i;
 const CODEX_PROCESS_PATTERN = /(?:^|[\\/\s])codex(?:\.js)?(?:\s|$)|@openai[\\/]codex/i;
-const OMB_LAUNCH_PROCESS_PATTERN = /(?:^|[\\/\s])(?:omb|omb)(?:\.js)?(?:\s|$)|(?:^|[\\/])(?:bin|dist[\\/]cli)[\\/](?:omb|omb)\.js(?:\s|$)|(?:oh-my-codebuddy|oh-my-codebuddy)[\\/]dist[\\/]cli[\\/](?:omb|omb)\.js/i;
-const OMB_TMP_DIRECTORY_PATTERN = /^(omc|omb|omb|oh-my-codebuddy|oh-my-codebuddy)-/;
+const OMB_LAUNCH_PROCESS_PATTERN = /(?:^|[\\/\s])omb(?:\.js)?(?:\s|$)|(?:^|[\\/])(?:bin|dist[\\/]cli)[\\/]omb\.js(?:\s|$)|(?:oh-my-codebuddy)[\\/]dist[\\/]cli[\\/]omb\.js/i;
+const OMB_TMP_DIRECTORY_PATTERN = /^(omc|omb|oh-my-codebuddy)-/;
 
 export interface ProcessEntry {
   pid: number;

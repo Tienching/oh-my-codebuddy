@@ -51,7 +51,7 @@ export interface TeamSession {
   resizeHookTarget: string | null;
 }
 
-const INJECTION_MARKERS = ['[OMB_TMUX_INJECT]', '[OMB_TMUX_INJECT]'] as const;
+const INJECTION_MARKERS = ['[OMB_TMUX_INJECT]'] as const;
 const MODEL_INSTRUCTIONS_FILE_KEY = 'model_instructions_file';
 const REASONING_KEY = 'model_reasoning_effort';
 const OMB_BYPASS_DEFAULT_SYSTEM_PROMPT_ENV = 'OMB_BYPASS_DEFAULT_SYSTEM_PROMPT';
@@ -182,7 +182,7 @@ export function listPaneIds(target: string): string[] {
 
 function isHudWatchPane(pane: TmuxPaneInfo): boolean {
   const start = pane.startCommand || '';
-  return /\b(?:omb|omb)\b.*\bhud\b.*--watch/i.test(start);
+  return /\bomb\b.*\bhud\b.*--watch/i.test(start);
 }
 
 export function chooseTeamLeaderPaneId(panes: TmuxPaneInfo[], preferredPaneId: string): string {

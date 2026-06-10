@@ -1,16 +1,14 @@
 import { existsSync } from 'fs';
 import { mkdir, readFile, rm, stat, writeFile } from 'fs/promises';
-import { dirname, join, sep } from 'path';
+import { dirname, join } from 'path';
 
-function mirrorLockDir(lockDir: string): string | null {
-  const canonicalSegment = `${sep}.omb${sep}state${sep}`;
-  const legacySegment = `${sep}.omb${sep}state${sep}`;
-  if (lockDir.includes(canonicalSegment)) {
-    return lockDir.replace(canonicalSegment, legacySegment);
-  }
-  if (lockDir.includes(legacySegment)) {
-    return lockDir.replace(legacySegment, canonicalSegment);
-  }
+/**
+ * Mirror a lock directory to its compat path. Since the brand migration from
+ * .omc → .omb completed April 2026, there is no separate legacy state
+ * directory, so mirroring is always a no-op (returns null).
+ * Retained as a hook in case a future state-directory split needs it.
+ */
+function mirrorLockDir(_lockDir: string): string | null {
   return null;
 }
 

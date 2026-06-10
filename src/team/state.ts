@@ -3,6 +3,7 @@ import { join, dirname, resolve, sep } from 'path';
 import { existsSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { ombStateDir } from '../utils/paths.js';
+import { safeStateText, safeStateMetadata, redactSensitiveValues, redactMetadataSecrets, STATE_TEXT_LIMITS } from '../utils/state-text-safety.js';
 import { isTerminalPhase, type TeamPhase, type TerminalPhase } from './orchestrator.js';
 import {
   computeTaskReadiness as computeTaskReadinessImpl,
@@ -702,24 +703,49 @@ export async function writeAtomic(filePath: string, data: string): Promise<void>
     throw error;
   }
 
-  const canonicalSegment = `${sep}.omb${sep}state${sep}`;
-  const legacySegment = `${sep}.omb${sep}state${sep}`;
-  const mirrorPath = filePath.includes(canonicalSegment)
-    ? filePath.replace(canonicalSegment, legacySegment)
-    : filePath.includes(legacySegment)
-      ? filePath.replace(legacySegment, canonicalSegment)
+  // Brand migration (.omc → .omb) completed April 2026; no separate legacy
+  // state directory exists, so the mirror write is a no-op. Retained as a
+  // hook in case a future state-directory split needs dual-write.
+}
+
+/** Log a state corruption event to .omb/state/corruption-log.jsonl for doctor/diagnostics. */
+async function logCorruption(filePath: string, kind: string, detail: string): Promise<void> {
+  try {
+    const stateRoot = dirname(filePath).includes(`${sep}state${sep}`)
+      ? resolve(dirname(filePath), '..').split(`${sep}state`).slice(0, -1).join(`${sep}state`) + `${sep}state`
       : null;
-  if (mirrorPath && mirrorPath !== filePath) {
-    const mirrorParent = dirname(mirrorPath);
-    await mkdir(mirrorParent, { recursive: true });
-    const mirrorTmpPath = `${mirrorPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}`;
-    await writeFile(mirrorTmpPath, data, 'utf8');
-    try {
-      await renameForAtomicWrite(mirrorTmpPath, mirrorPath);
-    } catch (error) {
-      await rm(mirrorTmpPath, { force: true }).catch(() => {});
-      throw error;
-    }
+    if (!stateRoot) return;
+    const logPath = join(stateRoot, 'corruption-log.jsonl');
+    const entry = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      path: filePath,
+      kind,
+      detail,
+    }) + '\n';
+    await appendFile(logPath, entry, 'utf8');
+  } catch {
+    // Corruption logging is best-effort; never let it break the caller.
+  }
+}
+
+export interface CorruptionEntry {
+  timestamp: string;
+  path: string;
+  kind: string;
+  detail: string;
+}
+
+/** Read corruption log entries from .omb/state/corruption-log.jsonl. Returns empty array if no log exists. */
+export async function readCorruptionLog(cwd: string): Promise<CorruptionEntry[]> {
+  const logPath = join(resolve(ombStateDir(cwd)), 'corruption-log.jsonl');
+  if (!existsSync(logPath)) return [];
+  try {
+    const raw = await readFile(logPath, 'utf8');
+    return raw.split('\n').filter(Boolean).map((line) => {
+      try { return JSON.parse(line) as CorruptionEntry; } catch { return null; }
+    }).filter((e): e is CorruptionEntry => e !== null);
+  } catch {
+    return [];
   }
 }
 
@@ -988,8 +1014,17 @@ export async function readTeamManifestV2(teamName: string, cwd: string): Promise
     const p = teamManifestV2Path(teamName, cwd);
     if (!existsSync(p)) return null;
     const raw = await readFile(p, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isTeamManifestV2(parsed)) return null;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      await logCorruption(p, 'json_parse_error', `Team ${teamName} manifest JSON is malformed`);
+      return null;
+    }
+    if (!isTeamManifestV2(parsed)) {
+      await logCorruption(p, 'schema_mismatch', `Team ${teamName} manifest failed schema validation`);
+      return null;
+    }
     const parsedManifest = parsed as TeamManifestV2 & {
       policy?: Partial<TeamPolicy> & Partial<TeamGovernance>;
       governance?: Partial<TeamGovernance>;
@@ -1074,10 +1109,21 @@ export async function readTeamConfig(teamName: string, cwd: string): Promise<Tea
     const p = teamConfigPath(teamName, cwd);
     if (!existsSync(p)) return null;
     const raw = await readFile(p, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object') return null;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      await logCorruption(p, 'json_parse_error', `Team ${teamName} config JSON is malformed`);
+      return null;
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      await logCorruption(p, 'schema_mismatch', `Team ${teamName} config failed basic object check`);
+      return null;
+    }
     return normalizeTeamConfig(parsed as TeamConfig);
-  } catch {
+  } catch (error) {
+    const p = teamConfigPath(teamName, cwd);
+    await logCorruption(p, 'io_error', `Team ${teamName} config read error: ${(error as Error).message}`);
     return null;
   }
 }
@@ -1127,13 +1173,21 @@ export async function readWorkerStatus(teamName: string, workerName: string, cwd
   const p = join(workerDir(teamName, workerName, cwd), 'status.json');
   try {
     const raw = await readFile(p, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      await logCorruption(p, 'json_parse_error', `Worker ${workerName} status JSON is malformed`);
+      return unknownStatus;
+    }
     if (!isWorkerStatus(parsed)) {
+      await logCorruption(p, 'schema_mismatch', `Worker ${workerName} status failed schema validation`);
       return unknownStatus;
     }
     return parsed;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return unknownStatus;
+    await logCorruption(p, 'io_error', `Worker ${workerName} status read error: ${(error as Error).message}`);
     return unknownStatus;
   }
 }
@@ -1235,13 +1289,32 @@ export async function createTask(
 
 // Read a task (returns null on missing/malformed)
 export async function readTask(teamName: string, taskId: string, cwd: string): Promise<TeamTask | null> {
+  let p: string;
   try {
-    const p = taskFilePath(teamName, taskId, cwd);
+    p = taskFilePath(teamName, taskId, cwd);
+  } catch {
+    // Invalid task ID — not a corruption case, just a bad request.
+    return null;
+  }
+  try {
     if (!existsSync(p)) return null;
     const raw = await readFile(p, 'utf8');
-    const parsed = JSON.parse(raw) as unknown;
-    return isTeamTask(parsed) ? normalizeTask(parsed) : null;
-  } catch {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      await logCorruption(p, 'json_parse_error', `Task ${taskId} JSON is malformed`);
+      return null;
+    }
+    if (!isTeamTask(parsed)) {
+      await logCorruption(p, 'schema_mismatch', `Task ${taskId} failed schema validation`);
+      return null;
+    }
+    return normalizeTask(parsed);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      await logCorruption(p, 'io_error', `Task ${taskId} read error: ${(error as Error).message}`);
+    }
     return null;
   }
 }
@@ -1379,9 +1452,40 @@ export async function reclaimExpiredTaskClaim(
   });
 }
 
+let eventWriteCounter = 0;
+
+/**
+ * Lazily import and call rotateTeamEventLog from the events submodule.
+ * Separated out to avoid a circular type-level dependency between state.ts
+ * and state/events.ts (events.ts imports appendTeamEvent from this file).
+ */
+async function rotateTeamEventLogIfAvailable(teamName: string, cwd: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const events = await import('./state/events.js');
+  if (typeof events.rotateTeamEventLog === 'function') {
+    await events.rotateTeamEventLog(teamName, cwd);
+  }
+}
+
 export async function appendTeamEvent(teamName: string, event: Omit<TeamEvent, 'event_id' | 'created_at' | 'team'>, cwd: string): Promise<TeamEvent> {
+  // Apply text limits and redaction
+  // Note: Omit with index signature widens property types to {}, so we
+  // extract via the known interface keys and re-type explicitly.
+  const rawReason: string | undefined = ('reason' in event ? (event as Record<string, unknown>).reason : undefined) as string | undefined;
+  let safeReason = rawReason;
+  if (safeReason) {
+    safeReason = safeStateText(redactSensitiveValues(safeReason), STATE_TEXT_LIMITS.MAX_EVENT_REASON_LENGTH);
+  }
+  const rawMetadata: Record<string, unknown> | undefined = ('metadata' in event ? (event as Record<string, unknown>).metadata : undefined) as Record<string, unknown> | undefined;
+  let safeMetadata: Record<string, unknown> | undefined = rawMetadata;
+  if (safeMetadata) {
+    safeMetadata = safeStateMetadata(redactMetadataSecrets(safeMetadata), STATE_TEXT_LIMITS.MAX_EVENT_METADATA_JSON_BYTES).value;
+  }
+
   const full = {
     ...event,
+    reason: safeReason,
+    metadata: safeMetadata,
     event_id: randomUUID(),
     team: teamName,
     created_at: new Date().toISOString(),
@@ -1389,6 +1493,15 @@ export async function appendTeamEvent(teamName: string, event: Omit<TeamEvent, '
   const p = teamEventLogPath(teamName, cwd);
   await mkdir(dirname(p), { recursive: true });
   await appendFile(p, `${JSON.stringify(full)}\n`, 'utf8');
+
+  // Periodic rotation check (every 100th event write)
+  eventWriteCounter++;
+  if (eventWriteCounter % 100 === 0) {
+    try {
+      await rotateTeamEventLogIfAvailable(teamName, cwd);
+    } catch { /* rotation failure is non-critical */ }
+  }
+
   return full;
 }
 

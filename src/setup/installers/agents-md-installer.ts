@@ -11,6 +11,10 @@ import {
   addGeneratedAgentsMarker,
   isOmbGeneratedAgentsMd,
 } from "../../utils/agents-md.js";
+import {
+  getTemplateReplacements,
+  renderTemplate,
+} from "../../utils/template-render.js";
 
 export const agentsMdInstaller: AssetInstaller = {
   name: "agents-md",
@@ -56,14 +60,15 @@ export const agentsMdInstaller: AssetInstaller = {
       const { readFile } = await import("fs/promises");
       const content = await readFile(action.source, "utf-8");
 
-      // Apply scope path rewrites
+      // Determine scope and provider from the destination path and options
       const scope = action.destination.includes("/.codebuddy/AGENTS.md") || action.destination.includes("\\.codebuddy\\AGENTS.md")
-        ? "user"
-        : "project";
+        ? "user" as const
+        : "project" as const;
+      const provider = scope === "project" ? "codebuddy" as const : "codebuddy" as const;
 
-      const rewritten = applyScopePathRewrites(
+      const rewritten = renderTemplate(
         addGeneratedAgentsMarker(content),
-        scope,
+        getTemplateReplacements(scope, provider),
       );
 
       await mkdir(join(action.destination, ".."), { recursive: true });
@@ -80,10 +85,3 @@ export const agentsMdInstaller: AssetInstaller = {
     }
   },
 };
-
-function applyScopePathRewrites(content: string, scope: string): string {
-  if (scope !== "project") return content;
-  return content
-    .replaceAll("~/.codebuddy", "./.codebuddy")
-    .replaceAll("~/.codex", "./.codebuddy");
-}

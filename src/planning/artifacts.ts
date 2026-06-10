@@ -121,7 +121,7 @@ export function readApprovedExecutionLaunchHint(
   if (!approvedPlan) return null;
 
   if (mode === 'team') {
-    const teamPattern = /(?<command>(?:(?:omb|omb)\s+team|\$team)\s+(?<ralph>ralph\s+)?(?<count>\d+)(?::(?<role>[a-z][a-z0-9-]*))?\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
+    const teamPattern = /(?<command>(?:omb\s+team|\$team)\s+(?<ralph>ralph\s+)?(?<count>\d+)(?::(?<role>[a-z][a-z0-9-]*))?\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
     const matches = [...approvedPlan.content.matchAll(teamPattern)];
     const last = matches.at(-1);
     if (!last?.groups) return null;
@@ -138,7 +138,7 @@ export function readApprovedExecutionLaunchHint(
     };
   }
 
-  const ralphPattern = /(?<command>(?:(?:omb|omb)\s+ralph|\$ralph)\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
+  const ralphPattern = /(?<command>(?:omb\s+ralph|\$ralph)\s+(?<task>"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))/gi;
   const matches = [...approvedPlan.content.matchAll(ralphPattern)];
   const last = matches.at(-1);
   if (!last?.groups) return null;

@@ -21,6 +21,10 @@ import {
   type TeamInteropErrorDetail,
   type TeamLegacyApiEnvelope,
 } from './contracts.js';
+import { validateRequiredFields as validateRequiredFieldsImport } from './api-operation-registry.js';
+
+/** Lazy-access reference to api-operation-registry to avoid circular dependency issues at module init */
+const apiOperationRegistryRef = { validateRequiredFields: validateRequiredFieldsImport };
 import { readTeamEvents, waitForTeamEvent } from './state/events.js';
 import { queueDirectMailboxMessage } from './mcp-comm.js';
 import { appendTeamDeliveryLogForCwd } from './delivery-log.js';
@@ -621,6 +625,26 @@ function validateCommonFields(args: Record<string, unknown>): void {
   }
 }
 
+/**
+ * Validate that all required fields for an operation are present in args.
+ * Returns an error envelope if validation fails, or null if all fields are present.
+ */
+function validateOperationRequiredFields(
+  operation: TeamApiOperation,
+  args: Record<string, unknown>,
+): TeamLegacyApiEnvelope<TeamApiOperation> | null {
+  const { validateRequiredFields: validateFields } = apiOperationRegistryRef;
+  const missing = validateFields(operation, args);
+  if (missing.length > 0) {
+    return {
+      ok: false as const,
+      operation,
+      error: { code: 'invalid_input', message: `Missing required fields: ${missing.join(', ')}` },
+    };
+  }
+  return null;
+}
+
 export async function executeTeamApiOperation(
   operation: TeamApiOperation,
   args: Record<string, unknown>,
@@ -628,6 +652,10 @@ export async function executeTeamApiOperation(
 ): Promise<TeamApiEnvelope> {
   try {
     validateCommonFields(args);
+    const reqValidationError = validateOperationRequiredFields(operation, args);
+    if (reqValidationError) {
+      return finalizeTeamApiEnvelope(reqValidationError);
+    }
     const teamNameForCwd = String(args.team_name || '').trim();
     const cwd = teamNameForCwd ? resolveTeamWorkingDirectory(teamNameForCwd, fallbackCwd) : fallbackCwd;
     const legacyEnvelope = await (async (): Promise<TeamLegacyApiEnvelope<TeamApiOperation>> => {

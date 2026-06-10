@@ -1,5 +1,5 @@
 import { statSync } from 'fs';
-import { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from 'child_process';
+import { spawnSync, execFileSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns, type ExecFileSyncOptions } from 'child_process';
 import { basename, delimiter, dirname, extname, join, resolve } from 'path';
 
 type ExistsSyncLike = (path: string) => boolean;
@@ -266,4 +266,143 @@ export function spawnPlatformCommandSync(
   };
   const retryResult = spawnImpl(retrySpec.command, retrySpec.args, spawnOptions);
   return { spec: retrySpec, result: retryResult };
+}
+
+// ─── Unified Command Execution Abstraction ─────────────────────────────
+// CR-P1-006: Canonical CommandResult type and wrappers for git/tmux/etc.
+// All external command execution should go through these wrappers.
+
+/**
+ * Unified result type for all platform command execution.
+ * Replaces the multiple ad-hoc result types scattered across the codebase.
+ */
+export interface CommandResult {
+  /** Whether the command exited with status 0 and no spawn error */
+  ok: boolean;
+  /** Trimmed stdout (empty string if none) */
+  stdout: string;
+  /** Trimmed stderr (empty string if none) */
+  stderr: string;
+  /** Process exit code (null if killed by signal or failed to spawn) */
+  exitCode: number | null;
+  /** Signal that killed the process, if any */
+  signal: string | null;
+  /** Spawn error classification: 'missing' | 'blocked' | 'error' | null */
+  errorKind: SpawnErrorKind | null;
+  /** Whether the command timed out */
+  timedOut: boolean;
+  /** Command label for error messages */
+  commandLabel: string;
+  /** Duration in milliseconds */
+  durationMs: number;
+}
+
+/** Options for unified command execution */
+export interface RunCommandOptions {
+  /** Working directory */
+  cwd?: string;
+  /** Environment variables */
+  env?: NodeJS.ProcessEnv;
+  /** Timeout in milliseconds (0 = no timeout) */
+  timeoutMs?: number;
+  /** Maximum stdout/stderr bytes before truncation */
+  maxOutputBytes?: number;
+  /** Whether to hide the console window on Windows (default: true) */
+  windowsHide?: boolean;
+  /** Standard input */
+  input?: string;
+}
+
+const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
+const TRUNCATION_MARKER = '\n...[output truncated]';
+
+/**
+ * Truncate output to maxBytes, preserving a marker.
+ */
+function truncateOutput(output: string, maxBytes: number): string {
+  if (maxBytes <= 0) return output;
+  const byteLength = Buffer.byteLength(output, 'utf8');
+  if (byteLength <= maxBytes) return output;
+  // Truncate to leave room for marker
+  const truncated = output.slice(0, Math.floor(maxBytes * 0.9));
+  return truncated + TRUNCATION_MARKER;
+}
+
+/**
+ * Run a command with the unified platform-aware wrapper (synchronous).
+ *
+ * Uses spawnPlatformCommandSync for cross-platform compatibility,
+ * then normalizes the result into a CommandResult.
+ */
+export function runPlatformCommandSync(
+  command: string,
+  args: string[],
+  options: RunCommandOptions = {},
+): CommandResult {
+  const start = Date.now();
+  const {
+    cwd,
+    env,
+    timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS,
+    maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
+    windowsHide = true,
+    input,
+  } = options;
+
+  const spawnOptions: SpawnSyncOptionsWithStringEncoding = {
+    encoding: 'utf-8',
+    ...(cwd ? { cwd } : {}),
+    ...(env ? { env } : {}),
+    ...(timeoutMs > 0 ? { timeout: timeoutMs } : {}),
+    windowsHide,
+    ...(input !== undefined ? { input } : {}),
+  };
+
+  const { spec, result } = spawnPlatformCommandSync(command, args, spawnOptions);
+  const durationMs = Date.now() - start;
+  const errorKind = result.error ? classifySpawnError(result.error) : null;
+  const timedOut = result.error?.message?.includes('ETIMEDOUT') ||
+    (timeoutMs > 0 && durationMs >= timeoutMs && result.status !== 0) ||
+    false;
+
+  const rawStdout = (result.stdout as string) || '';
+  const rawStderr = (result.stderr as string) || '';
+
+  return {
+    ok: result.status === 0 && !result.error,
+    stdout: truncateOutput(rawStdout.trim(), maxOutputBytes),
+    stderr: truncateOutput(rawStderr.trim(), maxOutputBytes),
+    exitCode: result.status ?? null,
+    signal: result.signal ?? null,
+    errorKind,
+    timedOut,
+    commandLabel: `${command} ${args.join(' ')}`.trim(),
+    durationMs,
+  };
+}
+
+/**
+ * Run a git command using the unified wrapper (synchronous).
+ * Shortcut for `runPlatformCommandSync('git', args, options)`.
+ */
+export function runGitCommandSync(
+  args: string[],
+  options: RunCommandOptions = {},
+): CommandResult {
+  return runPlatformCommandSync('git', args, options);
+}
+
+/**
+ * Run a tmux command using the unified wrapper (synchronous).
+ * Shortcut for `runPlatformCommandSync('tmux', args, options)`.
+ */
+export function runTmuxCommandSync(
+  args: string[],
+  options: RunCommandOptions = {},
+): CommandResult {
+  return runPlatformCommandSync('tmux', args, {
+    timeoutMs: 5_000, // tmux commands should be fast
+    ...options,
+  });
 }

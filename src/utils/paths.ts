@@ -15,14 +15,28 @@ import {
   resolveCanonicalEntryPath as boundaryResolveEntryPath,
 } from "../compat/legacy-boundary.js";
 
+/**
+ * Read an environment variable as a path, normalizing whitespace and treating
+ * blank/whitespace-only values as absent. Returns null when absent or invalid.
+ */
+function readEnvPath(name: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const raw = env[name];
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  // Reject paths containing NUL characters
+  if (trimmed.includes('\0')) return null;
+  return trimmed;
+}
+
 /** Codex CLI home directory (~/.codex/) */
 export function codexHome(): string {
-  return process.env.CODEX_HOME || join(homedir(), ".codex");
+  return readEnvPath('CODEX_HOME') || join(homedir(), ".codex");
 }
 
 /** Claude CLI home directory (~/.claude/) */
 export function claudeHome(): string {
-  return process.env.CLAUDE_HOME || join(homedir(), ".claude");
+  return readEnvPath('CLAUDE_HOME') || join(homedir(), ".claude");
 }
 
 export const OMB_ENTRY_PATH_ENV = "OMB_ENTRY_PATH";
@@ -64,8 +78,6 @@ function isCliEntryPath(value: string | null | undefined): boolean {
   if (typeof value !== "string") return false;
   const normalized = value.trim().replace(/\\/g, "/");
   return (
-    normalized.endsWith('/dist/cli/omb.js') ||
-    normalized.endsWith('/omb.js') ||
     normalized.endsWith('/dist/cli/omb.js') ||
     normalized.endsWith('/omb.js')
   );

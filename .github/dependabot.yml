@@ -4,13 +4,30 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+      day: monday
     target-branch: dev
+    open-pull-requests-limit: 5
+    groups:
+      runtime-deps:
+        patterns:
+          - "@modelcontextprotocol/*"
+          - "zod"
+      dev-deps:
+        patterns:
+          - "@types/*"
+          - "typescript"
+          - "vitest"
+          - "prettier"
+          - "eslint*"
+          - "c8"
 
   - package-ecosystem: cargo
     directory: "/"
     schedule:
       interval: weekly
+      day: monday
     target-branch: dev
+    open-pull-requests-limit: 3
 
   - package-ecosystem: github-actions
     directory: "/"

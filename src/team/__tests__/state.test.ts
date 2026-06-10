@@ -44,6 +44,7 @@ import {
   readDispatchRequest,
   readMonitorSnapshot,
   resolveDispatchLockTimeoutMs,
+  readCorruptionLog,
 } from '../state.js';
 import { normalizeDispatchRequest } from '../state/dispatch.js';
 
@@ -1181,6 +1182,57 @@ exit 1
     }
   });
 
+  it('reclaimExpiredTaskClaim reclaims a task with corrupted (invalid date) leased_until', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-team-reclaim-corrupt-'));
+    try {
+      await initTeamState('team-reclaim-corrupt', 't', 'executor', 2, cwd);
+      const t = await createTask('team-reclaim-corrupt', { subject: 'a', description: 'd', status: 'pending' }, cwd);
+      const claim = await claimTask('team-reclaim-corrupt', t.id, 'worker-1', t.version ?? 1, cwd);
+      assert.equal(claim.ok, true);
+      if (!claim.ok) return;
+
+      // Corrupt the leased_until to an invalid date string.
+      const taskPath = join(cwd, '.omb', 'state', 'team', 'team-reclaim-corrupt', 'tasks', `task-${t.id}.json`);
+      const current = JSON.parse(await readFile(taskPath, 'utf-8')) as any;
+      current.claim.leased_until = 'not-a-valid-date';
+      await writeFile(taskPath, JSON.stringify(current, null, 2));
+
+      // Corrupted lease should be treated as expired → reclaimable.
+      const reclaimed = await reclaimExpiredTaskClaim('team-reclaim-corrupt', t.id, cwd);
+      assert.equal(reclaimed.ok, true);
+      if (!reclaimed.ok) return;
+      assert.equal(reclaimed.reclaimed, true);
+      assert.equal(reclaimed.task.status, 'pending');
+
+      const secondClaim = await claimTask('team-reclaim-corrupt', t.id, 'worker-2', reclaimed.task.version ?? null, cwd);
+      assert.equal(secondClaim.ok, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('transitionTaskStatus returns lease_expired for corrupted leased_until', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-team-lease-corrupt-trans-'));
+    try {
+      await initTeamState('team-lease-corrupt-trans', 't', 'executor', 1, cwd);
+      const t = await createTask('team-lease-corrupt-trans', { subject: 'a', description: 'd', status: 'pending' }, cwd);
+      const claim = await claimTask('team-lease-corrupt-trans', t.id, 'worker-1', t.version ?? 1, cwd);
+      assert.equal(claim.ok, true);
+      if (!claim.ok) return;
+
+      const taskPath = join(cwd, '.omb', 'state', 'team', 'team-lease-corrupt-trans', 'tasks', `task-${t.id}.json`);
+      const current = JSON.parse(await readFile(taskPath, 'utf-8')) as any;
+      current.claim.leased_until = 'garbage-date-string';
+      await writeFile(taskPath, JSON.stringify(current, null, 2));
+
+      const result = await transitionTaskStatus('team-lease-corrupt-trans', t.id, 'in_progress', 'completed', claim.claimToken, cwd);
+      assert.equal(result.ok, false);
+      assert.equal(result.ok ? 'x' : result.error, 'lease_expired');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
   it('mailbox APIs: DM, broadcast, and mark delivered', async () => {
     const cwd = await mkdtemp(join(tmpdir(), 'omb-team-mailbox-'));
     try {
@@ -2114,6 +2166,60 @@ exit 1
       assert.equal(snapshot?.integrationByWorker?.['worker-1']?.last_integrated_head, 'abc123');
       assert.equal(snapshot?.integrationByWorker?.['worker-2']?.status, undefined);
       assert.equal(snapshot?.integrationByWorker?.['worker-2']?.last_integrated_head, 'def456');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('logs corruption when reading a malformed task file', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-corruption-task-'));
+    try {
+      await initTeamState('team-corrupt', 't', 'executor', 1, cwd);
+      const t = await createTask('team-corrupt', { subject: 'a', description: 'd', status: 'pending' }, cwd);
+
+      // Corrupt the task file with invalid JSON.
+      const taskPath = join(cwd, '.omb', 'state', 'team', 'team-corrupt', 'tasks', `task-${t.id}.json`);
+      await writeFile(taskPath, '{invalid json', 'utf8');
+
+      const result = await readTask('team-corrupt', t.id, cwd);
+      assert.equal(result, null);
+
+      // Corruption log should contain an entry.
+      const log = await readCorruptionLog(cwd);
+      assert.ok(log.length > 0, 'corruption log should not be empty');
+      assert.ok(log.some(e => e.kind === 'json_parse_error' && e.path.includes(`task-${t.id}.json`)),
+        'corruption log should contain json_parse_error for the corrupted task');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('logs corruption when reading a task with wrong schema', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-corruption-schema-'));
+    try {
+      await initTeamState('team-schema', 't', 'executor', 1, cwd);
+      const t = await createTask('team-schema', { subject: 'a', description: 'd', status: 'pending' }, cwd);
+
+      // Write a valid JSON that's not a valid TeamTask.
+      const taskPath = join(cwd, '.omb', 'state', 'team', 'team-schema', 'tasks', `task-${t.id}.json`);
+      await writeFile(taskPath, JSON.stringify({ foo: 'bar' }), 'utf8');
+
+      const result = await readTask('team-schema', t.id, cwd);
+      assert.equal(result, null);
+
+      const log = await readCorruptionLog(cwd);
+      assert.ok(log.some(e => e.kind === 'schema_mismatch'),
+        'corruption log should contain schema_mismatch');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('returns empty corruption log when no corruption has occurred', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-corruption-empty-'));
+    try {
+      const log = await readCorruptionLog(cwd);
+      assert.deepEqual(log, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

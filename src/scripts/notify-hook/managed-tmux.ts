@@ -42,7 +42,7 @@ export function buildExpectedManagedTmuxSessionName(cwd: string, sessionId: stri
   } catch {
     // best effort only
   }
-  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^(?:omb|omb)-/, ''));
+  const sessionToken = sanitizeTmuxToken(sessionId.replace(/^omb-/, ''));
   const name = `omb-${dirToken}-${branchToken}-${sessionToken}`;
   return name.length > 120 ? name.slice(0, 120) : name;
 }

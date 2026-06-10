@@ -18,9 +18,15 @@ interface TaskReadDeps {
   readTask: (teamName: string, taskId: string, cwd: string) => Promise<TeamTask | null>;
 }
 
+/** Default claim lease TTL in milliseconds (15 minutes). */
+export const DEFAULT_CLAIM_LEASE_TTL_MS = 15 * 60 * 1000;
+
 function isClaimLeaseExpired(claim: TeamTask['claim'] | undefined | null, now: Date = new Date()): boolean {
   if (!claim?.leased_until) return false;
-  return new Date(claim.leased_until) <= now;
+  const leaseTime = new Date(claim.leased_until);
+  // Invalid date → treat as expired (corrupted lease should not block forever)
+  if (!Number.isFinite(leaseTime.getTime())) return true;
+  return leaseTime <= now;
 }
 
 export async function computeTaskReadiness(
@@ -100,7 +106,7 @@ export async function claimTask(
       ...v,
       status: 'in_progress',
       owner: workerName,
-      claim: { owner: workerName, token: claimToken, leased_until: new Date(Date.now() + 15 * 60 * 1000).toISOString() },
+      claim: { owner: workerName, token: claimToken, leased_until: new Date(Date.now() + DEFAULT_CLAIM_LEASE_TTL_MS).toISOString() },
       version: v.version + 1,
     };
 
@@ -151,7 +157,7 @@ export async function transitionTaskStatus(
     if (!v.owner || !v.claim || v.claim.owner !== v.owner || v.claim.token !== claimToken) {
       return { ok: false as const, error: 'claim_conflict' as const };
     }
-    if (new Date(v.claim.leased_until) <= new Date()) return { ok: false as const, error: 'lease_expired' as const };
+    if (isClaimLeaseExpired(v.claim)) return { ok: false as const, error: 'lease_expired' as const };
 
     const normalizedResult = typeof terminalData?.result === 'string' ? terminalData.result : undefined;
     const normalizedError = typeof terminalData?.error === 'string' ? terminalData.error : undefined;
@@ -180,26 +186,28 @@ export async function transitionTaskStatus(
       );
     }
 
+    // Update monitor snapshot inside the task claim lock to prevent
+    // concurrent read-modify-write races on completedEventTaskIds.
+    if (to === 'completed') {
+      const existing = await deps.readMonitorSnapshot(deps.teamName, deps.cwd);
+      const snapshot: TeamMonitorSnapshotState = existing
+        ? { ...existing, completedEventTaskIds: { ...(existing.completedEventTaskIds ?? {}), [taskId]: true } }
+        : {
+            taskStatusById: {},
+            workerAliveByName: {},
+            workerStateByName: {},
+            workerTurnCountByName: {},
+            workerTaskIdByName: {},
+            mailboxNotifiedByMessageId: {},
+            completedEventTaskIds: { [taskId]: true },
+          };
+      await deps.writeMonitorSnapshot(deps.teamName, snapshot, deps.cwd);
+    }
+
     return { ok: true as const, task: updated };
   });
 
   if (!lock.ok) return { ok: false, error: 'claim_conflict' };
-
-  if (to === 'completed') {
-    const existing = await deps.readMonitorSnapshot(deps.teamName, deps.cwd);
-    const updated: TeamMonitorSnapshotState = existing
-      ? { ...existing, completedEventTaskIds: { ...(existing.completedEventTaskIds ?? {}), [taskId]: true } }
-      : {
-          taskStatusById: {},
-          workerAliveByName: {},
-          workerStateByName: {},
-          workerTurnCountByName: {},
-          workerTaskIdByName: {},
-          mailboxNotifiedByMessageId: {},
-          completedEventTaskIds: { [taskId]: true },
-        };
-    await deps.writeMonitorSnapshot(deps.teamName, updated, deps.cwd);
-  }
 
   return lock.value;
 }
@@ -223,7 +231,7 @@ export async function releaseTaskClaim(
     if (!v.owner || !v.claim || v.claim.owner !== v.owner || v.claim.token !== claimToken) {
       return { ok: false as const, error: 'claim_conflict' as const };
     }
-    if (new Date(v.claim.leased_until) <= new Date()) return { ok: false as const, error: 'lease_expired' as const };
+    if (isClaimLeaseExpired(v.claim)) return { ok: false as const, error: 'lease_expired' as const };
 
     const updated: TeamTaskV2 = {
       ...v,

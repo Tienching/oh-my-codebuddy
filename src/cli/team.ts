@@ -22,6 +22,13 @@ import {
   executeTeamApiOperation,
   type TeamApiOperation,
 } from '../team/api-interop.js';
+import {
+  TEAM_API_OPERATION_SCHEMAS,
+  getRequiredFields,
+  getOptionalFields,
+  getOperationNote,
+  validateRequiredFields,
+} from '../team/api-operation-registry.js';
 import { teamReadConfig as readTeamConfig, teamReadPhase as readTeamPhase } from '../team/team-ops.js';
 import { recordLeaderRuntimeActivity } from '../team/leader-activity.js';
 import { readTeamPaneStatus } from '../team/pane-status.js';
@@ -170,63 +177,34 @@ Examples:
 
 const HELP_TOKENS = new Set(['--help', '-h', 'help']);
 
-const TEAM_API_OPERATION_REQUIRED_FIELDS: Record<TeamApiOperation, string[]> = {
-  'send-message': ['team_name', 'from_worker', 'to_worker', 'body'],
-  'broadcast': ['team_name', 'from_worker', 'body'],
-  'mailbox-list': ['team_name', 'worker'],
-  'mailbox-mark-delivered': ['team_name', 'worker', 'message_id'],
-  'mailbox-mark-notified': ['team_name', 'worker', 'message_id'],
-  'create-task': ['team_name', 'subject', 'description'],
-  'read-task': ['team_name', 'task_id'],
-  'list-tasks': ['team_name'],
-  'update-task': ['team_name', 'task_id'],
-  'claim-task': ['team_name', 'task_id', 'worker'],
-  'transition-task-status': ['team_name', 'task_id', 'from', 'to', 'claim_token'],
-  'release-task-claim': ['team_name', 'task_id', 'claim_token', 'worker'],
-  'read-config': ['team_name'],
-  'read-manifest': ['team_name'],
-  'read-worker-status': ['team_name', 'worker'],
-  'read-worker-heartbeat': ['team_name', 'worker'],
-  'update-worker-heartbeat': ['team_name', 'worker', 'pid', 'turn_count', 'alive'],
-  'write-worker-inbox': ['team_name', 'worker', 'content'],
-  'write-worker-identity': ['team_name', 'worker', 'index', 'role'],
-  'append-event': ['team_name', 'type', 'worker'],
-  'read-events': ['team_name'],
-  'await-event': ['team_name'],
-  'read-idle-state': ['team_name'],
-  'read-stall-state': ['team_name'],
-  'get-summary': ['team_name'],
-  'cleanup': ['team_name'],
-  'orphan-cleanup': ['team_name'],
-  'write-shutdown-request': ['team_name', 'worker', 'requested_by'],
-  'read-shutdown-ack': ['team_name', 'worker'],
-  'read-monitor-snapshot': ['team_name'],
-  'write-monitor-snapshot': ['team_name', 'snapshot'],
-  'read-task-approval': ['team_name', 'task_id'],
-  'write-task-approval': ['team_name', 'task_id', 'status', 'reviewer', 'decision_reason'],
-};
+/**
+ * Required fields per operation — derived from the shared registry.
+ * @deprecated Import getRequiredFields from api-operation-registry instead.
+ */
+const TEAM_API_OPERATION_REQUIRED_FIELDS: Record<TeamApiOperation, string[]> =
+  Object.fromEntries(
+    TEAM_API_OPERATIONS.map(op => [op, [...getRequiredFields(op)]])
+  ) as Record<TeamApiOperation, string[]>;
 
-const TEAM_API_OPERATION_OPTIONAL_FIELDS: Partial<Record<TeamApiOperation, string[]>> = {
-  'create-task': ['owner', 'blocked_by', 'requires_code_change'],
-  'update-task': ['subject', 'description', 'blocked_by', 'requires_code_change'],
-  'claim-task': ['expected_version'],
-  'cleanup': ['force', 'confirm_issues'],
-  'transition-task-status': ['result', 'error'],
-  'read-shutdown-ack': ['min_updated_at'],
-  'write-worker-identity': [
-    'assigned_tasks', 'pid', 'pane_id', 'working_dir',
-    'worktree_path', 'worktree_branch', 'worktree_detached', 'team_state_root',
-  ],
-  'append-event': ['task_id', 'message_id', 'reason', 'state', 'prev_state', 'to_worker', 'worker_count', 'source_type', 'metadata'],
-  'read-events': ['after_event_id', 'wakeable_only', 'type', 'worker', 'task_id'],
-  'await-event': ['after_event_id', 'timeout_ms', 'poll_ms', 'wakeable_only', 'type', 'worker', 'task_id'],
-  'write-task-approval': ['required'],
-};
+/**
+ * Optional fields per operation — derived from the shared registry.
+ * @deprecated Import getOptionalFields from api-operation-registry instead.
+ */
+const TEAM_API_OPERATION_OPTIONAL_FIELDS: Partial<Record<TeamApiOperation, string[]>> =
+  Object.fromEntries(
+    TEAM_API_OPERATIONS
+      .map(op => [op, getOptionalFields(op)] as const)
+      .filter(([, fields]) => fields.length > 0)
+  ) as Partial<Record<TeamApiOperation, string[]>>;
 
+/**
+ * Extended notes per operation — supplements the shared registry notes
+ * with CLI-specific behavioral detail.
+ */
 const TEAM_API_OPERATION_NOTES: Partial<Record<TeamApiOperation, string>> = {
-  'update-task': 'Only non-lifecycle task metadata can be updated.',
-  'release-task-claim': 'Use this only for rollback/requeue to pending (not for completion).',
-  'transition-task-status': 'Lifecycle flow is claim-safe and typically transitions in_progress -> completed|failed.',
+  'update-task': getOperationNote('update-task'),
+  'release-task-claim': getOperationNote('release-task-claim'),
+  'transition-task-status': getOperationNote('transition-task-status'),
   'cleanup': 'Uses the runtime shutdown contract; add confirm_issues=true when failed tasks are acknowledged and shutdown should still proceed.',
   'orphan-cleanup': 'Destructive escape hatch for known orphan recovery. Bypasses shutdown orchestration.',
   'read-events': 'Events are returned in canonical form; worker_idle log entries normalize to type worker_state_changed with source_type worker_idle. wakeable_only defaults to false; set wakeable_only=true to mirror omb team await semantics (wakeable events now include merge conflicts and per-signal stale alerts).',
@@ -292,8 +270,8 @@ function sampleValueForTeamApiField(field: string): unknown {
 }
 
 function buildTeamApiOperationHelp(operation: TeamApiOperation): string {
-  const requiredFields = TEAM_API_OPERATION_REQUIRED_FIELDS[operation] ?? [];
-  const optionalFields = TEAM_API_OPERATION_OPTIONAL_FIELDS[operation] ?? [];
+  const requiredFields = getRequiredFields(operation);
+  const optionalFields = getOptionalFields(operation);
   const sampleInput: Record<string, unknown> = {};
 
   for (const field of requiredFields) {
