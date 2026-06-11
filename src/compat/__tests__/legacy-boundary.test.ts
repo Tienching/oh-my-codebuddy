@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import {
   resolveCanonicalCodebuddyHome,
   resolveLegacyCodexHome,
+  resolveStateDir,
   resolveCanonicalStateDir,
   resolveLegacyStateDir,
   resolveCanonicalEntryPath,
@@ -100,26 +101,23 @@ describe("resolveLegacyCodexHome", () => {
   });
 });
 
-// ── resolveCanonicalStateDir ─────────────────────────────────────────────
+// ── resolveStateDir ─────────────────────────────────────────────────────
 
-describe("resolveCanonicalStateDir", () => {
+describe("resolveStateDir", () => {
   it("returns .omb/state under the given cwd", () => {
-    const result = resolveCanonicalStateDir("/project/root");
+    const result = resolveStateDir("/project/root");
     assert.equal(result, "/project/root/.omb/state");
   });
 
   it("returns .omb/state under process.cwd() when no arg", () => {
-    const result = resolveCanonicalStateDir(process.cwd());
+    const result = resolveStateDir(process.cwd());
     assert.ok(result.endsWith(".omb/state"));
   });
-});
 
-// ── resolveLegacyStateDir ────────────────────────────────────────────────
-
-describe("resolveLegacyStateDir", () => {
-  it("returns .omb/state under the given cwd", () => {
-    const result = resolveLegacyStateDir("/project/root");
-    assert.equal(result, "/project/root/.omb/state");
+  it("deprecated aliases resolveCanonicalStateDir and resolveLegacyStateDir resolve to the same path", () => {
+    const cwd = "/project/root";
+    assert.equal(resolveCanonicalStateDir(cwd), resolveStateDir(cwd));
+    assert.equal(resolveLegacyStateDir(cwd), resolveStateDir(cwd));
   });
 });
 
@@ -304,12 +302,19 @@ describe("isLegacyPathActive", () => {
   beforeEach(() => { makeTmpDir(); });
   afterEach(cleanupTmpDir);
 
-  it("returns true when .omb/state exists", async () => {
-    await mkdir(join(tmpDir, ".omb", "state"), { recursive: true });
+  it("returns true when .omb/state exists and contains files", async () => {
+    const stateDir = join(tmpDir, ".omb", "state");
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(join(stateDir, "session.json"), "{}");
     assert.equal(isLegacyPathActive(tmpDir), true);
   });
 
   it("returns false when .omb/state does not exist", () => {
+    assert.equal(isLegacyPathActive(tmpDir), false);
+  });
+
+  it("returns false when .omb/state exists but is empty", async () => {
+    await mkdir(join(tmpDir, ".omb", "state"), { recursive: true });
     assert.equal(isLegacyPathActive(tmpDir), false);
   });
 });

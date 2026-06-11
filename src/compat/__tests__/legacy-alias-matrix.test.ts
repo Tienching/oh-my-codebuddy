@@ -372,10 +372,12 @@ describe("E1-T05: Setup scope migration rules", () => {
     }
   });
 
-  it("legacy-omb-state condition detects .omb directory", async () => {
+  it("legacy-omb-state condition detects .omb directory with state files", async () => {
     const dir = makeTmpDir();
     try {
-      await mkdir(join(dir, ".omb"), { recursive: true });
+      const stateDir = join(dir, ".omb", "state");
+      await mkdir(stateDir, { recursive: true });
+      await writeFile(join(stateDir, "session.json"), "{}");
       const rule = COMPAT_RULES.find((r) => r.id === "legacy-omb-state");
       assert.equal(rule?.condition(dir), true);
     } finally {
@@ -455,8 +457,10 @@ describe("E1-T05: Session state path compatibility", () => {
     assert.equal(parsed.session_id, "canonical-session");
   });
 
-  it("isLegacyPathActive detects .omb/state directory", async () => {
-    await mkdir(join(tmpDir, ".omb", "state"), { recursive: true });
+  it("isLegacyPathActive detects .omb/state directory with files", async () => {
+    const stateDir = join(tmpDir, ".omb", "state");
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(join(stateDir, "session.json"), "{}");
     assert.equal(isLegacyPathActive(tmpDir), true);
   });
 

@@ -113,6 +113,32 @@ export interface MailboxRecord {
 
 let schemaValidated = false;
 
+const EXPECTED_RUNTIME_COMMAND_VARIANTS = [
+  'AcquireAuthority',
+  'RenewAuthority',
+  'QueueDispatch',
+  'MarkNotified',
+  'MarkDelivered',
+  'MarkFailed',
+  'RequestReplay',
+  'CaptureSnapshot',
+  'CreateMailboxMessage',
+  'MarkMailboxNotified',
+  'MarkMailboxDelivered',
+] as const satisfies RuntimeCommand['command'][];
+
+function runtimeCommandVariantToSchemaName(commandName: RuntimeCommand['command']): string {
+  return commandName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+function normalizeSchemaCommandName(commandName: unknown): string | null {
+  if (typeof commandName !== 'string') return null;
+  const normalized = commandName.trim().replace(/_/g, '-').toLowerCase();
+  return normalized === '' ? null : normalized;
+}
+
+const EXPECTED_RUNTIME_SCHEMA_COMMANDS = EXPECTED_RUNTIME_COMMAND_VARIANTS.map(runtimeCommandVariantToSchemaName);
+
 export interface RuntimeBinaryDiscoveryOptions {
   debugPath?: string;
   releasePath?: string;
@@ -136,6 +162,10 @@ export function resolveRuntimeBinaryPath(options: RuntimeBinaryDiscoveryOptions 
 
 export function resolveBridgeStateDir(cwd: string, env: NodeJS.ProcessEnv = process.env): string {
   return resolveActiveTeamStateRoot(cwd, env);
+}
+
+export function resetRuntimeBridgeSchemaValidationForTests(): void {
+  schemaValidated = false;
 }
 
 export class RuntimeBridge {
@@ -229,14 +259,16 @@ export class RuntimeBridge {
     if (schemaValidated) return;
     try {
       const stdout = this.run(['schema', '--json']);
-      const schema = JSON.parse(stdout);
-      const expectedCommands = [
-        'acquire-authority', 'renew-authority', 'queue-dispatch',
-        'mark-notified', 'mark-delivered', 'mark-failed',
-        'request-replay', 'capture-snapshot',
-      ];
-      const missing = expectedCommands.filter(
-        (c) => !schema.commands?.includes(c),
+      const schema = JSON.parse(stdout) as { commands?: unknown[] };
+      const availableCommands = new Set(
+        Array.isArray(schema.commands)
+          ? schema.commands
+            .map((command) => normalizeSchemaCommandName(command))
+            .filter((command): command is string => command !== null)
+          : [],
+      );
+      const missing = EXPECTED_RUNTIME_SCHEMA_COMMANDS.filter(
+        (command) => !availableCommands.has(command),
       );
       if (missing.length > 0) {
         throw new Error(

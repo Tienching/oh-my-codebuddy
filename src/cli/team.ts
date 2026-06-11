@@ -4,7 +4,7 @@ import { updateModeState, startMode, readModeState } from '../modes/base.js';
 import { monitorTeam, resumeTeam, shutdownTeam, startTeam, type TeamRuntime, type TeamSnapshot } from '../team/runtime.js';
 import { DEFAULT_MAX_WORKERS } from '../team/state.js';
 import { sanitizeTeamName, type TeamWorkerCli } from '../team/tmux-session.js';
-import { readTeamEvents, waitForTeamEvent } from '../team/state/events.js';
+import { readTeamEvents, readTeamEventsDetailed, waitForTeamEvent } from '../team/state/events.js';
 import type { TeamEvent } from '../team/state.js';
 import { parseWorktreeMode, type WorktreeMode } from '../team/worktree.js';
 import { classifyTaskSize } from '../hooks/task-size-detector.js';
@@ -1538,42 +1538,47 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
 
     const baselineCursor = afterEventId || (await readTeamEvents(name, cwd, { wakeableOnly: true }).then((events) => events.at(-1)?.event_id ?? ''));
     const snapshot = await monitorTeam(name, cwd);
-    const immediateEvent = await readTeamEvents(name, cwd, {
+    const immediateRead = await readTeamEventsDetailed(name, cwd, {
       afterEventId: baselineCursor || undefined,
       wakeableOnly: true,
-    }).then((events) => events[0]);
+    });
+    const immediateEvent = immediateRead.events[0];
 
     const result =
       immediateEvent
-        ? { status: 'event' as const, cursor: immediateEvent.event_id, event: immediateEvent }
-        : snapshot && snapshotHasDeadWorkerStall(snapshot)
-          ? await readTeamEvents(name, cwd, { wakeableOnly: true }).then((events) => {
-            const latestWakeableEvent = events.at(-1);
-            if (latestWakeableEvent) {
-              return {
-                status: 'event' as const,
-                cursor: latestWakeableEvent.event_id,
-                event: latestWakeableEvent,
-              };
-            }
-            const fallbackEvent = buildDeadWorkerAwaitEvent(name, snapshot);
-            return fallbackEvent
-              ? { status: 'event' as const, cursor: baselineCursor, event: fallbackEvent }
-              : { status: 'timeout' as const, cursor: baselineCursor };
-          })
-          : await waitForTeamEvent(name, cwd, {
-            afterEventId: baselineCursor || undefined,
-            timeoutMs,
-            pollMs: 100,
-            wakeableOnly: true,
-          });
+        ? { status: 'event' as const, cursor: immediateEvent.event_id, event: immediateEvent, diagnostics: immediateRead.diagnostics }
+        : immediateRead.diagnostics.cursor_missing
+          ? { status: 'cursor_missing' as const, cursor: baselineCursor, diagnostics: immediateRead.diagnostics }
+          : snapshot && snapshotHasDeadWorkerStall(snapshot)
+            ? await readTeamEvents(name, cwd, { wakeableOnly: true }).then((events) => {
+              const latestWakeableEvent = events.at(-1);
+              if (latestWakeableEvent) {
+                return {
+                  status: 'event' as const,
+                  cursor: latestWakeableEvent.event_id,
+                  event: latestWakeableEvent,
+                  diagnostics: immediateRead.diagnostics,
+                };
+              }
+              const fallbackEvent = buildDeadWorkerAwaitEvent(name, snapshot);
+              return fallbackEvent
+                ? { status: 'event' as const, cursor: baselineCursor, event: fallbackEvent, diagnostics: immediateRead.diagnostics }
+                : { status: 'timeout' as const, cursor: baselineCursor, diagnostics: immediateRead.diagnostics };
+            })
+            : await waitForTeamEvent(name, cwd, {
+              afterEventId: baselineCursor || undefined,
+              timeoutMs,
+              pollMs: 100,
+              wakeableOnly: true,
+            });
 
     if (wantsJson) {
       console.log(JSON.stringify({
         team_name: sanitizeTeamName(name),
         status: result.status,
         cursor: result.cursor,
-        event: result.event ?? null,
+        event: result.status === 'event' ? result.event : null,
+        diagnostics: result.diagnostics,
       }));
       return;
     }
@@ -1583,7 +1588,13 @@ export async function teamCommand(args: string[], _options: TeamCliOptions = {})
       return;
     }
 
-    const event = result.event!;
+    if (result.status === 'cursor_missing') {
+      const latestAvailableCursor = result.diagnostics.latest_available_cursor || 'none';
+      console.log(`Await cursor expired for ${name}: after_event_id=${result.cursor || 'none'} latest_available_cursor=${latestAvailableCursor}`);
+      return;
+    }
+
+    const event = result.event;
     const context = [
       `team=${name}`,
       `event=${event.type}`,

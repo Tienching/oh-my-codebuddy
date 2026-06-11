@@ -10,9 +10,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { ombStateDir, ombLogsDir } from '../utils/paths.js';
 import {
-  resolveCanonicalStateDir,
-  resolveLegacyStateDir,
-  shouldDualWrite,
+  resolveStateDir,
 } from '../compat/legacy-boundary.js';
 import {
   type ProcessIdentity,
@@ -55,7 +53,7 @@ function historyPath(cwd: string): string {
 }
 
 function legacySessionPath(cwd: string): string {
-  return join(resolveLegacyStateDir(cwd), SESSION_FILE);
+  return join(resolveStateDir(cwd), SESSION_FILE);
 }
 
 /**
@@ -208,14 +206,8 @@ export async function writeSessionStart(
   sessionId: string,
   options: SessionStartOptions = {},
 ): Promise<void> {
-  const stateDir = resolveCanonicalStateDir(cwd);
+  const stateDir = resolveStateDir(cwd);
   await mkdir(stateDir, { recursive: true });
-
-  const dualWriteOmb = shouldDualWrite('.omb');
-  if (dualWriteOmb) {
-    const legacyDir = resolveLegacyStateDir(cwd);
-    await mkdir(legacyDir, { recursive: true });
-  }
 
   const pid = Number.isInteger(options.pid) && options.pid && options.pid > 0
     ? options.pid
@@ -246,9 +238,6 @@ export async function writeSessionStart(
       }
 
       await writeFile(sessionPath(cwd), serialized);
-      if (dualWriteOmb) {
-        await writeFile(legacySessionPath(cwd), serialized);
-      }
     },
   );
   await appendToLog(cwd, {

@@ -462,8 +462,25 @@ export async function handleTeamToolCall(request: {
                 status: 'running',
                 elapsedSeconds: elapsed,
                 wake_on: 'event',
+                event_wait_status: eventResult.status,
                 cursor: eventResult.cursor,
                 event: eventResult.event,
+                diagnostics: eventResult.diagnostics,
+              };
+              if (nudgeTracker.totalNudges > 0) out.nudges = nudgeTracker.getSummary();
+              return { content: [{ type: 'text' as const, text: JSON.stringify(out) }] };
+            }
+            if (eventResult.status === 'cursor_missing') {
+              const elapsed = ((Date.now() - job.startedAt) / 1000).toFixed(1);
+              const out: Record<string, unknown> = {
+                jobId,
+                status: 'running',
+                elapsedSeconds: elapsed,
+                wake_on: 'event',
+                event_wait_status: eventResult.status,
+                cursor: eventResult.cursor,
+                event: null,
+                diagnostics: eventResult.diagnostics,
               };
               if (nudgeTracker.totalNudges > 0) out.nudges = nudgeTracker.getSummary();
               return { content: [{ type: 'text' as const, text: JSON.stringify(out) }] };

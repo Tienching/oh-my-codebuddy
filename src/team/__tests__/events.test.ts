@@ -1,10 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { appendFile, mkdtemp, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { initTeamState, appendTeamEvent } from '../state.js';
-import { readTeamEvents, waitForTeamEvent } from '../state/events.js';
+import { withPathLock } from '../state/locks.js';
+import { initTeamState, appendTeamEvent, teamEventLogPath } from '../state.js';
+import { readTeamEvents, readTeamEventsDetailed, rotateTeamEventLog, waitForTeamEvent } from '../state/events.js';
 
 async function setupTeam(name: string): Promise<{ cwd: string; cleanup: () => Promise<void> }> {
   const cwd = await mkdtemp(join(tmpdir(), `omb-team-events-${name}-`));
@@ -198,6 +199,115 @@ describe('team/state/events', () => {
       assert.equal(result.event?.type, 'task_completed');
       assert.equal(result.event?.worker, 'worker-1');
       assert.equal(result.event?.task_id, '1');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('reports malformed lines without silently dropping diagnostics', async () => {
+    const { cwd, cleanup } = await setupTeam('malformed-diagnostics');
+    try {
+      const logPath = teamEventLogPath('malformed-diagnostics', cwd);
+      await appendTeamEvent('malformed-diagnostics', {
+        type: 'task_completed',
+        worker: 'worker-1',
+        task_id: '1',
+      }, cwd);
+      await appendFile(logPath, '{"broken":true\n', 'utf8');
+
+      const result = await readTeamEventsDetailed('malformed-diagnostics', cwd, { wakeableOnly: false });
+      assert.equal(result.events.length, 1);
+      assert.equal(result.diagnostics.malformed_line_count, 1);
+      assert.equal(result.diagnostics.cursor_missing, false);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('returns cursor_missing when the baseline event was rotated away', async () => {
+    const { cwd, cleanup } = await setupTeam('cursor-missing');
+    try {
+      const baseline = await appendTeamEvent('cursor-missing', {
+        type: 'team_leader_nudge',
+        worker: 'leader-fixed',
+        reason: 'baseline',
+      }, cwd);
+      for (let index = 0; index < 12; index += 1) {
+        await appendTeamEvent('cursor-missing', {
+          type: 'worker_state_changed',
+          worker: 'worker-1',
+          state: index % 2 === 0 ? 'working' : 'blocked',
+          prev_state: index % 2 === 0 ? 'idle' : 'working',
+          reason: `event-${index}-${'x'.repeat(256)}`,
+        }, cwd);
+      }
+
+      const rotated = await rotateTeamEventLog('cursor-missing', cwd, 1024);
+      assert.equal(rotated, true);
+
+      const readResult = await readTeamEventsDetailed('cursor-missing', cwd, {
+        afterEventId: baseline.event_id,
+        wakeableOnly: false,
+      });
+      assert.equal(readResult.diagnostics.cursor_missing, true);
+      assert.equal(readResult.diagnostics.cursor_found, false);
+      assert.notEqual(readResult.diagnostics.latest_available_cursor, '');
+
+      const waitResult = await waitForTeamEvent('cursor-missing', cwd, {
+        afterEventId: baseline.event_id,
+        timeoutMs: 100,
+        pollMs: 25,
+        wakeableOnly: false,
+      });
+      assert.equal(waitResult.status, 'cursor_missing');
+      assert.equal(waitResult.cursor, baseline.event_id);
+      assert.equal(waitResult.diagnostics.cursor_missing, true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('serializes rotation and append on the same event-log lock', async () => {
+    const { cwd, cleanup } = await setupTeam('rotate-lock');
+    try {
+      for (let index = 0; index < 24; index += 1) {
+        await appendTeamEvent('rotate-lock', {
+          type: 'task_completed',
+          worker: 'worker-1',
+          task_id: `${index}`,
+          reason: `seed-${index}-${'x'.repeat(256)}`,
+        }, cwd);
+      }
+
+      const logPath = teamEventLogPath('rotate-lock', cwd);
+      const lockDir = join(dirname(logPath), '.lock.events');
+      let rotateSettled = false;
+      let appendSettled = false;
+
+      const pending = await withPathLock(lockDir, { label: 'test event log lock' }, async () => {
+        const rotatePromise = rotateTeamEventLog('rotate-lock', cwd, 1024).finally(() => {
+          rotateSettled = true;
+        });
+        const lateEventPromise = appendTeamEvent('rotate-lock', {
+          type: 'task_completed',
+          worker: 'worker-2',
+          task_id: 'late',
+          reason: 'late-event',
+        }, cwd).finally(() => {
+          appendSettled = true;
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.equal(rotateSettled, false);
+        assert.equal(appendSettled, false);
+        return { rotatePromise, lateEventPromise };
+      });
+
+      const lateEvent = await pending.lateEventPromise;
+      await pending.rotatePromise;
+
+      const events = await readTeamEvents('rotate-lock', cwd, { wakeableOnly: false });
+      assert.equal(events.some((event) => event.event_id === lateEvent.event_id), true);
     } finally {
       await cleanup();
     }

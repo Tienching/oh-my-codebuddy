@@ -151,18 +151,18 @@ function canTransitionDispatchStatus(from: TeamDispatchRequestStatus, to: TeamDi
   return canTransitionTeamDispatchRequestStatus(from, to);
 }
 
-function buildDispatchMetadata(teamName: string, requestInput: TeamDispatchRequestInput): Record<string, unknown> {
+function buildDispatchMetadata(request: TeamDispatchRequest): Record<string, unknown> {
   return {
-    kind: requestInput.kind,
-    team_name: teamName,
-    worker_index: requestInput.worker_index,
-    pane_id: requestInput.pane_id,
-    trigger_message: requestInput.trigger_message,
-    intent: requestInput.intent,
-    message_id: requestInput.message_id,
-    inbox_correlation_key: requestInput.inbox_correlation_key,
-    transport_preference: requestInput.transport_preference,
-    fallback_allowed: requestInput.fallback_allowed,
+    kind: request.kind,
+    team_name: request.team_name,
+    worker_index: request.worker_index,
+    pane_id: request.pane_id,
+    trigger_message: request.trigger_message,
+    intent: request.intent,
+    message_id: request.message_id,
+    inbox_correlation_key: request.inbox_correlation_key,
+    transport_preference: request.transport_preference,
+    fallback_allowed: request.fallback_allowed,
   };
 }
 
@@ -269,8 +269,8 @@ export async function enqueueDispatchRequest(
     if (executeBridgeCommand(deps.cwd, {
       command: 'QueueDispatch',
       request_id: request.request_id,
-      target: requestInput.to_worker,
-      metadata: buildDispatchMetadata(deps.teamName, requestInput),
+      target: request.to_worker,
+      metadata: buildDispatchMetadata(request),
     })) {
       const bridgeRequest = await readDispatchRequest(request.request_id, deps);
       if (bridgeRequest) {

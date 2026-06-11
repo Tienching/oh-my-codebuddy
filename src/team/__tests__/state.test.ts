@@ -112,6 +112,9 @@ if (argv[0] === 'schema') {
       'mark-failed',
       'request-replay',
       'capture-snapshot',
+      'create-mailbox-message',
+      'mark-mailbox-notified',
+      'mark-mailbox-delivered',
     ],
     events: [],
     transport: 'tmux',
@@ -368,7 +371,7 @@ describe('team state', () => {
 set -eu
 printf '%s\n' "$*" >> "${runtimeLogPath}"
 if [[ "\${1:-}" == "schema" ]]; then
-  printf '{"schema_version":1,"commands":["acquire-authority","renew-authority","queue-dispatch","mark-notified","mark-delivered","mark-failed","request-replay","capture-snapshot"],"events":[],"transport":"tmux"}\n'
+  printf '{"schema_version":1,"commands":["acquire-authority","renew-authority","queue-dispatch","mark-notified","mark-delivered","mark-failed","request-replay","capture-snapshot","create-mailbox-message","mark-mailbox-notified","mark-mailbox-delivered"],"events":[],"transport":"tmux"}\n'
   exit 0
 fi
 if [[ "\${1:-}" == "exec" ]]; then
@@ -381,12 +384,13 @@ exit 1
       await chmod(join(fakeBinDir, 'omb-runtime'), 0o755);
       process.env.OMB_RUNTIME_BINARY = join(fakeBinDir, 'omb-runtime');
 
+      const sensitiveTriggerMessage = `Bearer supersecrettoken1234567890 ${'x'.repeat(20_000)}`;
       const queued = await enqueueDispatchRequest(
         'team-dispatch-sync',
         {
           kind: 'inbox',
           to_worker: 'worker-1',
-          trigger_message: 'ping',
+          trigger_message: sensitiveTriggerMessage,
           intent: 'followup-relaunch',
         },
         cwd,
@@ -398,9 +402,19 @@ exit 1
       const jsonStart = queueLine.indexOf('{');
       const stateDirFlag = queueLine.lastIndexOf(' --state-dir=');
       const jsonPayload = stateDirFlag > jsonStart ? queueLine.slice(jsonStart, stateDirFlag) : queueLine.slice(jsonStart);
-      const payload = JSON.parse(jsonPayload) as { request_id: string; metadata?: { intent?: string } };
+      const payload = JSON.parse(jsonPayload) as {
+        request_id: string;
+        metadata?: { intent?: string; trigger_message?: string };
+      };
       assert.equal(payload.request_id, queued.request.request_id);
       assert.equal(payload.metadata?.intent, 'followup-relaunch');
+      assert.equal(payload.metadata?.trigger_message, queued.request.trigger_message);
+      assert.match(payload.metadata?.trigger_message ?? '', /\[REDACTED:bearer\]/);
+      assert.doesNotMatch(payload.metadata?.trigger_message ?? '', /supersecrettoken1234567890/);
+      assert.ok(
+        (payload.metadata?.trigger_message?.length ?? 0) < sensitiveTriggerMessage.length,
+        'bridge metadata should use the normalized safe trigger message',
+      );
     } finally {
       if (typeof previousRuntimeBinary === 'string') process.env.OMB_RUNTIME_BINARY = previousRuntimeBinary;
       else delete process.env.OMB_RUNTIME_BINARY;

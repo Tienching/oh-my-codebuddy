@@ -11,7 +11,7 @@
  *  - Status tracking enables gradual migration and eventual removal.
  */
 
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -66,8 +66,6 @@ export function findAlias(name: string): LegacyAlias | undefined {
   );
 }
 
-// ── Resolution helpers ────────────────────────────────────────────────────
-
 // ── Public boundary functions ─────────────────────────────────────────────
 
 /**
@@ -92,22 +90,21 @@ export function resolveLegacyCodexHome(env?: NodeJS.ProcessEnv): string {
 
 /**
  * Resolve the canonical state directory (.omb/state).
- * Read-through from legacy (.omb/state) is handled by the caller.
+ * The legacy .omc migration completed April 2026; there is no separate
+ * legacy state directory, so this replaces the former resolveLegacyStateDir.
  */
-export function resolveCanonicalStateDir(cwd: string): string {
+export function resolveStateDir(cwd: string): string {
   return join(cwd, ".omb", "state");
 }
 
-/**
- * Resolve the legacy state directory (.omb/state) for read-through.
- */
-export function resolveLegacyStateDir(cwd: string): string {
-  return join(cwd, ".omb", "state");
-}
+/** @deprecated Use resolveStateDir — the legacy/canonical split was a no-op. */
+export const resolveCanonicalStateDir = resolveStateDir;
+
+/** @deprecated Use resolveStateDir — the legacy/canonical split was a no-op. */
+export const resolveLegacyStateDir = resolveStateDir;
 
 /**
- * Resolve OMB_ENTRY_PATH with OMB_ENTRY_PATH fallback.
- * Priority: OMB_ENTRY_PATH > OMB_ENTRY_PATH
+ * Resolve OMB_ENTRY_PATH entry point.
  */
 export function resolveCanonicalEntryPath(
   options: {
@@ -123,8 +120,7 @@ export function resolveCanonicalEntryPath(
 }
 
 /**
- * Resolve OMB_RUNTIME_BINARY with OMB_RUNTIME_BINARY fallback.
- * Priority: OMB_RUNTIME_BINARY > OMB_RUNTIME_BINARY
+ * Resolve OMB_RUNTIME_BINARY path.
  */
 export function resolveCanonicalRuntimeBinary(env?: NodeJS.ProcessEnv): string | undefined {
   const e = env ?? process.env;
@@ -134,7 +130,7 @@ export function resolveCanonicalRuntimeBinary(env?: NodeJS.ProcessEnv): string |
 }
 
 /**
- * Check if OMB_RUNTIME_BRIDGE (or legacy OMB_RUNTIME_BRIDGE) is enabled.
+ * Check if OMB_RUNTIME_BRIDGE is enabled.
  * The bridge is enabled unless explicitly set to '0'.
  */
 export function isRuntimeBridgeEnabled(env?: NodeJS.ProcessEnv): boolean {
@@ -181,16 +177,15 @@ export function readLegacyAliasIfPresent(cwd: string): LegacyPathReport {
 }
 
 /**
- * Whether legacy state paths (.omb) are still in active use in the project.
- * This is true if the .omb directory exists and contains state files.
+ * Whether the .omb state directory is still in active use in the project.
+ * True if the .omb/state directory exists and contains at least one file.
  */
 export function isLegacyPathActive(cwd: string): boolean {
-  const ombStateDir = join(cwd, ".omb", "state");
-  if (!existsSync(ombStateDir)) return false;
-  // Check if it has any state files
+  const stateDir = join(cwd, ".omb", "state");
+  if (!existsSync(stateDir)) return false;
   try {
-    const entries = existsSync(ombStateDir);
-    return entries; // directory exists = active
+    const entries = readdirSync(stateDir);
+    return entries.length > 0;
   } catch {
     return false;
   }

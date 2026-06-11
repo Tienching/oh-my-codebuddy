@@ -21,6 +21,7 @@ import {
   writeTaskApproval,
   writeWorkerStatus,
 } from '../../team/state.js';
+import { rotateTeamEventLog } from '../../team/state/events.js';
 import { isRealTmuxAvailable, withTempTmuxSession, type TempTmuxSessionFixture } from '../../team/__tests__/tmux-test-fixture.js';
 
 const OMB_CLI_PATH = fileURLToPath(new URL('../omb.js', import.meta.url));
@@ -1818,6 +1819,53 @@ describe('teamCommand await', () => {
       assert.equal(payload.event?.state, 'blocked');
       assert.equal(payload.event?.prev_state, 'working');
       assert.equal(payload.event?.reason, 'needs_follow_up');
+    } finally {
+      console.log = originalLog;
+      process.chdir(previousCwd);
+      await rm(wd, { recursive: true, force: true });
+    }
+  });
+
+  it('returns cursor diagnostics in JSON mode when after-event-id was rotated away', async () => {
+    const wd = await mkdtemp(join(tmpdir(), 'omb-team-await-cursor-missing-'));
+    const previousCwd = process.cwd();
+    const logs: string[] = [];
+    const originalLog = console.log;
+    try {
+      process.chdir(wd);
+      await initTeamState('await-cursor-missing', 'await test', 'executor', 1, wd);
+      const baseline = await appendTeamEvent('await-cursor-missing', {
+        type: 'team_leader_nudge',
+        worker: 'leader-fixed',
+        reason: 'baseline',
+      }, wd);
+      for (let index = 0; index < 12; index += 1) {
+        await appendTeamEvent('await-cursor-missing', {
+          type: 'task_completed',
+          worker: 'worker-1',
+          task_id: `${index}`,
+          reason: `event-${index}-${'x'.repeat(256)}`,
+        }, wd);
+      }
+      await rotateTeamEventLog('await-cursor-missing', wd, 1024);
+      console.log = (...args: unknown[]) => logs.push(args.map(String).join(' '));
+
+      await teamCommand(['await', 'await-cursor-missing', '--json', '--timeout-ms', '100', '--after-event-id', baseline.event_id]);
+
+      const payload = JSON.parse(logs.at(-1) ?? '{}') as {
+        team_name?: string;
+        status?: string;
+        cursor?: string;
+        event?: unknown;
+        diagnostics?: { cursor_missing?: boolean; cursor_found?: boolean; latest_available_cursor?: string };
+      };
+      assert.equal(payload.team_name, 'await-cursor-missing');
+      assert.equal(payload.status, 'cursor_missing');
+      assert.equal(payload.cursor, baseline.event_id);
+      assert.equal(payload.event, null);
+      assert.equal(payload.diagnostics?.cursor_missing, true);
+      assert.equal(payload.diagnostics?.cursor_found, false);
+      assert.notEqual(payload.diagnostics?.latest_available_cursor, '');
     } finally {
       console.log = originalLog;
       process.chdir(previousCwd);

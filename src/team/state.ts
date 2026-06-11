@@ -51,6 +51,7 @@ import {
   withTeamLock as withTeamLockImpl,
   withTaskClaimLock as withTaskClaimLockImpl,
   withMailboxLock as withMailboxLockImpl,
+  withPathLock as withPathLockImpl,
 } from './state/locks.js';
 import { getDefaultBridge, isBridgeEnabled, resolveBridgeStateDir, type DispatchRecord } from '../runtime/bridge.js';
 import { resolveActiveTeamStateRoot } from './state-root.js';
@@ -1491,12 +1492,17 @@ export async function appendTeamEvent(teamName: string, event: Omit<TeamEvent, '
     created_at: new Date().toISOString(),
   } as TeamEvent;
   const p = teamEventLogPath(teamName, cwd);
-  await mkdir(dirname(p), { recursive: true });
-  await appendFile(p, `${JSON.stringify(full)}\n`, 'utf8');
+  const lockDir = join(dirname(p), '.lock.events');
+  let shouldRotate = false;
+  await withPathLockImpl(lockDir, { label: `team event log ${teamName}` }, async () => {
+    await mkdir(dirname(p), { recursive: true });
+    await appendFile(p, `${JSON.stringify(full)}\n`, 'utf8');
+    eventWriteCounter++;
+    shouldRotate = eventWriteCounter % 100 === 0;
+  });
 
   // Periodic rotation check (every 100th event write)
-  eventWriteCounter++;
-  if (eventWriteCounter % 100 === 0) {
+  if (shouldRotate) {
     try {
       await rotateTeamEventLogIfAvailable(teamName, cwd);
     } catch { /* rotation failure is non-critical */ }

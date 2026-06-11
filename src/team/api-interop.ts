@@ -25,7 +25,7 @@ import { validateRequiredFields as validateRequiredFieldsImport } from './api-op
 
 /** Lazy-access reference to api-operation-registry to avoid circular dependency issues at module init */
 const apiOperationRegistryRef = { validateRequiredFields: validateRequiredFieldsImport };
-import { readTeamEvents, waitForTeamEvent } from './state/events.js';
+import { readTeamEvents, readTeamEventsDetailed, waitForTeamEvent } from './state/events.js';
 import { queueDirectMailboxMessage } from './mcp-comm.js';
 import { appendTeamDeliveryLogForCwd } from './delivery-log.js';
 import { isTerminalPhase } from './orchestrator.js';
@@ -1051,7 +1051,7 @@ export async function executeTeamApiOperation(
         const eventType = parseOptionalEventType(args.type);
         const worker = typeof args.worker === 'string' ? args.worker.trim() : '';
         const taskId = typeof args.task_id === 'string' ? args.task_id.trim() : '';
-        const events = await readTeamEvents(teamName, cwd, {
+        const eventResult = await readTeamEventsDetailed(teamName, cwd, {
           afterEventId: typeof args.after_event_id === 'string' ? args.after_event_id.trim() || undefined : undefined,
           wakeableOnly: wakeableOnly ?? false,
           type: eventType ?? undefined,
@@ -1062,9 +1062,10 @@ export async function executeTeamApiOperation(
           ok: true,
           operation,
           data: {
-            count: events.length,
-            cursor: events.at(-1)?.event_id ?? (typeof args.after_event_id === 'string' ? args.after_event_id.trim() : ''),
-            events,
+            count: eventResult.events.length,
+            cursor: eventResult.events.at(-1)?.event_id ?? (typeof args.after_event_id === 'string' ? args.after_event_id.trim() : ''),
+            events: eventResult.events,
+            diagnostics: eventResult.diagnostics,
           },
         };
       }
@@ -1094,7 +1095,8 @@ export async function executeTeamApiOperation(
           data: {
             status: result.status,
             cursor: result.cursor,
-            event: result.event ?? null,
+            event: result.status === 'event' ? result.event : null,
+            diagnostics: result.diagnostics,
           },
         };
       }

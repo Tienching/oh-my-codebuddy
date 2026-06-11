@@ -1,6 +1,14 @@
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRuntimeBinaryPath } from '../bridge.js';
+import {
+  resetRuntimeBridgeSchemaValidationForTests,
+  resolveRuntimeBinaryPath,
+  RuntimeBridge,
+} from '../bridge.js';
+
+afterEach(() => {
+  resetRuntimeBridgeSchemaValidationForTests();
+});
 
 describe('resolveRuntimeBinaryPath', () => {
   it('prefers explicit OMB_RUNTIME_BINARY override', () => {
@@ -48,5 +56,90 @@ describe('resolveRuntimeBinaryPath', () => {
       exists: () => false,
     });
     assert.equal(actual, 'omb-runtime');
+  });
+});
+
+describe('RuntimeBridge schema validation', () => {
+  it('accepts mailbox commands after normalizing schema naming differences', () => {
+    const bridge = new RuntimeBridge({ binaryPath: '/ignored' });
+    const runCalls: string[][] = [];
+    (bridge as unknown as { run: (args: string[]) => string }).run = (args: string[]) => {
+      runCalls.push(args);
+      if (args[0] === 'schema') {
+        return JSON.stringify({
+          schema_version: 1,
+          commands: [
+            'acquire-authority',
+            'renew-authority',
+            'queue-dispatch',
+            'mark-notified',
+            'mark-delivered',
+            'mark-failed',
+            'request-replay',
+            'capture-snapshot',
+            'create_mailbox_message',
+            'mark-mailbox-notified',
+            'mark_mailbox_delivered',
+          ],
+          events: [],
+          transport: 'tmux',
+        });
+      }
+      if (args[0] === 'exec') {
+        return JSON.stringify({
+          event: 'MailboxMessageCreated',
+          message_id: 'msg-1',
+          from_worker: 'worker-1',
+          to_worker: 'worker-2',
+        });
+      }
+      throw new Error(`Unexpected runtime bridge call: ${args.join(' ')}`);
+    };
+
+    const event = bridge.execCommand({
+      command: 'CreateMailboxMessage',
+      message_id: 'msg-1',
+      from_worker: 'worker-1',
+      to_worker: 'worker-2',
+      body: 'hello',
+    });
+
+    assert.equal(event.event, 'MailboxMessageCreated');
+    assert.deepEqual(runCalls.map((args) => args[0]), ['schema', 'exec']);
+  });
+
+  it('throws when the runtime schema omits mailbox commands', () => {
+    const bridge = new RuntimeBridge({ binaryPath: '/ignored' });
+    (bridge as unknown as { run: (args: string[]) => string }).run = (args: string[]) => {
+      if (args[0] === 'schema') {
+        return JSON.stringify({
+          schema_version: 1,
+          commands: [
+            'acquire-authority',
+            'renew-authority',
+            'queue-dispatch',
+            'mark-notified',
+            'mark-delivered',
+            'mark-failed',
+            'request-replay',
+            'capture-snapshot',
+          ],
+          events: [],
+          transport: 'tmux',
+        });
+      }
+      throw new Error(`Unexpected runtime bridge call: ${args.join(' ')}`);
+    };
+
+    assert.throws(
+      () => bridge.execCommand({
+        command: 'CreateMailboxMessage',
+        message_id: 'msg-1',
+        from_worker: 'worker-1',
+        to_worker: 'worker-2',
+        body: 'hello',
+      }),
+      /create-mailbox-message, mark-mailbox-notified, mark-mailbox-delivered/,
+    );
   });
 });

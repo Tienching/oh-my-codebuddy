@@ -38,6 +38,7 @@ import {
   writeMonitorSnapshot,
   writeWorkerStatus,
 } from '../state.js';
+import { rotateTeamEventLog } from '../state/events.js';
 
 const API_INTEROP_FIXTURES_DIR = join(process.cwd(), 'src', 'team', '__tests__', 'fixtures', 'api-interop');
 
@@ -1529,6 +1530,46 @@ describe('executeTeamApiOperation: await-event', () => {
         assert.equal(event?.type, 'task_completed');
         assert.equal(event?.worker, 'worker-1');
         assert.equal(event?.task_id, '1');
+      }
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('returns cursor diagnostics when the requested baseline was rotated away', async () => {
+    const { cwd, cleanup } = await setupTeam('evt-await-cursor-missing');
+    try {
+      const baseline = await appendTeamEvent('evt-await-cursor-missing', {
+        type: 'team_leader_nudge',
+        worker: 'leader-fixed',
+        reason: 'baseline',
+      }, cwd);
+      for (let index = 0; index < 12; index += 1) {
+        await appendTeamEvent('evt-await-cursor-missing', {
+          type: 'task_completed',
+          worker: 'worker-1',
+          task_id: `${index}`,
+          reason: `event-${index}-${'x'.repeat(256)}`,
+        }, cwd);
+      }
+      await rotateTeamEventLog('evt-await-cursor-missing', cwd, 1024);
+
+      const result = await executeTeamApiOperation('await-event', {
+        team_name: 'evt-await-cursor-missing',
+        after_event_id: baseline.event_id,
+        timeout_ms: 100,
+        poll_ms: 25,
+        wakeable_only: false,
+      }, cwd);
+      assert.equal(result.ok, true);
+      if (result.ok) {
+        assert.equal(result.data.status, 'cursor_missing');
+        assert.equal(result.data.cursor, baseline.event_id);
+        assert.equal(result.data.event, null);
+        const diagnostics = result.data.diagnostics as { cursor_missing?: boolean; cursor_found?: boolean; latest_available_cursor?: string };
+        assert.equal(diagnostics.cursor_missing, true);
+        assert.equal(diagnostics.cursor_found, false);
+        assert.notEqual(diagnostics.latest_available_cursor, '');
       }
     } finally {
       await cleanup();

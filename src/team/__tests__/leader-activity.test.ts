@@ -263,4 +263,56 @@ describe('leader runtime activity', () => {
       await rm(cwd, { recursive: true, force: true });
     }
   });
+
+  it('uses atomic write for recordLeaderRuntimeActivity and writes only once', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-leader-activity-atomic-'));
+    try {
+      const nowIso = '2026-04-01T00:00:00.000Z';
+      await recordLeaderRuntimeActivity(cwd, 'team_status', 'atomic-team', nowIso);
+
+      const activityPath = join(cwd, '.omb', 'state', 'leader-runtime-activity.json');
+      const content = await readFile(activityPath, 'utf-8');
+      const activity = JSON.parse(content) as {
+        last_activity_at?: string;
+        last_team_status_at?: string;
+        last_source?: string;
+        last_team_name?: string;
+      };
+
+      assert.equal(activity.last_activity_at, nowIso);
+      assert.equal(activity.last_team_status_at, nowIso);
+      assert.equal(activity.last_source, 'team_status');
+      assert.equal(activity.last_team_name, 'atomic-team');
+
+      // No leftover temp files
+      const { readdir } = await import('node:fs/promises');
+      const stateFiles = await readdir(join(cwd, '.omb', 'state'));
+      assert.equal(stateFiles.filter((f) => f.endsWith('.tmp')).length, 0, 'no temp files should remain after atomic write');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves existing fields when updating activity', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'omb-leader-activity-preserve-'));
+    try {
+      await recordLeaderRuntimeActivity(cwd, 'team_status', 'team-a', '2026-04-01T00:00:00.000Z');
+      await recordLeaderRuntimeActivity(cwd, 'heartbeat', undefined, '2026-04-01T00:01:00.000Z');
+
+      const content = await readFile(join(cwd, '.omb', 'state', 'leader-runtime-activity.json'), 'utf-8');
+      const activity = JSON.parse(content) as {
+        last_activity_at?: string;
+        last_team_status_at?: string;
+        last_source?: string;
+        last_team_name?: string;
+      };
+
+      assert.equal(activity.last_activity_at, '2026-04-01T00:01:00.000Z');
+      assert.equal(activity.last_team_status_at, '2026-04-01T00:00:00.000Z');
+      assert.equal(activity.last_source, 'heartbeat');
+      assert.equal(activity.last_team_name, 'team-a');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
 });
